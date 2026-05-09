@@ -1,0 +1,81 @@
+# Jekyll
+_site/
+.jekyll-cache/
+.jekyll-metadata
+.sass-cache/
+vendor/
+Gemfile.lock
+
+# Node (if any of the demos pull in JS tooling later)
+node_modules/
+
+# C++ build artifacts
+build/
+build-*/
+out/
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+*.app
+
+# Profile-Guided Optimization artifacts
+*.gcda
+*.gcno
+*.profdata
+*.profraw
+default.profraw
+
+# Compiler / linker temp
+*.d
+compile_commands.json
+.cache/
+.ccache/
+.cache-clangd/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+cmake_install.cmake
+install_manifest.txt
+
+# Conan
+.conan2/
+conan_paths.cmake
+conan_toolchain.cmake
+conanbuildinfo.*
+conaninfo.txt
+graph_info.json
+
+# Podman / container local state
+.containerfiles/
+.local-images/
+
+# Diagrams editor scratch
+*.excalidraw.lock
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.envrc
+.direnv/
+
+# Test outputs
+test-results/
+*.junit.xml
+benchmark-results/

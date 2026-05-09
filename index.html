@@ -1,0 +1,44 @@
+---
+layout: default
+title: Home
+---
+
+<section class="hero" style="padding: 2rem 0 1rem; border-bottom: 1px solid var(--border);">
+  <p style="font-size: 0.95rem; color: var(--muted); margin: 0;">A 1.5–3 hour technical presentation + tutorial</p>
+  <h1 style="font-size: 2.4rem; line-height: 1.15; margin-top: 0.25em;">{{ site.title }}</h1>
+  <p style="font-size: 1.15rem; color: var(--muted); max-width: 640px;">
+    {{ site.description }}
+  </p>
+  <p>
+    <a href="{{ '/docs/00-outline/' | relative_url }}" style="background: var(--accent); color: white; padding: 0.6em 1.2em; border-radius: 6px; display: inline-block;">Start with the outline →</a>
+  </p>
+</section>
+
+<section style="margin-top: 2rem;">
+  <h2 style="font-size: 1.4rem;">What you'll learn</h2>
+  <ul>
+    <li>Compile-time wins: LTO, PGO, <code>constexpr</code></li>
+    <li>C++20/23 data structures: <code>flat_map</code>, <code>flat_set</code>, PMR allocators</li>
+    <li>Memory: huge pages, cgroups v2 <code>memory.high</code>, mimalloc/jemalloc</li>
+    <li>I/O: <code>io_uring</code>, async gRPC, <code>SO_REUSEPORT</code></li>
+    <li>Container strategy: UBI vs scratch, multi-stage, ABI labels</li>
+    <li>Observability with the Grafana stack — Prometheus, Tempo, Loki, Mimir</li>
+    <li>Profiling with <code>perf</code>, <code>bcc</code>, <code>bpftrace</code></li>
+    <li>Isolation: cgroup weights, CPU pinning, NUMA, veth latency</li>
+    <li>Reproducibility: Conan 2 lockfiles, CMake presets, <code>abidiff</code></li>
+  </ul>
+</section>
+
+<section style="margin-top: 3rem;">
+  <h2 style="font-size: 1.4rem;">Sections</h2>
+  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; margin-top: 1rem;">
+    {% assign sorted_docs = site.docs | sort: "order" %}
+    {% for d in sorted_docs %}
+    <a href="{{ d.url | relative_url }}" style="display: block; padding: 1rem; border: 1px solid var(--border); border-radius: 6px; color: var(--fg);">
+      <p style="margin: 0; color: var(--muted); font-size: 0.85rem;">§{{ d.order }} · {{ d.duration }}</p>
+      <p style="margin: 0.25rem 0 0; font-weight: 600;">{{ d.title }}</p>
+      {% if d.description %}<p style="margin: 0.5rem 0 0; color: var(--muted); font-size: 0.9rem;">{{ d.description }}</p>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+</section>

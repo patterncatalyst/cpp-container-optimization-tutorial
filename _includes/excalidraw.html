@@ -1,0 +1,21 @@
+{%- comment -%}
+  Embed a paired SVG + .excalidraw diagram.
+
+  Usage:
+    {% include excalidraw.html name="03-image-strategy-ubi-vs-scratch" caption="UBI vs scratch trade-off matrix" %}
+
+  Both files are expected at /assets/diagrams/<name>.svg and
+  /assets/diagrams/<name>.excalidraw.
+{%- endcomment -%}
+
+<figure class="excalidraw">
+  <object type="image/svg+xml" data="{{ '/assets/diagrams/' | append: include.name | append: '.svg' | relative_url }}" aria-label="{{ include.caption | default: include.name }}">
+    <img src="{{ '/assets/diagrams/' | append: include.name | append: '.svg' | relative_url }}" alt="{{ include.caption | default: include.name }}">
+  </object>
+  {% if include.caption %}<figcaption>{{ include.caption }}</figcaption>{% endif %}
+  <p class="excalidraw-source">
+    <a href="{{ '/assets/diagrams/' | append: include.name | append: '.excalidraw' | relative_url }}" download>
+      Download Excalidraw source
+    </a>
+  </p>
+</figure>

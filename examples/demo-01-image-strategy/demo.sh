@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# Demo 1 — image strategy: UBI multi-stage vs scratch vs naive single-stage,
+# plus a PGO pass against the multi-stage build.
+#
+# Run from this directory:
+#   ./demo.sh [--no-pgo]  # skip the PGO build (fast path)
+#   ./demo.sh --clean     # remove all images and exit
+
+set -euo pipefail
+
+DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$DEMO_DIR"
+
+IMG_PREFIX="cpp-tut/demo-01"
+PORT_BASE=18801
+
+color() { printf '\033[%sm%s\033[0m' "$1" "$2"; }
+header() { echo; echo "$(color '1;34' "==> $*")"; }
+note() { echo "    $*"; }
+
+cleanup() {
+  podman ps -a --format '{{.Names}}' | grep -E '^demo01-' | \
+    xargs -r podman rm -f >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+# Vendor cpp-httplib if not already present. Pin the version so re-runs
+# produce a byte-identical input to the build.
+HTTPLIB_VERSION="${HTTPLIB_VERSION:-v0.16.0}"
+if [[ ! -f src/third_party/httplib.h ]]; then
+  header "Vendoring cpp-httplib ${HTTPLIB_VERSION}"
+  mkdir -p src/third_party
+  curl -fsSL -o src/third_party/httplib.h \
+    "https://raw.githubusercontent.com/yhirose/cpp-httplib/${HTTPLIB_VERSION}/httplib.h"
+  note "Saved to src/third_party/httplib.h"
+fi
+
+case "${1:-}" in
+  --clean)
+    podman rmi -f \
+      "${IMG_PREFIX}:ubi-multistage" \
+      "${IMG_PREFIX}:scratch-static" \
+      "${IMG_PREFIX}:single-stage-naive" \
+      "${IMG_PREFIX}:pgo" 2>/dev/null || true
+    echo "Cleaned."
+    exit 0
+    ;;
+esac
+
+DO_PGO=1
+[[ "${1:-}" == "--no-pgo" ]] && DO_PGO=0
+
+# ---------------------------------------------------------------------
+header "Building UBI multi-stage (LTO on, no PGO)"
+podman build -f Containerfile.ubi-multistage -t "${IMG_PREFIX}:ubi-multistage" .
+
+header "Building scratch + static binary"
+podman build -f Containerfile.scratch-static -t "${IMG_PREFIX}:scratch-static" .
+
+header "Building naive single-stage (anti-pattern)"
+podman build -f Containerfile.single-stage-naive -t "${IMG_PREFIX}:single-stage-naive" .
+
+if [[ $DO_PGO -eq 1 ]]; then
+  header "Building PGO step 1 (instrumented binary)"
+  podman build -f Containerfile.pgo --target instrumented -t "${IMG_PREFIX}:pgo-instrumented" .
+
+  header "Running representative workload to gather profile data"
+  rm -rf pgo-profiles && mkdir -p pgo-profiles
+  podman run --rm -d --name demo01-pgo-train \
+    -p ${PORT_BASE}:8080 \
+    -v "$PWD/pgo-profiles:/profiles:Z" \
+    "${IMG_PREFIX}:pgo-instrumented"
+  sleep 1
+  hey -n 5000 -c 50 "http://127.0.0.1:${PORT_BASE}/" >/dev/null
+  hey -n 2500 -c 25 -m POST -d "$(printf 'x%.0s' {1..512})" \
+    "http://127.0.0.1:${PORT_BASE}/echo" >/dev/null || true
+  podman stop demo01-pgo-train >/dev/null
+  note "Captured $(ls -1 pgo-profiles/*.profraw 2>/dev/null | wc -l) profraw file(s)"
+
+  header "Merging profile data with llvm-profdata"
+  # Run llvm-profdata inside a throwaway toolchain image so the host
+  # doesn't need clang installed.
+  podman run --rm \
+    -v "$PWD/pgo-profiles:/profiles:Z" \
+    registry.access.redhat.com/ubi9/ubi:9.4 \
+    bash -c 'dnf install -y llvm >/dev/null 2>&1 \
+      && llvm-profdata merge -output=/profiles/default.profdata /profiles/*.profraw'
+  note "Merged profile: pgo-profiles/default.profdata ($(stat -c %s pgo-profiles/default.profdata 2>/dev/null || echo 0) bytes)"
+
+  header "Building PGO step 2 (optimized using gathered profile)"
+  podman build -f Containerfile.pgo --target optimized -t "${IMG_PREFIX}:pgo" .
+fi
+
+# ---------------------------------------------------------------------
+header "Image size comparison"
+podman images --format '{{.Repository}}:{{.Tag}}\t{{.Size}}' | grep "^${IMG_PREFIX}:" | column -t
+
+# ---------------------------------------------------------------------
+header "Latency comparison ('hey -n 10000 -c 100')"
+declare -A IMAGES=(
+  [ubi-multistage]=$((PORT_BASE + 1))
+  [scratch-static]=$((PORT_BASE + 2))
+  [single-stage-naive]=$((PORT_BASE + 3))
+)
+[[ $DO_PGO -eq 1 ]] && IMAGES[pgo]=$((PORT_BASE + 4))
+
+printf '\n%-22s  %-10s  %-10s  %-10s\n' "image" "p50 (ms)" "p95 (ms)" "p99 (ms)"
+printf -- '-%.0s' {1..62}; echo
+for tag in "${!IMAGES[@]}"; do
+  port="${IMAGES[$tag]}"
+  podman run --rm -d --name "demo01-bench-${tag}" -p "${port}:8080" "${IMG_PREFIX}:${tag}" >/dev/null
+  sleep 1
+  out=$(hey -n 10000 -c 100 "http://127.0.0.1:${port}/" 2>/dev/null)
+  p50=$(awk '/50% in/ {print $3 * 1000}' <<<"$out")
+  p95=$(awk '/95% in/ {print $3 * 1000}' <<<"$out")
+  p99=$(awk '/99% in/ {print $3 * 1000}' <<<"$out")
+  printf '%-22s  %-10s  %-10s  %-10s\n' "$tag" "${p50:-?}" "${p95:-?}" "${p99:-?}"
+  podman stop "demo01-bench-${tag}" >/dev/null
+done
+
+# ---------------------------------------------------------------------
+header "Image labels (provenance for each build)"
+for tag in "${!IMAGES[@]}"; do
+  echo
+  echo "[$tag]"
+  podman inspect --format='{{json .Config.Labels}}' "${IMG_PREFIX}:${tag}" \
+    | jq -r 'to_entries[] | "  \(.key)=\(.value)"' 2>/dev/null || true
+done
+
+echo
+header "Done"
+note "Tear down with: ./demo.sh --clean"

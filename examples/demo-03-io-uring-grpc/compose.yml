@@ -1,0 +1,25 @@
+# Two-server harness for demo-03.
+# Bring up with:
+#   podman compose -f compose.yml up --build
+#
+# The networking variant is selected with PODMAN_NETWORK=host or by
+# leaving it unset (default rootless network). demo.sh handles this.
+
+services:
+  echo-uring:
+    build:
+      context: .
+      target: echo-uring
+    image: cpp-tut/demo-03:echo-uring
+    container_name: demo03-echo-uring
+    ports:
+      - "18301:8080"
+
+  grpc-async:
+    build:
+      context: .
+      target: grpc-async
+    image: cpp-tut/demo-03:grpc-async
+    container_name: demo03-grpc-async
+    ports:
+      - "18302:50051"

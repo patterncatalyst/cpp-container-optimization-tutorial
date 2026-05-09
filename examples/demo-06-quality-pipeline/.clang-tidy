@@ -1,0 +1,21 @@
+# Tutorial scope: keep this checks list short and meaningful.
+# The point isn't to demo every check; it's to have something fail
+# loudly when somebody adds an obvious issue.
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  cppcoreguidelines-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -modernize-use-trailing-return-type,
+  -readability-identifier-length,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -readability-magic-numbers,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay
+WarningsAsErrors: '*'
+HeaderFilterRegex: 'src/include/.*'
+FormatStyle: file

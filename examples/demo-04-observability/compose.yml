@@ -1,0 +1,30 @@
+# Demo 4 brings up:
+#   - the demo service (this directory)
+#   - the full observability stack (../../observability/compose.yml)
+# on a shared network so the service can reach the OTel collector / Tempo /
+# Loki / Mimir endpoints by name.
+#
+# Bring up:  podman compose -f compose.yml -f ../../observability/compose.yml up --build
+# Tear down: ./demo.sh --clean
+
+services:
+  demo-04-svc:
+    build:
+      context: .
+    image: cpp-tut/demo-04:latest
+    container_name: demo04-svc
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL_SERVICE_NAME: "demo-04-svc"
+      OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=tutorial"
+    ports:
+      - "18401:8080"
+    depends_on:
+      - otel-collector
+    networks:
+      - obs
+
+networks:
+  obs:
+    name: tutorial-obs
+    external: false

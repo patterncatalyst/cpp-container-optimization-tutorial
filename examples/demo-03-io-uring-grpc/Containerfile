@@ -1,0 +1,53 @@
+# Build both server variants from a shared toolchain stage.
+#
+# Build:
+#   podman build --target echo-uring   -t cpp-tut/demo-03:echo-uring .
+#   podman build --target grpc-async   -t cpp-tut/demo-03:grpc-async .
+
+ARG UBI_VERSION=9.4
+
+FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build
+
+RUN dnf install -y --setopt=install_weak_deps=False \
+        gcc-toolset-14 \
+        cmake \
+        ninja-build \
+        liburing \
+        liburing-devel \
+        grpc-devel \
+        grpc-plugins \
+        protobuf-devel \
+        protobuf-compiler \
+        git \
+    && dnf clean all
+
+ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64
+
+WORKDIR /src
+COPY src/ ./src/
+COPY CMakeLists.txt ./
+
+RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+ && cmake --build build -j"$(nproc)" \
+ && strip --strip-all build/echo-uring build/grpc-async-server
+
+# ---- runtime: echo-uring ----
+FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION} AS echo-uring
+RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ liburing \
+ && microdnf clean all
+COPY --from=build /src/build/echo-uring /app/echo-uring
+LABEL tutorial.demo="03-io-uring-grpc" tutorial.variant="echo-uring"
+EXPOSE 8080
+USER 1001:1001
+ENTRYPOINT ["/app/echo-uring"]
+
+# ---- runtime: grpc-async ----
+FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION} AS grpc-async
+RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ grpc protobuf \
+ && microdnf clean all
+COPY --from=build /src/build/grpc-async-server /app/grpc-async-server
+LABEL tutorial.demo="03-io-uring-grpc" tutorial.variant="grpc-async"
+EXPOSE 50051
+USER 1001:1001
+ENTRYPOINT ["/app/grpc-async-server"]

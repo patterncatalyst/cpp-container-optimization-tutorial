@@ -1,0 +1,62 @@
+name: demos
+
+on:
+  pull_request:
+    paths:
+      - 'examples/**'
+      - 'observability/**'
+      - 'scripts/**'
+      - '.github/workflows/demos.yml'
+  workflow_dispatch:
+
+# Most demos exercise rootless cgroups v2, io_uring multishot, or other
+# kernel features that GitHub-hosted runners don't always support cleanly.
+# We run the parts that DO work on a stock ubuntu-latest runner here.
+# For the full suite, point a self-hosted Fedora 44 runner at this
+# workflow and override `runs-on`.
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install podman + tools
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y podman podman-compose jq curl bc
+          # `hey` from a binary release; the apt package is not always available.
+          HEY_VERSION=v0.1.4
+          curl -fsSL -o /tmp/hey \
+            "https://hey-release.s3.us-east-2.amazonaws.com/hey_linux_amd64"
+          chmod +x /tmp/hey && sudo mv /tmp/hey /usr/local/bin/hey
+
+      - name: Sanity — podman + kernel
+        run: |
+          podman --version
+          podman info --format '{{.Host.Security.Rootless}}'
+          uname -r
+
+      # Each test script must exit non-zero on failure. We run only the
+      # demos whose runtime expectations match the GitHub runner. The
+      # io_uring (demo-03), full observability (demo-04), and isolation
+      # (demo-05) tests are gated by a label or run on a self-hosted
+      # runner; see CONTRIBUTING.md for how to wire that up.
+      - name: Run demo-01 smoke test
+        run: bash scripts/test-demo-01-image-strategy.sh
+
+      - name: Run demo-02 smoke test
+        run: bash scripts/test-demo-02-memory-and-stl.sh
+
+      - name: Run demo-06 smoke test
+        run: bash scripts/test-demo-06-quality-pipeline.sh
+
+  full-suite:
+    if: contains(github.event.pull_request.labels.*.name, 'run-full-suite')
+    runs-on: [self-hosted, fedora-44]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run all demos
+        run: bash scripts/test-all-demos.sh

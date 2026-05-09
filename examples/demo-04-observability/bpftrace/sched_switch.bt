@@ -1,0 +1,24 @@
+#!/usr/bin/env bpftrace
+/*
+ * Sched-switch probe: how often is the demo service's threads getting
+ * involuntarily preempted, and where? Run during the load phase to see
+ * scheduler contention as a fourth observability dimension that lives
+ * outside the container's own metrics.
+ *
+ * Usage:  sudo bpftrace ./sched_switch.bt
+ */
+
+BEGIN {
+    printf("Tracing sched switches involving 'demo-04-svc' for 10s...\n");
+}
+
+tracepoint:sched:sched_switch
+/comm == "demo-04-svc" || args->next_comm == "demo-04-svc"/
+{
+    @switches[args->prev_state] = count();
+}
+
+interval:s:10 {
+    print(@switches);
+    exit();
+}

@@ -1,0 +1,49 @@
+# Static build on Alpine, then copy into scratch.
+# Demonstrates the absolute floor on image size when you give up
+# glibc compatibility and dynamic linking.
+#
+# Build:
+#   podman build -f Containerfile.scratch-static -t demo-01-scratch-static .
+
+FROM docker.io/alpine:3.20 AS build
+
+RUN apk add --no-cache \
+        build-base \
+        clang19 \
+        lld \
+        cmake \
+        ninja \
+        musl-dev \
+        linux-headers
+
+WORKDIR /src
+COPY src/ ./src/
+COPY CMakeLists.txt CMakePresets.json ./
+
+# Static link against musl. -fuse-ld=lld for size, no exceptions/RTTI removal
+# is left up to CMakePresets so we can flip it from the build system.
+ENV CC=clang CXX=clang++
+RUN cmake --preset static-musl \
+ && cmake --build --preset static-musl -j"$(nproc)" \
+ && strip --strip-all build/static-musl/demo-svc
+
+# ---- runtime stage: scratch ----
+FROM scratch AS runtime
+
+ARG GIT_SHA=unknown
+ARG BUILD_DATE
+LABEL org.opencontainers.image.title="cpp-container-tutorial demo-01 scratch-static" \
+      org.opencontainers.image.description="Static musl build, scratch runtime" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      tutorial.demo="01-image-strategy" \
+      tutorial.variant="scratch-static" \
+      tutorial.toolchain="clang-19-musl" \
+      tutorial.lto="thin"
+
+COPY --from=build /src/build/static-musl/demo-svc /demo-svc
+
+# scratch has no /etc/passwd; numeric UID is required.
+USER 1001:1001
+EXPOSE 8080
+ENTRYPOINT ["/demo-svc"]

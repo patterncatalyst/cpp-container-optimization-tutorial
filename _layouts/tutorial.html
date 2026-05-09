@@ -1,0 +1,40 @@
+---
+layout: default
+---
+
+{% assign sorted_docs = site.docs | sort: "order" %}
+{% assign idx = -1 %}
+{% for d in sorted_docs %}
+  {% if d.url == page.url %}{% assign idx = forloop.index0 %}{% endif %}
+{% endfor %}
+{% assign prev_idx = idx | minus: 1 %}
+{% assign next_idx = idx | plus: 1 %}
+{% assign prev_doc = nil %}
+{% assign next_doc = nil %}
+{% if prev_idx >= 0 %}{% assign prev_doc = sorted_docs[prev_idx] %}{% endif %}
+{% if next_idx < sorted_docs.size %}{% assign next_doc = sorted_docs[next_idx] %}{% endif %}
+
+<article class="tutorial-section">
+  <header class="tutorial-header">
+    <p class="tutorial-eyebrow">§{{ page.order }} · {% if page.duration %}<span class="duration">{{ page.duration }}</span>{% endif %}</p>
+    <h1>{{ page.title }}</h1>
+    {% if page.description %}<p class="tutorial-lede">{{ page.description }}</p>{% endif %}
+  </header>
+
+  <div class="tutorial-body">
+    {{ content }}
+  </div>
+
+  <nav class="tutorial-nav">
+    <div class="tutorial-nav-prev">
+      {% if prev_doc %}
+        <a href="{{ prev_doc.url | relative_url }}">← {{ prev_doc.title }}</a>
+      {% endif %}
+    </div>
+    <div class="tutorial-nav-next">
+      {% if next_doc %}
+        <a href="{{ next_doc.url | relative_url }}">{{ next_doc.title }} →</a>
+      {% endif %}
+    </div>
+  </nav>
+</article>

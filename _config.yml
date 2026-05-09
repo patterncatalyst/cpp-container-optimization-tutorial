@@ -1,0 +1,68 @@
+# ────────────────────────────────────────────────────────────────────────────
+# CONFIG — Edit the values below before first commit. Search for "EDIT-ME"
+# for the things that almost certainly need changing for your fork.
+# ────────────────────────────────────────────────────────────────────────────
+
+# Site identity
+title: "Optimizing C++20/23 with Containers"
+description: "A 1.5-3 hour tutorial and presentation on writing fast modern C++ inside rootless OCI containers, with six runnable Podman demos."
+brand_emoji: "⚡"
+
+# GitHub identity for header link and example sourcing
+# EDIT-ME: replace with your GitHub username and the repo name you push to
+github_username: "patterncatalyst"
+github_repo: "cpp-container-optimization-tutorial"
+
+# baseurl
+# - User/org Pages site (USERNAME.github.io): set to ""
+# - Project Pages site (USERNAME.github.io/PROJECT): set to "/PROJECT"
+# - Local dev override: bundle exec jekyll serve --baseurl ""
+baseurl: "/cpp-container-optimization-tutorial"
+
+# Set at deploy time; blank for GitHub Pages auto-detection
+url: ""
+
+# ────────────────────────────────────────────────────────────────────────────
+# Build configuration — generally don't change.
+# ────────────────────────────────────────────────────────────────────────────
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+
+permalink: pretty
+
+collections:
+  docs:
+    output: true
+    permalink: /docs/:name/
+  plans:
+    output: true
+    permalink: /plans/:name/
+
+defaults:
+  - scope:
+      path: ""
+      type: docs
+    values:
+      layout: tutorial
+  - scope:
+      path: ""
+      type: plans
+    values:
+      layout: plan
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor/
+  - node_modules/
+  - examples/      # ← trailing slash matters; runnable demos, not site content
+  - scripts/
+  - observability/
+  - README.md
+  - LICENSE
+  - PRD.md
+  - STARTING-WITH-CLAUDE.md
+  - GETTING-STARTED.md

@@ -1,0 +1,26 @@
+# Conan 2.x package list.
+#
+# This demo intentionally vendors cpp-httplib as a single header under
+# src/third_party/ to keep the multi-stage build hermetic and avoid
+# network fetches inside the build container. Conan is invoked from the
+# host for richer demos (3, 4, 6) where dependencies justify the extra
+# moving part.
+#
+# This file is kept as a template so you can extend the demo without
+# re-deriving the layout. Drop a [requires] line in, run:
+#   conan install . --output-folder=build/conan -s build_type=Release
+# then add `include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake)` to
+# the CMakeLists or pass it on the command line.
+
+[requires]
+# Add packages here as the demo grows. Examples kept commented:
+#   fmt/10.2.1
+#   spdlog/1.14.1
+#   nlohmann_json/3.11.3
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[layout]
+cmake_layout

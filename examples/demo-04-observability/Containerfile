@@ -1,0 +1,66 @@
+ARG UBI_VERSION=9.4
+
+FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build
+
+RUN dnf install -y --setopt=install_weak_deps=False \
+        gcc-toolset-14 \
+        cmake \
+        ninja-build \
+        git \
+        grpc-devel \
+        protobuf-devel \
+        protobuf-compiler \
+        abseil-cpp-devel \
+        c-ares-devel \
+        nlohmann-json-devel \
+    && dnf clean all
+
+ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64
+
+# Build OpenTelemetry C++ from source. Pinned tag.
+ARG OTEL_TAG=v1.16.1
+RUN git clone --depth 1 --branch "${OTEL_TAG}" \
+        https://github.com/open-telemetry/opentelemetry-cpp.git /tmp/otel \
+ && cmake -S /tmp/otel -B /tmp/otel/build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_TESTING=OFF \
+        -DWITH_OTLP_GRPC=ON \
+        -DWITH_OTLP_HTTP=OFF \
+        -DWITH_LOGS_PREVIEW=ON \
+        -DWITH_ABSEIL=ON \
+ && cmake --build /tmp/otel/build -j"$(nproc)" \
+ && cmake --install /tmp/otel/build
+
+WORKDIR /src
+COPY src/ ./src/
+COPY CMakeLists.txt ./
+
+# Vendor cpp-httplib at build time.
+ARG HTTPLIB_VERSION=v0.16.0
+RUN mkdir -p src/third_party \
+ && curl -fsSL -o src/third_party/httplib.h \
+        "https://raw.githubusercontent.com/yhirose/cpp-httplib/${HTTPLIB_VERSION}/httplib.h"
+
+RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+ && cmake --build build -j"$(nproc)" \
+ && strip --strip-all build/demo-04-svc
+
+# ---- runtime ----
+FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION}
+RUN microdnf install -y --setopt=install_weak_deps=0 \
+        libstdc++ grpc protobuf abseil-cpp c-ares \
+ && microdnf clean all
+
+ARG GIT_SHA=unknown
+LABEL tutorial.demo="04-observability" \
+      org.opencontainers.image.revision="${GIT_SHA}"
+
+WORKDIR /app
+COPY --from=build /src/build/demo-04-svc /app/demo-04-svc
+COPY --from=build /usr/local/lib64/libopentelemetry_*.so* /usr/local/lib64/
+
+ENV LD_LIBRARY_PATH=/usr/local/lib64
+USER 1001:1001
+EXPOSE 8080
+ENTRYPOINT ["/app/demo-04-svc"]

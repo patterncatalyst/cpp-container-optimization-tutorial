@@ -1,0 +1,100 @@
+ARG UBI_VERSION=9.4
+
+# ---- toolchain base ----
+FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS toolchain
+RUN dnf install -y --setopt=install_weak_deps=False \
+        gcc-toolset-14 \
+        cmake \
+        ninja-build \
+        clang-tools-extra \
+        cppcheck \
+        libabigail \
+        gdb-gdbserver \
+        python3-pip \
+        git \
+    && pip install --no-cache-dir 'conan>=2.0,<3.0' \
+    && dnf clean all
+ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64
+
+# ---- build stage ----
+FROM toolchain AS build
+WORKDIR /src
+COPY conanfile.py CMakeLists.txt CMakePresets.json .clang-tidy ./
+COPY src/ ./src/
+COPY tests/ ./tests/
+COPY conan.lock ./conan.lock
+
+# Hermetic Conan install: reads conan.lock, fails if it can't satisfy.
+RUN conan profile detect --force \
+ && conan install . \
+        --output-folder=build/release-debuginfo \
+        --lockfile=conan.lock \
+        --build=missing \
+        -s build_type=RelWithDebInfo \
+ && cmake --preset release-debuginfo \
+ && cmake --build --preset release-debuginfo -j"$(nproc)"
+
+# ---- analyzer stage ----
+FROM build AS analyzer
+WORKDIR /src
+RUN mkdir -p reports
+
+# cppcheck. --error-exitcode=1 makes the build break on any finding.
+RUN cppcheck --enable=warning,style,performance,portability \
+        --error-exitcode=1 \
+        --inline-suppr \
+        --xml --xml-version=2 \
+        --suppress=missingIncludeSystem \
+        -I src/include src/ 2> reports/cppcheck.xml \
+  || (cat reports/cppcheck.xml; exit 1)
+
+# clang-tidy. Errors-as-warnings flipped on by .clang-tidy.
+RUN run-clang-tidy -p build/release-debuginfo -j"$(nproc)" \
+        $(find src -name '*.cpp') > reports/clang-tidy.txt 2>&1 \
+  || (cat reports/clang-tidy.txt; exit 1)
+
+# ---- test stage ----
+FROM build AS tests
+WORKDIR /src
+RUN ctest --preset release --output-on-failure --output-junit reports/gtest.xml
+
+# ---- abi stage ----
+FROM build AS abi
+WORKDIR /src
+COPY abi-reference/ ./abi-reference/
+# If reference exists, compare; otherwise just record current ABI as a baseline
+# the developer can commit.
+RUN if [ -f abi-reference/libdemo06_channel.so.1.abi ]; then \
+        abidw --out-file reports/current.abi build/release-debuginfo/libdemo06_channel.so.1; \
+        abidiff abi-reference/libdemo06_channel.so.1.abi reports/current.abi \
+            > reports/abidiff.txt 2>&1 \
+        || (echo "ABI changed:"; cat reports/abidiff.txt; exit 2); \
+    else \
+        mkdir -p reports; \
+        abidw --out-file reports/current.abi build/release-debuginfo/libdemo06_channel.so.1; \
+        echo "No reference yet; current ABI saved at reports/current.abi"; \
+    fi
+
+# ---- release runtime ----
+FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION} AS svc
+RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ \
+ && microdnf clean all
+COPY --from=build /src/build/release-debuginfo/demo06-svc /app/demo06-svc
+COPY --from=build /src/build/release-debuginfo/libdemo06_channel.so* /usr/local/lib/
+ENV LD_LIBRARY_PATH=/usr/local/lib
+LABEL tutorial.demo="06-quality-pipeline" tutorial.variant="svc"
+USER 1001:1001
+ENTRYPOINT ["/app/demo06-svc"]
+
+# ---- gdbserver sidecar ----
+FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS gdbserver
+RUN dnf install -y --setopt=install_weak_deps=False \
+        libstdc++ gdb-gdbserver \
+    && dnf clean all
+COPY --from=build /src/build/release-debuginfo/demo06-svc /app/demo06-svc
+COPY --from=build /src/build/release-debuginfo/libdemo06_channel.so* /usr/local/lib/
+ENV LD_LIBRARY_PATH=/usr/local/lib
+LABEL tutorial.demo="06-quality-pipeline" tutorial.variant="gdbserver"
+EXPOSE 1234
+ENTRYPOINT ["gdbserver", "0.0.0.0:1234", "/app/demo06-svc"]

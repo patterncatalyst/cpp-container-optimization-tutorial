@@ -1,0 +1,54 @@
+# Build the bench harness into a UBI runtime image with mimalloc available.
+#
+# Build:
+#   podman build -t cpp-tut/demo-02 .
+
+ARG UBI_VERSION=9.4
+
+FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build
+
+RUN dnf install -y --setopt=install_weak_deps=False \
+        gcc-toolset-14 \
+        cmake \
+        ninja-build \
+        git \
+        wget \
+    && dnf clean all
+
+ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64
+
+WORKDIR /src
+COPY src/ ./src/
+COPY CMakeLists.txt ./
+
+RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+ && cmake --build build -j"$(nproc)" \
+ && strip --strip-all build/demo-bench
+
+# Build mimalloc from source against the same toolchain. Pinning the
+# tag is important: PRD §9 says reproducible builds.
+ARG MIMALLOC_TAG=v2.1.7
+RUN git clone --depth 1 --branch "${MIMALLOC_TAG}" \
+        https://github.com/microsoft/mimalloc.git /tmp/mimalloc \
+ && cmake -S /tmp/mimalloc -B /tmp/mimalloc/build \
+        -G Ninja -DCMAKE_BUILD_TYPE=Release -DMI_BUILD_STATIC=OFF \
+ && cmake --build /tmp/mimalloc/build -j"$(nproc)"
+
+# ---- runtime ----
+FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION}
+
+RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ \
+ && microdnf clean all
+
+ARG GIT_SHA=unknown
+LABEL tutorial.demo="02-memory-and-stl" \
+      tutorial.toolchain="gcc-toolset-14" \
+      org.opencontainers.image.revision="${GIT_SHA}"
+
+WORKDIR /app
+COPY --from=build /src/build/demo-bench /app/demo-bench
+COPY --from=build /tmp/mimalloc/build/libmimalloc.so* /usr/local/lib/
+
+USER 1001:1001
+ENTRYPOINT ["/app/demo-bench"]

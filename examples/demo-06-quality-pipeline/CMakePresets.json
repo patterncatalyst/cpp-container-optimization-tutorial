@@ -1,0 +1,43 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "_base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/${presetName}/conan_toolchain.cmake"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "_base",
+      "displayName": "Release",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "release-debuginfo",
+      "inherits": "_base",
+      "displayName": "RelWithDebInfo (used by abidiff)",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
+    },
+    {
+      "name": "debug",
+      "inherits": "_base",
+      "displayName": "Debug build for gdbserver",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "release",            "configurePreset": "release" },
+    { "name": "release-debuginfo",  "configurePreset": "release-debuginfo" },
+    { "name": "debug",              "configurePreset": "debug" }
+  ],
+  "testPresets": [
+    { "name": "release",            "configurePreset": "release",            "output": { "outputOnFailure": true } },
+    { "name": "debug",              "configurePreset": "debug",              "output": { "outputOnFailure": true } }
+  ]
+}

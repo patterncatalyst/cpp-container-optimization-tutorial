@@ -1,0 +1,41 @@
+ARG UBI_VERSION=9.4
+
+FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build
+
+RUN dnf install -y --setopt=install_weak_deps=False \
+        gcc-toolset-14 cmake ninja-build \
+    && dnf clean all
+ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64
+
+WORKDIR /src
+COPY src/ ./src/
+COPY CMakeLists.txt ./
+
+ARG HTTPLIB_VERSION=v0.16.0
+RUN mkdir -p src/third_party \
+ && curl -fsSL -o src/third_party/httplib.h \
+        "https://raw.githubusercontent.com/yhirose/cpp-httplib/${HTTPLIB_VERSION}/httplib.h"
+
+RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+ && cmake --build build -j"$(nproc)" \
+ && strip --strip-all build/tenant-a build/tenant-b
+
+# ---- runtime: tenant-a ----
+FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION} AS tenant-a
+RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ \
+ && microdnf clean all
+COPY --from=build /src/build/tenant-a /app/tenant-a
+LABEL tutorial.demo="05-isolation" tutorial.tenant="a"
+EXPOSE 8080
+USER 1001:1001
+ENTRYPOINT ["/app/tenant-a"]
+
+# ---- runtime: tenant-b ----
+FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION} AS tenant-b
+RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ \
+ && microdnf clean all
+COPY --from=build /src/build/tenant-b /app/tenant-b
+LABEL tutorial.demo="05-isolation" tutorial.tenant="b"
+USER 1001:1001
+ENTRYPOINT ["/app/tenant-b"]

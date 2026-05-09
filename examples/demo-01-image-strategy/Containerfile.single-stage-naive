@@ -1,0 +1,36 @@
+# Anti-example: a single-stage build that ships the full toolchain
+# along with the binary. This is what most "first try" Containerfiles
+# look like. The point is to compare its size to the multi-stage variant.
+#
+# Build:
+#   podman build -f Containerfile.single-stage-naive -t demo-01-single-stage-naive .
+
+ARG UBI_VERSION=9.4
+FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION}
+
+RUN dnf install -y --setopt=install_weak_deps=False \
+        gcc-toolset-14 \
+        cmake \
+        ninja-build \
+        git
+# Note: no `dnf clean all` and no second stage — this is the anti-pattern.
+
+ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64
+
+WORKDIR /app
+COPY src/ ./src/
+COPY CMakeLists.txt CMakePresets.json ./
+
+RUN cmake --preset release \
+ && cmake --build --preset release -j"$(nproc)"
+
+ARG GIT_SHA=unknown
+LABEL tutorial.demo="01-image-strategy" \
+      tutorial.variant="single-stage-naive" \
+      tutorial.toolchain="gcc-toolset-14" \
+      tutorial.lto="thin" \
+      org.opencontainers.image.revision="${GIT_SHA}"
+
+EXPOSE 8080
+ENTRYPOINT ["/app/build/release/demo-svc"]

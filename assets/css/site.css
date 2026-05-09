@@ -1,0 +1,143 @@
+/* ------------------------------------------------------------------
+ * Minimal stub stylesheet. Replace verbatim with the skeleton's
+ * assets/css/site.css when convenient — the conventions match.
+ * ------------------------------------------------------------------ */
+
+:root {
+  --bg: #ffffff;
+  --fg: #1d1f24;
+  --muted: #5b6470;
+  --accent: #0066cc;
+  --accent-light: #e6f0fa;
+  --border: #e1e4e8;
+  --code-bg: #f6f8fa;
+  --max-width: 760px;
+  --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-light: #1f2a3a;
+    --border: #30363d;
+    --code-bg: #161b22;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code, pre, kbd { font-family: var(--font-mono); font-size: 0.92em; }
+code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; }
+pre {
+  background: var(--code-bg);
+  padding: 1rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+}
+pre code { background: transparent; padding: 0; }
+
+.site-header, .site-footer { border-bottom: 1px solid var(--border); }
+.site-footer { border-top: 1px solid var(--border); border-bottom: 0; margin-top: 4rem; }
+.site-header-inner, .site-footer-inner, .site-main {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 1rem 1.5rem;
+}
+.site-header-inner { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.site-brand { font-weight: 600; color: var(--fg); display: inline-flex; align-items: baseline; gap: 0.5em; }
+.site-brand:hover { text-decoration: none; }
+.site-brand-emoji { font-size: 1.25em; }
+.site-nav a { margin-left: 1.25rem; color: var(--muted); }
+.site-nav a:hover { color: var(--accent); }
+.site-footer { font-size: 0.9em; color: var(--muted); }
+
+.site-main h1, .site-main h2, .site-main h3 {
+  line-height: 1.25;
+  margin-top: 2em;
+  margin-bottom: 0.5em;
+}
+.site-main h1 { margin-top: 0; font-size: 2rem; }
+
+.tutorial-eyebrow, .plan-eyebrow {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.tutorial-lede, .plan-lede {
+  color: var(--muted);
+  font-size: 1.1rem;
+  margin-top: 0.25em;
+}
+.duration {
+  background: var(--accent-light);
+  color: var(--accent);
+  padding: 0.1em 0.5em;
+  border-radius: 4px;
+}
+
+.tutorial-nav {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.95rem;
+}
+
+.tutorial-body table, .plan-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 0.92em;
+}
+.tutorial-body th, .tutorial-body td, .plan-body th, .plan-body td {
+  border: 1px solid var(--border);
+  padding: 0.5em 0.75em;
+  text-align: left;
+  vertical-align: top;
+}
+.tutorial-body th, .plan-body th { background: var(--code-bg); font-weight: 600; }
+
+.excalidraw {
+  margin: 2rem 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem;
+  background: var(--bg);
+}
+.excalidraw object, .excalidraw img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+.excalidraw figcaption { text-align: center; color: var(--muted); margin-top: 0.5rem; font-size: 0.92em; }
+.excalidraw-source { text-align: center; margin: 0.5rem 0 0; font-size: 0.85em; }
+
+.callout {
+  border-left: 4px solid var(--accent);
+  background: var(--accent-light);
+  padding: 0.75rem 1rem;
+  margin: 1.25rem 0;
+  border-radius: 0 4px 4px 0;
+}

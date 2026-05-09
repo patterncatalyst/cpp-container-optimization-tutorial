@@ -1,0 +1,15 @@
+---
+layout: default
+---
+
+<article class="plan-doc">
+  <header class="plan-header">
+    <p class="plan-eyebrow">Plan · audit trail</p>
+    <h1>{{ page.title }}</h1>
+    {% if page.description %}<p class="plan-lede">{{ page.description }}</p>{% endif %}
+  </header>
+
+  <div class="plan-body">
+    {{ content }}
+  </div>
+</article>

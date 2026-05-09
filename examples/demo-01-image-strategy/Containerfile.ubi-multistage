@@ -1,0 +1,54 @@
+# Multi-stage build on Red Hat UBI.
+# Stage 1 builds with the full toolchain; stage 2 ships only the binary
+# and the minimal runtime libs it links against.
+#
+# Build:
+#   podman build -f Containerfile.ubi-multistage -t demo-01-ubi-multistage .
+
+ARG UBI_VERSION=9.4
+FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build
+
+RUN dnf install -y --setopt=install_weak_deps=False \
+        gcc-toolset-14 \
+        cmake \
+        ninja-build \
+        git \
+    && dnf clean all
+
+ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64
+
+WORKDIR /src
+COPY src/ ./src/
+COPY CMakeLists.txt CMakePresets.json ./
+
+# Release build with LTO. PGO is handled by the dedicated PGO Containerfile.
+RUN cmake --preset release \
+ && cmake --build --preset release -j"$(nproc)" \
+ && strip --strip-all build/release/demo-svc
+
+# ---- runtime stage ----
+FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION} AS runtime
+
+RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ \
+ && microdnf clean all
+
+# Provenance: who built this image, with which toolchain, against which sources.
+ARG GIT_SHA=unknown
+ARG BUILD_DATE
+LABEL org.opencontainers.image.title="cpp-container-tutorial demo-01 ubi-multistage" \
+      org.opencontainers.image.description="UBI multi-stage build with LTO" \
+      org.opencontainers.image.source="https://github.com/patterncatalyst/cpp-container-optimization-tutorial" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      tutorial.demo="01-image-strategy" \
+      tutorial.variant="ubi-multistage" \
+      tutorial.toolchain="gcc-toolset-14" \
+      tutorial.lto="thin"
+
+WORKDIR /app
+COPY --from=build /src/build/release/demo-svc /app/demo-svc
+
+USER 1001:1001
+EXPOSE 8080
+ENTRYPOINT ["/app/demo-svc"]

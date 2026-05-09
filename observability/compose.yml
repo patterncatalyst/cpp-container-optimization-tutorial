@@ -1,0 +1,102 @@
+# Reusable observability stack.
+#
+# Bring up standalone:
+#   podman compose -f observability/compose.yml up -d
+#
+# Or include from a demo's compose.yml via:
+#   podman compose -f compose.yml -f observability/compose.yml up
+#
+# Single-binary mode for Mimir/Tempo/Loki — fine for a tutorial, not
+# production. All ports are bound to 127.0.0.1 (no external exposure)
+# and Grafana is set to anonymous viewer so the audience can browse
+# without typing a password.
+
+services:
+  otel-collector:
+    image: docker.io/otel/opentelemetry-collector-contrib:0.103.0
+    container_name: tutorial-otel-collector
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otel/config.yaml:ro,Z
+    ports:
+      - "127.0.0.1:4317:4317"   # OTLP gRPC
+      - "127.0.0.1:4318:4318"   # OTLP HTTP
+    networks:
+      - obs
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+
+  prometheus:
+    image: docker.io/prom/prometheus:v2.55.0
+    container_name: tutorial-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--enable-feature=otlp-write-receiver"
+      - "--web.enable-remote-write-receiver"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro,Z
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks:
+      - obs
+
+  mimir:
+    image: docker.io/grafana/mimir:2.13.0
+    container_name: tutorial-mimir
+    command: ["-config.file=/etc/mimir/config.yaml"]
+    volumes:
+      - ./mimir/mimir.yaml:/etc/mimir/config.yaml:ro,Z
+    ports:
+      - "127.0.0.1:9009:9009"
+    networks:
+      - obs
+
+  tempo:
+    image: docker.io/grafana/tempo:2.5.0
+    container_name: tutorial-tempo
+    command: ["-config.file=/etc/tempo/config.yaml"]
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo/config.yaml:ro,Z
+    ports:
+      - "127.0.0.1:3200:3200"   # HTTP API
+    networks:
+      - obs
+
+  loki:
+    image: docker.io/grafana/loki:3.1.0
+    container_name: tutorial-loki
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./loki/loki-config.yaml:/etc/loki/config.yaml:ro,Z
+    ports:
+      - "127.0.0.1:3100:3100"
+    networks:
+      - obs
+
+  grafana:
+    image: docker.io/grafana/grafana:11.2.0
+    container_name: tutorial-grafana
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      GF_FEATURE_TOGGLES_ENABLE: "traceqlEditor"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro,Z
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro,Z
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - obs
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+      - mimir
+
+networks:
+  obs:
+    name: tutorial-obs
+    external: false

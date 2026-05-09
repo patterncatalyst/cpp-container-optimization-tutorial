@@ -1,0 +1,81 @@
+# PGO build, two stages.
+#
+# Stage 1 (`instrumented`) builds with -fprofile-generate. We run that
+# binary against a representative workload (see demo.sh's pgo_train phase),
+# collect .profraw files, merge them with llvm-profdata, and copy the
+# resulting profile back into the build context.
+#
+# Stage 2 (`optimized`) consumes the merged profile via -fprofile-use
+# and produces the final image.
+#
+# Build:
+#   podman build -f Containerfile.pgo --target instrumented -t demo-01-pgo-instrumented .
+#   # ... run training workload, collect profile to ./pgo-profiles/default.profdata ...
+#   podman build -f Containerfile.pgo --target optimized -t demo-01-pgo-optimized .
+
+ARG UBI_VERSION=9.4
+
+# ---- toolchain base ----
+FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS toolchain
+
+RUN dnf install -y --setopt=install_weak_deps=False \
+        clang \
+        llvm \
+        cmake \
+        ninja-build \
+    && dnf clean all
+
+# ---- stage: instrumented ----
+FROM toolchain AS instrumented-build
+WORKDIR /src
+COPY src/ ./src/
+COPY CMakeLists.txt CMakePresets.json ./
+
+RUN cmake --preset pgo-generate \
+ && cmake --build --preset pgo-generate -j"$(nproc)"
+
+FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION} AS instrumented
+RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ compiler-rt \
+ && microdnf clean all
+WORKDIR /app
+COPY --from=instrumented-build /src/build/pgo-generate/demo-svc /app/demo-svc
+LABEL tutorial.demo="01-image-strategy" \
+      tutorial.variant="pgo-instrumented" \
+      tutorial.lto="thin"
+ENV LLVM_PROFILE_FILE=/profiles/demo-svc-%p-%m.profraw
+EXPOSE 8080
+# Profiles are written under /profiles; mount that as a volume when running.
+ENTRYPOINT ["/app/demo-svc"]
+
+# ---- stage: optimized ----
+# Consumes the merged profile from ./pgo-profiles/default.profdata.
+FROM toolchain AS optimized-build
+WORKDIR /src
+COPY src/ ./src/
+COPY CMakeLists.txt CMakePresets.json ./
+COPY pgo-profiles/default.profdata /pgo/default.profdata
+
+RUN cmake --preset pgo-use -DPGO_PROFILE_PATH=/pgo/default.profdata \
+ && cmake --build --preset pgo-use -j"$(nproc)" \
+ && strip --strip-all build/pgo-use/demo-svc
+
+FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION} AS optimized
+RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ \
+ && microdnf clean all
+
+ARG GIT_SHA=unknown
+ARG BUILD_DATE
+LABEL org.opencontainers.image.title="cpp-container-tutorial demo-01 pgo-optimized" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      tutorial.demo="01-image-strategy" \
+      tutorial.variant="pgo-optimized" \
+      tutorial.toolchain="clang-19" \
+      tutorial.lto="thin" \
+      tutorial.pgo="true"
+
+WORKDIR /app
+COPY --from=optimized-build /src/build/pgo-use/demo-svc /app/demo-svc
+USER 1001:1001
+EXPOSE 8080
+ENTRYPOINT ["/app/demo-svc"]

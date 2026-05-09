@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+  external_labels:
+    cluster: tutorial
+    source: prometheus
+
+# OTel Collector forwards metrics here via the OTLP receiver enabled in
+# the compose command flags. We also scrape any service that exposes
+# /metrics directly. Remote-write to Mimir keeps a longer-horizon copy.
+scrape_configs:
+  - job_name: prometheus-self
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: tutorial-services
+    static_configs:
+      - targets:
+          - 'demo04-svc:8080'
+        labels:
+          tutorial_demo: '04'
+
+remote_write:
+  - url: http://mimir:9009/api/v1/push
+    queue_config:
+      capacity: 10000
+      max_samples_per_send: 1000
