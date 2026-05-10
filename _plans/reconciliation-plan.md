@@ -44,8 +44,8 @@ on a clean Fedora 44 host; that's what the verification pass turns
 
 | §  | Title                                                              | Drafted | Verified state              | Verifier notes                                       |
 |----|--------------------------------------------------------------------|---------|-----------------------------|------------------------------------------------------|
-| 0  | Outline                                                            | [x]     | unverified                  | —                                                    |
-| 1  | Prerequisites                                                      | [x]     | unverified                  | Test on fresh Fedora 44 VM and Silverblue toolbox    |
+| 0  | Outline                                                            | [x]     | drafted (r03)               | Full prose, sidebar dropped, dual-target sizing called out  |
+| 1  | Prerequisites                                                      | [x]     | drafted (r03)               | Full prose drafted; scripts/check-host.sh added; not yet run on fresh Fedora 44 VM |
 | 2  | Introduction & Mental Model                                        | [x]     | unverified                  | —                                                    |
 | 3  | Container Strategy: UBI, scratch, multi-stage builds               | [x]     | unverified                  | Tied to Demo 1                                       |
 | 4  | Compile-Time Wins: LTO, PGO, constexpr                             | [x]     | unverified                  | Tied to Demo 1; PGO instrumentation step needs test  |
@@ -137,6 +137,97 @@ memory), what was tested, what passed, what surprised the verifier.
   the user provided; not walked through on a Fedora 44 host.
 
 ### 2026-05-09 — Site refactored to hummingbird-tutorial conventions; Excalidraw folder seeded; PRD dual-target sizing
+
+- Adopted `patterncatalyst/hummingbird-tutorial` Jekyll conventions for
+  CSS, layouts, includes, and top-level listing pages so the
+  `patterncatalyst` family of tutorial sites shares a visual language.
+  - Rewrote `assets/css/site.css` (~480 lines) around the same class
+    system (`hero`, `hero--compact`, `card`, `chip`, `btn--primary`,
+    `gallery-card`, `modal__*`, `tutorial__*`, `doc-card`) with a
+    C++-flavored deep-red accent (`#c0392b`) and proper
+    `prefers-color-scheme: dark` tokens (later removed in r02 per
+    user request — site now stays light always).
+  - Replaced `_layouts/{default,tutorial,plan}.html`,
+    `_includes/{header,footer,excalidraw}.html`, and `index.html`.
+  - Added `_includes/diagram-card.html` partial used by the gallery.
+  - Added top-level pages `diagrams.html` (fullscreen-modal gallery,
+    JS verbatim from hummingbird so future patches apply to both)
+    and `examples.html` (cards listing the six demos).
+  - Updated `_config.yml` to match: `permalink: /:path/:basename/`,
+    `jekyll-redirect-from` plugin, `sectionid` defaults, the
+    "trailing slash on `examples/`" exclude pattern. Added
+    `jekyll-redirect-from` to the Gemfile.
+
+- Seeded `assets/diagrams/` with 13 placeholder pairs (`.svg` and
+  `.excalidraw`) so every inline include and gallery card resolves to
+  *something* on first build. Each placeholder is a labelled gray box
+  that says "diagram pending"; the `.excalidraw` stub opens cleanly on
+  excalidraw.com so the editor doesn't have to hand-craft the JSON
+  envelope. Conventions written up in `assets/diagrams/README.md`.
+
+- Renamed every inline diagram reference in `_docs/*.md` to the
+  canonical basenames used by the gallery (`02-introduction-four-layers`,
+  `06-allocator-stack`, `12-reproducibility-conan-flow`, etc.) so
+  inline embeds and the gallery resolve to the same SVG file.
+
+- PRD dual-target sizing made explicit:
+  - **PPTX deck**: 1.5–3 hours when delivered live.
+  - **Jekyll site**: untimed; written for self-paced reading.
+  - **Demos**: standalone runnable examples used in both targets;
+    live during the talk *or* swapped for pre-recorded video.
+  - Per-section "duration" fields in `_docs/` are reading time for
+    the site; PPTX talk-time for the deck is in PRD §5.
+  - Section table now labels its time column "PPTX talk" rather than
+    a generic "duration", and PRD §5 spells out which sections are
+    in the 1.5h cut vs. the 3h cut.
+
+- Verification state unchanged: nothing has been walked through on
+  Fedora 44 yet.
+
+### 2026-05-09 — r02: CSS light-only; demo-01 pre-flight fixes
+
+- Removed the dark-mode media query from `assets/css/site.css` so
+  the site stays light always (matches hummingbird). Added
+  `color-scheme: light` on `:root`. Kept the dark-mode block as
+  commented-out reference at the bottom of the file for opt-in.
+- demo-01 fixes that would have blocked the verification pass:
+  - `CMakePresets.json` `pgo-use` preset: hardcoded
+    `/pgo/default.profdata`. The original `${PGO_PROFILE_PATH}`
+    cache-var reference doesn't expand inside preset cacheVariables.
+  - `Containerfile.scratch-static`: added `libstdc++-dev` to apk so
+    the static archive is present at link time.
+  - `Containerfile.pgo`: dropped unneeded `compiler-rt` from the
+    instrumented runtime image (profile runtime is statically linked).
+  - `demo.sh`: source `_helpers.sh`, `require podman curl jq hey`,
+    replaced both `sleep 1` calls with `wait_for_http`, added
+    unconditional `mkdir -p pgo-profiles`.
+
+### 2026-05-09 — r03: Round 1 prose (§0, §1); sidebar drop; CONTRIBUTING.md
+
+- §0 Outline rewritten as full long-form prose. Documents how the
+  tutorial is organised, the two delivery targets (PPTX 1.5–3h vs
+  untimed site), the 1.5h vs 3h PPTX cuts, what each section covers,
+  what's deliberately out of scope, and the realistic 7–10h end-to-end
+  reading + running estimate.
+- §1 Prerequisites rewritten as a working install guide: dnf install
+  list, Conan 2 via pip, hey installation, rootless cgroup delegation
+  drop-in, kernel-feature checks, registry auth, repo clone, and a
+  "common things that go wrong" runbook.
+- Added `scripts/check-host.sh` that exercises every prerequisite
+  and prints a PASS/FAIL table with remediation hints. References
+  the Fedora baseline but degrades gracefully on other distros.
+- Site change (per user request): dropped the per-tutorial-page
+  sidebar entirely; the layout is now single-column with prev/next
+  pager, matching hummingbird-tutorial's behaviour. CSS for
+  `.tutorial__sidebar` excised; `.tutorial` no longer a grid.
+- Added `CONTRIBUTING.md` documenting the Conventional-Commits
+  format and the type list (`docs:`, `site:`, `demo:`, `obs:`,
+  `build:`, `ci:`, `chore:`, `fix:`, `feat:`, `refactor:`, `style:`).
+- Verification status: §0 and §1 are **drafted** but not yet
+  walked through on a fresh Fedora 44 host. The check-host.sh
+  output in §1 is illustrative; the script itself runs cleanly
+  in syntax check but needs an end-to-end pass to validate every
+  remediation hint.
 
 - Adopted `patterncatalyst/hummingbird-tutorial` Jekyll conventions for
   CSS, layouts, includes, and top-level listing pages so the

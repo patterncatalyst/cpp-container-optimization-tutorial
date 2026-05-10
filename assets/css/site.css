@@ -10,7 +10,11 @@
    ────────────────────────────────────────────────────────────────────── */
 
 :root {
-    /* Light theme tokens */
+    /* Light theme tokens. Site stays light regardless of OS preference —
+       matches hummingbird-tutorial's behaviour. To opt back into auto
+       dark mode, see the commented block at the bottom of this file. */
+    color-scheme: light;
+
     --bg:           #fdfbf7;
     --bg-soft:      #f4efe6;
     --bg-card:     #ffffff;
@@ -36,22 +40,6 @@
                    Arial, "Noto Sans", sans-serif;
     --font-mono:   ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
                    "Liberation Mono", monospace;
-}
-
-@media (prefers-color-scheme: dark) {
-    :root {
-        --bg:        #15171c;
-        --bg-soft:   #1d2026;
-        --bg-card:   #22262d;
-        --fg:        #ececec;
-        --fg-muted:  #b8b8b8;
-        --fg-faint:  #828282;
-        --accent:    #ff7568;
-        --accent-soft: #3a1f1c;
-        --rule:      #2a2f37;
-        --code-bg:   #0f1115;
-        --code-fg:   #e6e2da;
-    }
 }
 
 * { box-sizing: border-box; }
@@ -338,47 +326,11 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5rem 0; }
     font-size: .92rem; line-height: 1.45;
 }
 
-/* ── Tutorial layout (single doc page) ───────────────────────────────── */
+/* ── Tutorial layout (single doc page, sidebar-free) ─────────────────── */
 
-.tutorial {
-    display: grid;
-    grid-template-columns: 220px minmax(0, 1fr);
-    gap: 3rem;
-    padding: 2.5rem 0;
-}
-@media (max-width: 800px) {
-    .tutorial { grid-template-columns: 1fr; gap: 1.5rem; }
-    .tutorial__sidebar { order: 2; }
-}
-.tutorial__sidebar {
-    position: sticky; top: 5rem; align-self: start;
-    border-left: 1px solid var(--rule);
-    padding-left: 1.25rem;
-    max-height: calc(100vh - 6rem);
-    overflow-y: auto;
-}
-.tutorial__sidebar h3 {
-    font-size: .8rem;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    color: var(--fg-faint);
-    margin: 0 0 .75rem;
-}
-.tutorial__sidebar ol {
-    list-style: none; padding: 0; margin: 0;
-}
-.tutorial__sidebar li { margin-bottom: .35rem; }
-.tutorial__sidebar a {
-    color: var(--fg-muted); font-size: .92rem;
-    display: block; padding: .15rem 0;
-}
-.tutorial__sidebar a:hover { color: var(--accent); text-decoration: none; }
-.tutorial__sidebar a.is-current { color: var(--fg); font-weight: 600; }
-.tutorial__sidebar .section-num {
-    display: inline-block; min-width: 1.5em; color: var(--fg-faint);
-}
+.tutorial { padding: 2.5rem 0; }
 
-.tutorial__main { min-width: 0; }      /* prevent grid overflow on long lines */
+.tutorial__main { min-width: 0; }      /* prevent overflow on long lines */
 .tutorial__header {
     margin: 0 0 2rem;
     padding-bottom: 1.5rem;
@@ -606,3 +558,28 @@ pre code { background: transparent; padding: 0; color: inherit; font-size: .92em
     height: 1px; width: 1px; overflow: hidden;
     clip: rect(0 0 0 0); white-space: nowrap;
 }
+
+/* ── Opt-back-in dark mode ───────────────────────────────────────────────
+   Uncomment this block (and remove `color-scheme: light` from :root above)
+   to follow the operating system's theme preference. We default to
+   light-only because hummingbird-tutorial does, and visual consistency
+   across the patterncatalyst family is more important than theme parity
+   with the OS.
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        color-scheme:   dark;
+        --bg:           #15171c;
+        --bg-soft:      #1d2026;
+        --bg-card:      #22262d;
+        --fg:           #ececec;
+        --fg-muted:     #b8b8b8;
+        --fg-faint:     #828282;
+        --accent:       #ff7568;
+        --accent-soft:  #3a1f1c;
+        --rule:         #2a2f37;
+        --code-bg:      #0f1115;
+        --code-fg:      #e6e2da;
+    }
+}
+*/

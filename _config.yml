@@ -75,6 +75,7 @@ exclude:
     - GETTING-STARTED.md
     - STARTING-WITH-CLAUDE.md
     - LICENSE
+    - CONTRIBUTING.md
     - scripts/
     - observability/
     # examples/ holds runnable demo code that the tutorial references but is

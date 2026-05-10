@@ -1,0 +1,118 @@
+# Contributing
+
+Short version: this project uses **Conventional Commits** with a small
+fixed set of types listed below. PRs should match the convention; CI
+doesn't enforce it (yet) but reviewers will ask you to amend if not.
+
+## Commit-message format
+
+```
+<type>(<scope>): <short summary>
+
+<optional body, wrap at 72 chars>
+
+<optional trailers, e.g. Fixes: #123>
+```
+
+- `<type>` from the table below.
+- `<scope>` is **optional** but expected on `demo:`, `docs:`, `obs:`,
+  and any change scoped to one section. Use `demo-01` ... `demo-06`
+  for demo work, `§3` ... `§14` for section work, or omit when the
+  change spans many areas.
+- `<short summary>` is one line, **imperative mood**, ≤ 72 chars,
+  no trailing period.
+- The body is optional but encouraged for anything beyond a typo fix.
+  Wrap at 72 chars.
+
+### Types
+
+| Type        | When to use                                                                          |
+|-------------|--------------------------------------------------------------------------------------|
+| `docs:`     | Tutorial prose under `_docs/`, README, PRD, plan updates                              |
+| `site:`     | Jekyll layouts, includes, CSS, page structure under `_layouts/` `_includes/` `assets/`|
+| `demo:`     | Anything inside `examples/demo-XX-*/` (sources, Containerfiles, demo.sh)              |
+| `obs:`      | Anything under `observability/` (Grafana, Prom, Mimir, Tempo, Loki, OTel collector)   |
+| `build:`    | CMake, Conan, Ninja config; cross-cutting toolchain changes                           |
+| `ci:`       | `.github/workflows/`, test scripts under `scripts/`                                   |
+| `chore:`    | Routine maintenance (dependency bumps, `.gitignore`, file moves, archive housekeeping)|
+| `fix:`      | Bug fix in any of the above; **always** pair with the scope of the bug                |
+| `feat:`     | New capability; **always** pair with the scope where it lands                         |
+| `refactor:` | Reorganization without behaviour change                                               |
+| `style:`    | Formatting only, no logic change                                                      |
+
+### Examples
+
+```
+docs(§6): expand memory mgmt with cgroups v2, OOM, malloc_trim, LinuxMemoryChecker
+```
+
+```
+fix(demo-01): pre-flight bugs blocking the verification pass
+
+- CMakePresets pgo-use: hardcoded /pgo/default.profdata; ${} subst
+  doesn't expand in preset cache vars.
+- Containerfile.scratch-static: added libstdc++-dev to apk.
+- demo.sh: source _helpers.sh, require podman curl jq hey,
+  replace sleep 1 with wait_for_http, mkdir -p pgo-profiles always.
+```
+
+```
+site: drop tutorial-page sidebar; cards-only homepage
+```
+
+```
+chore: archive r03 — round 3 prose for §0 and §1
+```
+
+```
+feat(obs): provision Grafana dashboard for demo-04 latency overview
+```
+
+### Subject-line cheat sheet
+
+- "Add", "Drop", "Rename", "Move" — imperative verbs are right.
+- "Added", "Dropped" — past tense is wrong; reword.
+- "Updates docs" — vague; say *what* about the docs.
+- "WIP" — fine on a feature branch, but squash before merge.
+
+## When to split a commit
+
+Each commit should leave the tree in a working state. If a single
+change touches **multiple types** (e.g. you fixed a demo bug *and*
+expanded the prose around it), prefer two commits:
+
+```
+fix(demo-02): pmr arena was 64 KiB instead of 1 MiB
+docs(§5): explain why arena size matters for the comparison
+```
+
+over a single mixed-type commit. The exception: when the doc change
+*explains* the fix and they share rationale; then bundle them and
+say so in the body.
+
+## Reconciliation plan
+
+Every substantive change should leave a corresponding entry in
+[`_plans/reconciliation-plan.md`](./_plans/reconciliation-plan.md).
+This is **not** a changelog — it tracks verification state, not the
+list of commits. The rule of thumb:
+
+- A code or docs change that you've personally walked through on
+  Fedora 44 → flip the matrix row from `unverified` to `verified`,
+  add a dated entry to the verification log.
+- A code or docs change you haven't run end-to-end → leave the row
+  as `unverified` and **say so** in the verification log if the
+  surface area changed.
+
+The reconciliation plan is the honest source of truth for what's
+real vs. what's drafted-but-untested. Keep it honest.
+
+## Branching and PRs
+
+- Default branch: `main`.
+- Branches: `feat/<thing>`, `fix/<thing>`, `docs/<scope>`. Anything
+  short-lived.
+- One commit per logical change is preferred; squash-merge is fine
+  if review surfaced fixups.
+- Force-pushing your own feature branch is fine; force-pushing
+  `main` is not.

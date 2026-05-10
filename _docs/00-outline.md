@@ -1,64 +1,253 @@
 ---
-title: Outline
+title: "Outline & reading order"
 order: 0
-description: The reader's map. What's ahead, in what order, and how to use this tutorial in either 90 minutes or 3 hours.
-duration: 2 minutes
+description: How this tutorial is organised, what each section covers, the 1.5h vs 3h presentation cuts, and what's deliberately out of scope.
+duration: "5–10 minute read"
 ---
 
-## What this tutorial is
+This page is the map. Read it once before you start, and come back
+whenever you lose your place. Every section ends with a prev/next bar
+that links you here through §1, but if you want a bird's-eye view of
+where any one section sits in the whole, this is the page.
 
-Performance tuning for modern C++ services running in OCI
-containers, on a Linux host. Every claim is paired with a runnable
-demo so you can reproduce it on your own laptop.
+## How the tutorial is organised
 
-## Two ways to use it
+The tutorial is split into **fifteen numbered sections** under
+[`_docs/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/_docs).
+The sections are designed to be **read and executed in order** —
+each one builds on the state your machine is in when you finish the
+previous one. There is no separate lab environment: your Fedora 44
+workstation is the lab from start to finish.
 
-- **The 90-minute path.** Read every section in order; skip
-  running demos 3, 4, and 5 (long compose stacks); rely on the
-  pre-recorded screenshots in those sections. Best for a first
-  pass to get the shape of things.
-- **The 3-hour path.** Read every section in order; run every
-  demo. Best when you have a Fedora 44 host in front of you and
-  want to feel each tuning knob in your hands.
+Six **runnable demos** under
+[`examples/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples)
+are pulled in by name from the sections that need them. Each demo is
+a self-contained Podman project with its own `./demo.sh`, its own
+Containerfile(s), and the CMake / Conan plumbing to build hermetically.
+You can run the demos as you read, run them all in a final pass, or
+skip them entirely on a first read and come back later.
 
-Either path covers the same material. Demos compress to "show me
-the result"; you can always come back later and run them.
+A small Grafana / Prometheus / Mimir / Tempo / Loki stack lives under
+[`observability/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/observability).
+Demo 4 brings it up; later demos optionally point at it. You can also
+run the stack standalone — useful as a sandbox for your own services.
 
-## The sections
+Within each section, the structure is consistent:
 
-| §  | Title                                                              | Duration |
-|----|--------------------------------------------------------------------|----------|
-| 0  | Outline (this page)                                                | 2 min    |
-| 1  | [Prerequisites](../01-prerequisites/)                              | 10 min   |
-| 2  | [Introduction & Mental Model](../02-introduction/)                 | 8 min    |
-| 3  | [Container Strategy: UBI, scratch, multi-stage](../03-image-strategy/) | 12 min   |
-| 4  | [Compile-Time Wins: LTO, PGO, constexpr](../04-compile-time-wins/)  | 12 min   |
-| 5  | [STL, Layout, and C++20/23 Containers](../05-stl-layout/)           | 15 min   |
-| 6  | [Memory Management](../06-memory-management/)                       | 12 min   |
-| 7  | [I/O Latency](../07-io-latency/)                                    | 15 min   |
-| 8  | [Networking & Kernel Parameters](../08-networking-kernel/)          | 10 min   |
-| 9  | [Observability & Profiling](../09-observability-profiling/)         | 15 min   |
-| 10 | [Noisy Neighbor Isolation](../10-noisy-neighbors/)                  | 12 min   |
-| 11 | [Static Analysis & Debugging](../11-analysis-debugging/)            | 12 min   |
-| 12 | [Reproducibility & ABI](../12-reproducibility-abi/)                 | 12 min   |
-| 13 | [Pitfalls](../13-pitfalls/)                                         | 10 min   |
-| 14 | [Where to Go Next](../14-where-to-go-next/)                         | 3 min    |
+1. **Learning objectives** — what you should be able to do after.
+2. **Diagram** — an Excalidraw figure showing the moving parts.
+3. **Planned content** — the substance of the section.
+4. **Demo** — pointer to the matching `examples/demo-XX-*` directory.
+5. **For deeper coverage** — pointers into the four reference books.
+6. **What's next** — explicit handoff to the next section.
 
-**Total:** ~2 hours 40 minutes with demos.
+## Two delivery targets
 
-## What's not covered
+This material exists in two parallel forms, and the difference matters
+for how you read:
 
-C++ language fundamentals; Podman / OCI fundamentals; Docker /
-vcpkg / Bazel comparisons; Kubernetes; Windows hosts. See
-[`PRD.md`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/blob/main/PRD.md) §3 for the
-full non-goals list.
+| Target          | Time budget                | What it is                                                                                       |
+|-----------------|----------------------------|--------------------------------------------------------------------------------------------------|
+| **PPTX deck**   | 1.5–3 hours, live          | A guided tour of the most important sections, with pre-recorded demo videos in the 1.5h cut and live demo runs in the 3h cut. |
+| **This site**   | Untimed                    | The comprehensive long-form reference. Every code listing, every command, the full reconciliation plan. Read at your own pace. |
+| **The demos**   | Each runs in 30s–8 minutes | Self-contained Podman projects you can run independently of either delivery target.              |
 
-## Reference materials
+Per-section "duration" fields here are **reading time** for the site,
+not talking time for the deck. The deck's pacing is documented in
+[the PRD](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/blob/main/PRD.md#5-scope-and-section-outline).
 
-The tutorial points at, but does not summarize, three reference
-books. Each section's "for deeper coverage" pointer names the
-relevant chapter:
+### The 1.5-hour PPTX cut
 
-- Andrist & Sehr, *C++ High Performance, 2nd Edition*
-- Iglberger, *C++ Software Design*
-- Enberg, *Latency: Reduce delay in software systems*
+A pragmatic short version that hits the highest-leverage material
+and uses pre-recorded video for everything else:
+
+- §0 Outline — 2 min
+- §1 Prerequisites — 5 min (skip the demo; show host-check video)
+- §2 Introduction & mental model — 8 min
+- §3 Container strategy + Demo 1 video — 12 min
+- §6 Memory management — 15 min
+- §7 I/O latency + Demo 3 video — 15 min
+- §9 Observability + Demo 4 video — 15 min
+- §13 Pitfalls highlights — 10 min
+- §14 Where to go next — 3 min
+- Q&A buffer — 5 min
+
+Topics linked to but not visited live: §4 (LTO/PGO theory mentioned in
+§3), §5 (STL silent overhead — link to site), §8 (kernel parameters),
+§10 (noisy neighbors), §11 (analysis), §12 (ABI).
+
+### The 3-hour PPTX cut
+
+Every section walked through, every demo run live. Talk-time totals
+**2h 46m**; the rest is Q&A, room reset, and slack for live-demo
+overruns.
+
+## The fifteen sections
+
+### §0 — Outline (this page)
+
+The map. Don't skip it on your first read.
+
+### [§1 — Prerequisites](../01-prerequisites/)
+
+Set up Fedora 44, Podman 5.x rootless, GCC 14 / Clang 18 toolchain,
+Conan 2, CMake, Ninja, and the supporting tools (`hey`, `jq`, `curl`,
+`bpftrace`, `libabigail`). Configure rootless cgroups v2 delegation,
+verify your kernel has io_uring multishot, and run the host-check
+script that confirms everything's wired correctly before you touch
+the demos.
+
+If you're on a different distro, this is the section that tells you
+what won't work. (Spoiler: macOS via `podman machine` works for the
+container parts and breaks for the kernel-feature parts.)
+
+### [§2 — Introduction & mental model](../02-introduction/)
+
+Why container constraints change C++ performance reasoning. The
+**four-layer model** that frames the rest of the tutorial:
+**compile time → image layout → kernel boundary → runtime isolation.**
+Where each performance lever lives. Why advice that's correct on
+bare metal can be actively wrong inside a container.
+
+### [§3 — Container strategy: UBI, scratch, multi-stage builds](../03-image-strategy/)
+
+Demo 1 territory. When to use UBI vs scratch vs Alpine, why
+multi-stage builds matter for both image size and supply chain,
+and the **AVX-512 mismatch trap** that bites builds promoted from
+a builder host with newer silicon to a runtime host without it.
+
+### [§4 — Compile-time wins: LTO, PGO, constexpr](../04-compile-time-wins/)
+
+Still Demo 1. What LTO actually does, why thin LTO is usually the
+right default, when PGO is worth the extra build phase, and what
+`constexpr` buys you that ordinary `inline` doesn't. Includes the
+full PGO instrumentation flow: build instrumented → run training
+workload → merge profiles → rebuild optimized.
+
+### [§5 — STL, layout, and C++20/23 containers](../05-stl-layout/)
+
+Demo 2 territory. `std::vector` vs `std::deque` cache behaviour;
+when C++23's `flat_map` and `flat_set` win and when they lose;
+the **silent memory overhead** of node-based containers; the
+allocator-aware refactoring story for hot data structures.
+
+### [§6 — Memory management: allocators, huge pages, cgroups v2, OOM](../06-memory-management/)
+
+Still Demo 2. PMR allocators, transparent huge pages, mimalloc
+and jemalloc as `LD_PRELOAD` swaps, **cgroups v2 `memory.max` vs
+`memory.high`**, why glibc holds onto memory and how `malloc_trim`
+reclaims it, the **RSS / working set / `memory.current` distinction**,
+and the **LinuxMemoryChecker pattern** for keeping your service a
+safe distance below the OOM ceiling.
+
+### [§7 — I/O latency: io_uring, async gRPC, SO_REUSEPORT](../07-io-latency/)
+
+Demo 3 territory. The submission queue / completion queue model,
+multishot accept and multishot recv, provided buffer rings, async
+gRPC's completion-queue API, and `SO_REUSEPORT` for letting the
+kernel distribute connections across worker processes.
+
+### [§8 — Networking & kernel parameters](../08-networking-kernel/)
+
+Still Demo 3. The cost of **veth pairs vs `--network=host`** in
+rootless Podman, the sysctls that matter for low-latency C++
+services (`net.core.somaxconn`, TCP timestamps and SACK,
+`net.ipv4.tcp_rmem` / `tcp_wmem`), and where the comparison
+between rootless and rootful networking actually lives.
+
+### [§9 — Observability & profiling: Grafana stack, perf, eBPF](../09-observability-profiling/)
+
+Demo 4 territory. The full Grafana / Prometheus / Mimir / Tempo /
+Loki stack via `podman compose`, OTLP/gRPC instrumentation from C++,
+and three host-side observability layers that complement application
+metrics: `perf` for CPU sampling, `bcc-tools` for off-CPU and syscall
+analysis, and `bpftrace` for ad-hoc kernel probes.
+
+### [§10 — Noisy neighbor isolation: cgroups, CPU pinning, NUMA](../10-noisy-neighbors/)
+
+Demo 5 territory. The two-tenant scenario: a latency-sensitive
+service next to a CPU/memory-bound noisy neighbor. **`cpu.weight`,
+`io.weight`, `cpuset.cpus`**, `numactl --membind`, and what each
+knob actually controls under contention.
+
+### [§11 — Static analysis & debugging in containers](../11-analysis-debugging/)
+
+Demo 6 territory. cppcheck and clang-tidy as build stages, gtest
++ gmock as a separate build target, **AddressSanitizer / UBSan /
+MSan / TSan** with a slowdown comparison table, **Valgrind**
+trade-offs, **Meta's Object Introspection** for the silent-overhead
+pitfalls from §5, and the **ephemeral gdb sidecar** pattern for
+attaching to a running container without putting `gdb` into the
+runtime image.
+
+### [§12 — Reproducibility & ABI: Conan, CMake presets, hermetic builds](../12-reproducibility-abi/)
+
+Still Demo 6. Conan 2 lockfiles for fully-pinned dependencies,
+CMake presets for build-environment portability, and **`abidiff`
+from libabigail** for catching silent ABI breaks before they reach
+production. The mental model: every binary you ship should be
+rebuildable byte-for-byte from a commit and a lockfile.
+
+### [§13 — Pitfalls](../13-pitfalls/)
+
+The traps that catch experienced people: AVX-512 instruction-set
+mismatch between builder and runtime host, abstraction overhead
+from misjudged virtual interfaces, build-time delays from
+unbounded layer cache miss patterns, and a few smaller ones.
+Each pitfall is presented as **symptom → root cause → fix**, in
+the runbook style §11's "distroless gotchas" page in the
+hummingbird-tutorial popularised.
+
+### [§14 — Where to go next](../14-where-to-go-next/)
+
+Pointers to the four reference books we draw on, what each is
+strongest at, and what topics this tutorial deliberately doesn't
+cover (coroutines, Kubernetes, distributed tracing, GPU offload).
+
+## What this tutorial deliberately does not cover
+
+A few things are out of scope on purpose:
+
+- **C++ language tutorials.** We assume idiomatic C++17 and a
+  working knowledge of templates, RAII, move semantics, and the STL.
+  If you're newer to C++, [cppreference.com](https://en.cppreference.com)
+  and [Andrist & Sehr's *C++ High Performance, 2e*](#) are the right
+  starting points.
+- **Podman fundamentals.** We assume you can run `podman run` and
+  write a basic `Containerfile`. The
+  [hummingbird-tutorial](https://patterncatalyst.github.io/hummingbird-tutorial/)
+  is an excellent companion if you need that grounding first.
+- **Kubernetes.** Cgroups v2 and Podman pods are the deployment
+  mental model. Translating to k8s is mostly mechanical (the
+  `requests` / `limits` semantics map directly to the cgroup
+  controllers we tune), but k8s-specific work is a separate tutorial.
+- **macOS as a primary platform.** macOS via `podman machine` works
+  for the container parts but breaks the kernel-feature demos
+  (cgroups v2, NUMA, `io_uring` multishot). We acknowledge it,
+  but Fedora 44 is the demo baseline.
+- **Comparisons to other tooling.** Podman vs Docker, GCC vs Clang,
+  Conan vs vcpkg — choices are stated and defended in §1; readers
+  wanting comparisons can do them themselves.
+
+The [reconciliation plan](../../plans/reconciliation-plan/) tracks
+which of these may be added in future iterations and which are
+firmly out of scope.
+
+## Estimated time, end-to-end
+
+If you read every section and run every demo, expect:
+
+- **45 minutes to 1.5 hours** for §0–§2 (the prerequisites and the
+  mental model)
+- **2 to 3 hours** for §3–§6 (Demo 1 and Demo 2; the bulk of the
+  compile-time and memory material)
+- **1.5 to 2.5 hours** for §7–§9 (Demo 3 and Demo 4; I/O, networking,
+  and the full observability stack)
+- **2 to 3 hours** for §10–§13 (Demos 5 and 6, plus the pitfalls
+  reference)
+- **15 minutes** for §14
+
+Total reading + running time: **roughly 7–10 hours**, spread over
+however many sittings you want. The first three rows are the
+recommended first pass; the rest can wait until you have a real
+reason to reach for them.

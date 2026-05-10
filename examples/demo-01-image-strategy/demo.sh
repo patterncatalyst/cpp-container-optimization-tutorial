@@ -11,9 +11,17 @@ set -euo pipefail
 DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DEMO_DIR"
 
+# shellcheck source=../../scripts/lib/_helpers.sh
+source "$(cd ../../scripts/lib && pwd)/_helpers.sh"
+
+require podman curl jq hey
+
 IMG_PREFIX="cpp-tut/demo-01"
 PORT_BASE=18801
 
+# Local color/header/note kept for backwards-compat with the script's
+# original output style; helpers are used for the new functionality
+# (require, wait_for_http) only.
 color() { printf '\033[%sm%s\033[0m' "$1" "$2"; }
 header() { echo; echo "$(color '1;34' "==> $*")"; }
 note() { echo "    $*"; }
@@ -23,6 +31,11 @@ cleanup() {
     xargs -r podman rm -f >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
+
+# Ensure pgo-profiles/ exists so the optimized stage's COPY doesn't 404
+# even on a --no-pgo run that's followed later by a normal run that
+# uses cached layers. demo.sh's PGO branch will repopulate it cleanly.
+mkdir -p pgo-profiles
 
 # Vendor cpp-httplib if not already present. Pin the version so re-runs
 # produce a byte-identical input to the build.
@@ -70,7 +83,7 @@ if [[ $DO_PGO -eq 1 ]]; then
     -p ${PORT_BASE}:8080 \
     -v "$PWD/pgo-profiles:/profiles:Z" \
     "${IMG_PREFIX}:pgo-instrumented"
-  sleep 1
+  wait_for_http "http://127.0.0.1:${PORT_BASE}/healthz" 30
   hey -n 5000 -c 50 "http://127.0.0.1:${PORT_BASE}/" >/dev/null
   hey -n 2500 -c 25 -m POST -d "$(printf 'x%.0s' {1..512})" \
     "http://127.0.0.1:${PORT_BASE}/echo" >/dev/null || true
@@ -109,7 +122,7 @@ printf -- '-%.0s' {1..62}; echo
 for tag in "${!IMAGES[@]}"; do
   port="${IMAGES[$tag]}"
   podman run --rm -d --name "demo01-bench-${tag}" -p "${port}:8080" "${IMG_PREFIX}:${tag}" >/dev/null
-  sleep 1
+  wait_for_http "http://127.0.0.1:${port}/healthz" 20
   out=$(hey -n 10000 -c 100 "http://127.0.0.1:${port}/" 2>/dev/null)
   p50=$(awk '/50% in/ {print $3 * 1000}' <<<"$out")
   p95=$(awk '/95% in/ {print $3 * 1000}' <<<"$out")

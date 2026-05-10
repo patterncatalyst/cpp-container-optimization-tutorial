@@ -2,7 +2,6 @@
 layout: default
 ---
 {%- assign docs = site.docs | sort: "order" -%}
-{%- assign here = page.order | default: 0 -%}
 
 {%- assign prev_doc = nil -%}
 {%- assign next_doc = nil -%}
@@ -15,52 +14,37 @@ layout: default
     {%- unless found -%}{%- assign prev_doc = d -%}{%- endunless -%}
 {%- endfor -%}
 
-<div class="container">
-    <div class="tutorial">
-        <aside class="tutorial__sidebar" aria-label="Section navigation">
-            <h3>Tutorial sections</h3>
-            <ol>
-                {%- for d in docs -%}
-                <li>
-                    <a href="{{ d.url | relative_url }}"
-                       {% if d.url == page.url %}class="is-current" aria-current="page"{% endif %}>
-                        <span class="section-num">§{{ d.order }}</span>
-                        {{ d.title }}
-                    </a>
-                </li>
-                {%- endfor -%}
-            </ol>
-        </aside>
+<article class="tutorial">
+    <div class="container container-prose">
+        <header class="tutorial__header">
+            <p class="tutorial__meta">
+                <span>§{{ page.order }}</span>
+                {%- if page.duration -%}<span>⏱ {{ page.duration }}</span>{%- endif -%}
+            </p>
+            <h1>{{ page.title }}</h1>
+            {%- if page.description -%}
+            <p class="tutorial__lead">{{ page.description }}</p>
+            {%- endif -%}
+        </header>
 
-        <article class="tutorial__main">
-            <header class="tutorial__header">
-                <p class="tutorial__meta">
-                    <span>§{{ page.order }}</span>
-                    {%- if page.duration -%}<span>⏱ {{ page.duration }}</span>{%- endif -%}
-                </p>
-                <h1>{{ page.title }}</h1>
-                {%- if page.description -%}
-                <p class="tutorial__lead">{{ page.description }}</p>
-                {%- endif -%}
-            </header>
-
+        <div class="tutorial__main">
             {{ content }}
+        </div>
 
-            <nav class="tutorial__pager" aria-label="Section pagination">
-                {%- if prev_doc -%}
-                <a class="is-prev" href="{{ prev_doc.url | relative_url }}">
-                    <span class="label">← §{{ prev_doc.order }}</span>
-                    <span class="title">{{ prev_doc.title }}</span>
-                </a>
-                {%- else -%}<span></span>{%- endif -%}
+        <nav class="tutorial__pager" aria-label="Section pagination">
+            {%- if prev_doc -%}
+            <a class="is-prev" href="{{ prev_doc.url | relative_url }}">
+                <span class="label">← §{{ prev_doc.order }}</span>
+                <span class="title">{{ prev_doc.title }}</span>
+            </a>
+            {%- else -%}<span></span>{%- endif -%}
 
-                {%- if next_doc -%}
-                <a class="is-next" href="{{ next_doc.url | relative_url }}">
-                    <span class="label">§{{ next_doc.order }} →</span>
-                    <span class="title">{{ next_doc.title }}</span>
-                </a>
-                {%- else -%}<span></span>{%- endif -%}
-            </nav>
-        </article>
+            {%- if next_doc -%}
+            <a class="is-next" href="{{ next_doc.url | relative_url }}">
+                <span class="label">§{{ next_doc.order }} →</span>
+                <span class="title">{{ next_doc.title }}</span>
+            </a>
+            {%- else -%}<span></span>{%- endif -%}
+        </nav>
     </div>
-</div>
+</article>

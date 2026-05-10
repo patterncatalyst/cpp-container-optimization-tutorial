@@ -35,7 +35,9 @@ RUN cmake --preset pgo-generate \
  && cmake --build --preset pgo-generate -j"$(nproc)"
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION} AS instrumented
-RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ compiler-rt \
+# -fprofile-generate statically links the profile runtime into the binary,
+# so we only need libstdc++ at runtime.
+RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ \
  && microdnf clean all
 WORKDIR /app
 COPY --from=instrumented-build /src/build/pgo-generate/demo-svc /app/demo-svc
@@ -55,7 +57,7 @@ COPY src/ ./src/
 COPY CMakeLists.txt CMakePresets.json ./
 COPY pgo-profiles/default.profdata /pgo/default.profdata
 
-RUN cmake --preset pgo-use -DPGO_PROFILE_PATH=/pgo/default.profdata \
+RUN cmake --preset pgo-use \
  && cmake --build --preset pgo-use -j"$(nproc)" \
  && strip --strip-all build/pgo-use/demo-svc
 
