@@ -403,6 +403,78 @@ prefixes:
 
 ---
 
+### G-12 · `podman compose` delegating to `docker-compose` rejects `Containerfile` and demands `Dockerfile` (r28 → r29)
+
+**Problem.** Running `podman compose -f compose.yml -f
+../../observability/compose.yml up -d --build` against a
+demo whose container build file is named `Containerfile`
+fails with:
+
+    >>>> Executing external compose provider
+    "/usr/libexec/docker/cli-plugins/docker-compose". <<<<
+    [+] up 0/1
+     ⠋ Image cpp-tut/demo-04:latest Building       0.0s
+    unable to prepare context: unable to evaluate symlinks
+    in Dockerfile path: lstat .../examples/demo-04-observability/Dockerfile:
+    no such file or directory
+    Error: executing /usr/libexec/docker/cli-plugins/docker-compose
+    -f compose.yml -f .../observability/compose.yml up -d
+    --build: exit status 1
+
+**Why.** Podman 5.x detects `docker-compose` (the Compose
+v2 CLI) on `$PATH` and *delegates* to it instead of using
+the native podman-compose Python implementation. The
+warning banner in the failure output makes this explicit.
+The native `podman-compose` is friendly to `Containerfile`
+because that's the podman convention; `docker-compose` is
+not, because that's not the Docker convention. With no
+explicit `dockerfile:` in the compose `build:` block, the
+Compose v2 CLI defaults to looking for `Dockerfile`, can't
+find it, and aborts before any build runs.
+
+This isn't a podman bug or a docker-compose bug — both
+are doing the right thing for their own tradition. It's
+a delegation seam that surfaces only when both tools are
+installed on the same host, which is the common case on
+developer workstations.
+
+**Fix.** Specify the build file explicitly in every
+compose `build:` block:
+
+    services:
+      demo-04-svc:
+        build:
+          context: .
+          dockerfile: Containerfile      # <-- add this
+        image: cpp-tut/demo-04:latest
+
+Both `docker-compose` and `podman-compose` honor an
+explicit `dockerfile:` key. Compatible across the seam,
+clear in the YAML, no environment-variable magic, no
+pinning the user's compose binary.
+
+Three demos shipped this oversight: demo-03 (two build
+targets), demo-04 (one). All three patched in r29. Future
+demos with a `build:` block must include
+`dockerfile: Containerfile` from the start.
+
+If you want to verify which compose binary your podman is
+delegating to (or confirm it isn't delegating at all):
+
+    podman compose version
+    # native podman-compose:
+    #   podman-compose version 1.x.y
+    # delegating to docker-compose:
+    #   >>>> Executing external compose provider ...
+
+The delegation can be disabled by either uninstalling
+`docker-compose-plugin` or by setting
+`PODMAN_COMPOSE_PROVIDER=podman-compose` in the
+environment, but neither is necessary once the
+`dockerfile:` key is in place.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -2562,6 +2634,92 @@ re-derive them mid-debug.
 Ready to run on your machine. Phase 0 first; then the
 script does Phase 1-4 in one go; Phase 4 (matrix flip)
 is what r29 will record.
+
+### 2026-05-10 — r29: G-12 — fix `podman compose` → `docker-compose` delegation rejecting Containerfile
+
+User ran the upgraded `test-demo-04-observability.sh`
+from r28 and Phase 1 failed at the `up -d --build`
+step:
+
+    >>>> Executing external compose provider
+    "/usr/libexec/docker/cli-plugins/docker-compose". <<<<
+    [+] up 0/1
+     ⠋ Image cpp-tut/demo-04:latest Building       0.0s
+    unable to prepare context: unable to evaluate symlinks
+    in Dockerfile path: lstat .../demo-04-observability/Dockerfile:
+    no such file or directory
+    Error: ... exit status 1
+    ==> tearing down
+
+The script's cleanup path ran correctly — `set -euo
+pipefail` killed Phase 1 the moment `up` returned non-zero,
+the EXIT trap tore down the partial state. So the script
+machinery worked exactly as designed; the error is real
+and needs a fix.
+
+**Why.** Podman 5.x detects `docker-compose` (the Compose
+v2 CLI) on `$PATH` and delegates to it instead of using
+the native podman-compose Python implementation. The
+banner in the failure output makes this explicit. The
+native podman-compose is friendly to Containerfile;
+docker-compose is not. With no explicit `dockerfile:` in
+the compose `build:` block, Compose v2 defaults to
+looking for `Dockerfile`, can't find it, and aborts
+before any build runs.
+
+Not a bug in either tool — both are doing the right
+thing for their own tradition. It's a delegation seam
+that surfaces only when both are installed on the same
+host (the common case on developer workstations).
+
+**Fix.** Specify `dockerfile: Containerfile` in every
+compose `build:` block. Both providers honor it. Three
+files patched:
+
+- `examples/demo-04-observability/compose.yml` — one
+  build block.
+- `examples/demo-03-io-uring-grpc/compose.yml` — two
+  build blocks (echo-uring + grpc-async targets).
+
+`observability/compose.yml` and the other demos
+(01/02/05/06) are unaffected — they either have no
+build directive or use bare image references.
+
+**Promoted to G-12** in the Gotchas section. Documented
+includes:
+
+- The literal failure output the user saw (banner
+  delegation message + 'no such file or directory' on
+  Dockerfile).
+- The why (delegation, not bug).
+- The minimal fix (one yaml key per build block).
+- The diagnosis tip (`podman compose version`
+  identifies which binary is being delegated to).
+- The fact that `PODMAN_COMPOSE_PROVIDER=podman-compose`
+  works as an alternative env-var fix, but the yaml fix
+  is the right call because it works for every reader
+  regardless of their compose binary configuration.
+
+**What this round does NOT do:**
+
+- Doesn't actually re-run option B; that's the user's
+  next step. After applying r29 the build should
+  proceed; the OTel-cpp v1.16.1 build from source will
+  take 10-20 minutes on first run; the test should
+  then complete Phases 2-4.
+- Doesn't address the OTel-cpp build risk if it fires
+  later in the build (G-12 candidate from r28 was
+  about that; remains a candidate until we know
+  whether it fires).
+- Doesn't change demo-04 source or the test script —
+  the script is correct, it just couldn't get past the
+  build step on the user's host.
+
+**Convention update for future demos.** Any new compose
+`build:` block ships with `dockerfile: Containerfile`
+from the start. Adding this to CONTRIBUTING.md as a
+checklist item is a follow-up nicety; for now the G-12
+gotcha entry serves as the institutional memory.
 
 ---
 

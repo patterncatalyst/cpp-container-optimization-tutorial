@@ -9,6 +9,7 @@ services:
   echo-uring:
     build:
       context: .
+      dockerfile: Containerfile
       target: echo-uring
     image: cpp-tut/demo-03:echo-uring
     container_name: demo03-echo-uring
@@ -18,6 +19,7 @@ services:
   grpc-async:
     build:
       context: .
+      dockerfile: Containerfile
       target: grpc-async
     image: cpp-tut/demo-03:grpc-async
     container_name: demo03-grpc-async
