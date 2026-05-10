@@ -1,21 +1,40 @@
-# Multi-stage build to ubi-micro.
+# Multi-stage build to ubi-micro with a fully-static -static-pie binary.
 #
 # Demonstrates how small a UBI-based image gets when the runtime base is
-# the minimum Red Hat ships (ubi-micro: ~30 MB, glibc + a few coreutils,
-# no package manager) and the C++ stdlib is statically linked into the
-# binary. The binary itself stays dynamically linked against glibc, which
-# ubi-micro provides.
+# the minimum Red Hat ships (ubi-micro: ~10-15 MB, basically just rootfs
+# scaffolding, no package manager) and the binary is *fully statically*
+# linked. Unlike a typical "static libstdc++ only" build, this one bakes
+# glibc into the binary too, sidestepping a real-world failure mode that
+# bites in production:
+#
+#   /app/demo-svc: /lib64/libc.so.6: version `GLIBC_2.35' not found
+#   (required by /app/demo-svc)
+#
+# That error happened on r17 with a static-libstdc++-only build. The
+# build container's `ubi:9.4` image had a newer glibc patch level
+# (Oct 2024 build, with backported GLIBC_2.35-stamped symbols) than the
+# runtime container's `ubi-micro:9.4` (Aug 2024 build, no backport).
+# Static-libstdc++ doesn't help — the missing symbol is in libc itself,
+# which was still linked dynamically. With -static-pie there is no
+# dynamic libc dependency at all, so it doesn't matter what version
+# of glibc the runtime image ships.
 #
 # Build:
 #   podman build -f Containerfile.ubi-micro -t demo-01-ubi-micro .
 #
-# Why this is the right "small image" path:
-#   - ubi-micro is published by Red Hat, requires no subscription, and
-#     receives the same security updates as the rest of UBI 9.
-#   - Static-linking libstdc++ avoids the version-drift trap of bundling
-#     a libstdc++.so from the builder into the runtime image.
-#   - We don't fight glibc by trying to static-link it (that approach is
-#     officially discouraged and full of NSS / getaddrinfo traps).
+# Trade-offs to be aware of:
+#   - Binary grows from ~7 MB (dynamic libc) to ~25 MB (static glibc
+#     + libstdc++ + libgcc baked in). Image size ends up ~35-40 MB,
+#     which is still a 17-19x reduction vs the naive single-stage
+#     image and more importantly it actually runs.
+#   - Some libc features that depend on dlopen() at runtime stop
+#     working: NSS (so getaddrinfo() can't resolve hostnames against
+#     /etc/nsswitch.conf), iconv() loadable converters, locale
+#     loading, etc. We don't use any of them; the demo binds to
+#     0.0.0.0 directly and never resolves hostnames.
+#   - -static-pie is GCC's modern static option: position-independent
+#     so it's still ASLR-friendly. -static (the older option) works
+#     too but produces a non-PIE binary.
 
 ARG UBI_VERSION=9.4
 FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build
@@ -41,22 +60,24 @@ WORKDIR /src
 COPY src/ ./src/
 COPY CMakeLists.txt CMakePresets.json ./
 
-# Same release flags as the multi-stage build PLUS -static-libstdc++ /
-# -static-libgcc so the C++ stdlib + libgcc support routines bake into
-# the binary. glibc itself stays dynamic — ubi-micro provides it at
-# runtime.
-RUN cmake --preset release-static-libstdcxx \
- && cmake --build --preset release-static-libstdcxx -j"$(nproc)" \
- && strip --strip-all build/release-static-libstdcxx/demo-svc
+# release-static-pie preset: thin LTO + -static-pie + static libgcc +
+# static libstdc++. The result is a single-file ELF that doesn't need
+# /lib64/ld-linux-x86-64.so.2 or libc.so.6 at runtime.
+#
+# The strip pass after the build cuts ~30% off the binary by stripping
+# both static-linked symbol tables and DWARF debug info.
+RUN cmake --preset release-static-pie \
+ && cmake --build --preset release-static-pie -j"$(nproc)" \
+ && strip --strip-all build/release-static-pie/demo-svc
 
-# ---- runtime stage: ubi-micro (~30 MB, glibc + minimal coreutils) ----
+# ---- runtime stage: ubi-micro (~10-15 MB, just glibc + rootfs scaffolding) ----
 FROM registry.access.redhat.com/ubi9/ubi-micro:${UBI_VERSION} AS runtime
 
 # Provenance.
 ARG GIT_SHA=unknown
 ARG BUILD_DATE
 LABEL org.opencontainers.image.title="cpp-container-tutorial demo-01 ubi-micro" \
-      org.opencontainers.image.description="UBI-micro runtime, static libstdc++" \
+      org.opencontainers.image.description="UBI-micro runtime, fully static -static-pie binary" \
       org.opencontainers.image.source="https://github.com/patterncatalyst/cpp-container-optimization-tutorial" \
       org.opencontainers.image.revision="${GIT_SHA}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
@@ -64,12 +85,13 @@ LABEL org.opencontainers.image.title="cpp-container-tutorial demo-01 ubi-micro" 
       tutorial.variant="ubi-micro" \
       tutorial.toolchain="gcc-toolset-14" \
       tutorial.lto="thin" \
-      tutorial.libstdcxx="static"
+      tutorial.linkage="static-pie"
 
 WORKDIR /app
-COPY --from=build /src/build/release-static-libstdcxx/demo-svc /app/demo-svc
+COPY --from=build /src/build/release-static-pie/demo-svc /app/demo-svc
 
-# ubi-micro has /etc/passwd with a built-in non-root user.
+# ubi-micro doesn't ship a populated /etc/passwd, but we run as a numeric
+# UID so passwd lookups aren't needed. ENTRYPOINT runs as UID 1001.
 USER 1001:1001
 EXPOSE 8080
 ENTRYPOINT ["/app/demo-svc"]

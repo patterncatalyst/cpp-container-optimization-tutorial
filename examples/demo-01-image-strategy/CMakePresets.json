@@ -22,13 +22,13 @@
       }
     },
     {
-      "name": "release-static-libstdcxx",
+      "name": "release-static-pie",
       "inherits": "_base",
-      "displayName": "Release with thin LTO + static libstdc++/libgcc",
+      "displayName": "Release with thin LTO + fully static (libc + libstdc++ + libgcc), PIE",
       "cacheVariables": {
         "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
-        "CMAKE_EXE_LINKER_FLAGS": "-static-libstdc++ -static-libgcc",
-        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG -fno-plt"
+        "CMAKE_EXE_LINKER_FLAGS": "-static-pie -static-libgcc -static-libstdc++",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG -fno-plt -fPIE"
       }
     },
     {
@@ -55,7 +55,7 @@
   ],
   "buildPresets": [
     { "name": "release",                   "configurePreset": "release" },
-    { "name": "release-static-libstdcxx",  "configurePreset": "release-static-libstdcxx" },
+    { "name": "release-static-pie",        "configurePreset": "release-static-pie" },
     { "name": "pgo-generate",              "configurePreset": "pgo-generate" },
     { "name": "pgo-use",                   "configurePreset": "pgo-use" }
   ]

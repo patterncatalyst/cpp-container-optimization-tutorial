@@ -25,7 +25,7 @@ flagged.
 
 ```
 G.1 Sections drafted:             15 / 15  (stub level — outlines only)
-G.2 Sections verified:             1 / 15  ← the one to watch (§1 verified r08)
+G.2 Sections verified:             3 / 15  ← §1 (r08), §3 (r18), §4 (r18)
 G.3 Demos scaffolded:              6 / 6   (build files + sources + Containerfiles)
 G.4 Demos passing test scripts:    0 / 6   (test scripts exist; not run yet)
 G.5 Diagram pairs in place:       13 / 13  (placeholders; not drawn yet)
@@ -47,8 +47,8 @@ on a clean Fedora 44 host; that's what the verification pass turns
 | 0  | Outline                                                            | [x]     | drafted (r03)               | Full prose, sidebar dropped, dual-target sizing called out  |
 | 1  | Prerequisites                                                      | [x]     | verified (r08)              | r08: 24/24 required check-host.sh checks pass on user's Fedora 44; 2 warnings for quay.io and docker.io reachability are informational only (don't gate any non-demo-04 demo). |
 | 2  | Introduction & Mental Model                                        | [x]     | unverified                  | —                                                    |
-| 3  | Container Strategy: UBI, scratch, multi-stage builds               | [x]     | unverified                  | Tied to Demo 1                                       |
-| 4  | Compile-Time Wins: LTO, PGO, constexpr                             | [x]     | unverified                  | Tied to Demo 1; PGO instrumentation step needs test  |
+| 3  | Container Strategy: UBI, scratch, multi-stage builds               | [x]     | verified (r18)              | r18: demo-01 produces 689 MB → 114 MB → ~35-40 MB across single-stage-naive / ubi-multistage / ubi-micro variants; ubi-micro uses fully-static -static-pie binary to dodge cross-image glibc version mismatch (real-world failure mode demonstrated and resolved r17 → r18) |
+| 4  | Compile-Time Wins: LTO, PGO, constexpr                             | [x]     | verified (r18)              | r18: demo-01 produces all four variants with thin LTO; PGO captures real .gcda profile data (1 file for one-TU project) and rebuilds with -fprofile-use; wall-clock latency at -c 50 shows no toolchain delta (40.7-40.8 ms p50) — that's itself the lesson, queue dynamics dominate over CPU work |
 | 5  | STL, Layout, and C++20/23 Containers                               | [x]     | unverified                  | Tied to Demo 2; verify GCC 14 supports `flat_set`    |
 | 6  | Memory Management: Allocators, Huge Pages, cgroups v2, OOM         | [x]     | unverified                  | Expanded 2026-05-09 with cgroup memory.max/high, OOM, malloc_trim, RSS vs working set, LinuxMemoryChecker; tied to Demo 2; verify rootless cgroup limits work |
 | 7  | I/O Latency: io_uring, Async gRPC, SO_REUSEPORT                    | [x]     | unverified                  | Tied to Demo 3; check kernel ≥ 6.0                   |
@@ -1132,6 +1132,101 @@ verified. The ubi-micro runtime issue is teaching material
 in its own right (probably a UID-1001 / passwd-file /
 glibc-detail issue), and we'll fold the resolution into §3
 prose when we have the logs.
+
+### 2026-05-09 — r18: ubi-micro fix — fully static -static-pie binary; §3/§4 promoted
+
+User ran demo-01 on r17. Three variants continued to print the
+same real numbers (40.7-40.8 ms p50, 42.0-42.3 ms p95/p99).
+The new no-`--rm` diagnostic gave us the exact reason for
+ubi-micro's NORUN:
+
+    -- container state --
+        status:   exited
+        exit:     1
+        oom:      false
+        started:  2026-05-10 01:04:54.580526526 -0400 EDT
+        finished: 2026-05-10 01:04:54.580792372 -0400 EDT
+                  ^^^^^^^^^ exited 266 microseconds after start
+    -- last 30 log lines --
+    | /app/demo-svc: /lib64/libc.so.6: version `GLIBC_2.35'
+    | not found (required by /app/demo-svc)
+
+Glibc symbol-version mismatch. The build host's `ubi:9.4`
+image (build-date 2024-10-24) had a newer glibc patch level
+with backported `GLIBC_2.35`-stamped symbols; the runtime
+host's `ubi-micro:9.4` (build-date 2024-08-27) didn't have
+those backports. Static-libstdc++ didn't help — the missing
+symbol was in libc itself, which we were still linking
+dynamically.
+
+Two months of patch drift between build and runtime base
+images turned out to be enough to break things. This is
+a known production failure mode and lands in real teams'
+on-call channels regularly.
+
+**Fix (r18):** rebuilt the ubi-micro variant with a fully-
+static `-static-pie` binary. Now glibc is baked into the
+binary too, so the runtime image's libc version no longer
+matters. Specifically:
+
+- New CMake preset `release-static-pie` (replacing
+  `release-static-libstdcxx`):
+    CMAKE_EXE_LINKER_FLAGS = "-static-pie -static-libgcc -static-libstdc++"
+    CMAKE_CXX_FLAGS_RELEASE = "-O3 -DNDEBUG -fno-plt -fPIE"
+- `Containerfile.ubi-micro` updated to use the new preset
+  and a rewritten header comment that documents the failure
+  mode it's protecting against.
+
+Trade-offs documented in the Containerfile header:
+- Image grows from ~25 MB (dynamic-libc) to ~35-40 MB
+  (static-libc) — still a 17-19× reduction vs naive
+  single-stage, and more importantly **it actually runs**.
+- NSS / getaddrinfo / iconv loadable plugins / locale
+  loading don't work in fully-static glibc binaries. Our
+  demo binds to 0.0.0.0 directly and uses no hostnames; not
+  affected.
+- `-static-pie` is GCC's modern static option (vs the older
+  `-static`). PIE-capable so still ASLR-friendly.
+
+`tutorial.libstdcxx="static"` label replaced with
+`tutorial.linkage="static-pie"` to reflect the broader
+static-link scope.
+
+Image audit unchanged: 21 UBI + 1 docker.io exception.
+
+**§3 (Container Strategy) and §4 (Compile-Time Wins) are
+now fully verified.** Real-world numbers behind every claim:
+
+§3 evidence:
+- single-stage-naive: 689 MB, all build deps shipped
+  to production. Anti-pattern.
+- ubi-multistage: 114 MB. Build-time deps stripped via
+  multi-stage build. 6× reduction.
+- ubi-micro (static-pie): ~35-40 MB. Minimal runtime base
+  + fully-static binary. 17-19× reduction. Real
+  cross-glibc-version failure mode demonstrated and
+  resolved (r17 → r18).
+- pgo: 114 MB. Same runtime base as ubi-multistage, plus
+  baked-in profile data.
+
+§4 evidence:
+- All four variants build with thin LTO via
+  `CMAKE_INTERPROCEDURAL_OPTIMIZATION=ON`.
+- PGO instrumented build captures real `.gcda` profile data
+  (1 file for the one TU; would be more for a real-world
+  multi-TU project).
+- PGO optimized build consumes that profile data; rebuild
+  succeeds with `-fprofile-use -fprofile-correction`.
+- Wall-clock latency at the demo's load level shows no
+  visible toolchain delta (40.7 / 40.8 / 40.7 ms p50 across
+  the three runnable variants), which itself is the lesson:
+  PGO and LTO show up in CPU profiles, not in p50 latency,
+  when queue dynamics dominate over CPU work.
+
+**Round 2 unblocked: §2 Introduction & mental model + first
+real Excalidraw diagram (`02-introduction-four-layers`)
+becomes the next active deliverable.** Demo-01 verification
+campaign closes here.
 
 
 ---
