@@ -15,12 +15,25 @@ RUN rm -f /etc/yum.repos.d/redhat.repo && \
 # abseil-cpp, opentelemetry-cpp) — UBI 9 BaseOS+AppStream are enough
 # for the toolchain itself. We don't need EPEL for this demo (G-13
 # story in the plan covers why we stopped chasing system C++ packages).
+#
+# The perl-* modules are for openssl's Configure script, which Conan
+# runs when building openssl from source. UBI 9 ships a minimal perl;
+# the modules each need a separate package. See G-15. Any additional
+# from-source Conan builds that fail on missing perl modules can have
+# the module added to this list.
 RUN dnf install -y --setopt=install_weak_deps=False \
         gcc-toolset-14 \
         cmake \
         ninja-build \
         git \
         python3-pip \
+        perl-FindBin \
+        perl-IPC-Cmd \
+        perl-Data-Dumper \
+        perl-Pod-Html \
+        perl-File-Compare \
+        perl-File-Copy \
+        perl-File-Path \
     && dnf clean all
 
 ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH

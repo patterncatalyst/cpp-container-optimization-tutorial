@@ -665,6 +665,102 @@ flow.
 
 ---
 
+### G-15 · Conan from-source openssl build fails on UBI 9: `Can't locate FindBin.pm in @INC` (r32)
+
+**Problem.** During `conan install`, when a transitive
+dep (openssl, in this case) doesn't have a Conan Center
+pre-built for our profile, Conan falls back to a
+from-source build via `--build=missing`. The build runs
+the dep's own configure script, which for openssl is a
+perl script that fails immediately on UBI 9:
+
+    openssl/3.6.2: RUN: perl ./Configure ...
+    Can't locate FindBin.pm in @INC (you may need to
+    install the FindBin module) (@INC contains:
+    /usr/local/lib64/perl5/5.32 ...)
+    BEGIN failed--compilation aborted at ./Configure
+    line 15.
+    ...
+    ERROR: openssl/3.6.2: Error in build() method
+
+The error chain bubbles all the way up to
+`docker-compose up -d --build` exiting non-zero.
+
+**Why.** UBI 9's perl packaging is unusually fine-
+grained. The `perl` package itself is minimal — only
+the interpreter, no standard-library modules. Each
+common module (FindBin, IPC::Cmd, Data::Dumper,
+File::Compare, File::Path, etc.) lives in its own
+`perl-<Module>` RPM, all in AppStream. RHEL/UBI did
+this to let small footprints stay small; the
+side-effect is that any perl-using build script needs
+its dependencies installed explicitly.
+
+OpenSSL's Configure script in particular uses several
+of the modules above. Without them, it dies before the
+first compile flag gets emitted.
+
+This isn't a Conan issue — Conan would hit the same
+wall building openssl on any minimal distro. It's
+specific to UBI 9 (and to a lesser extent CentOS Stream
+9 / Alma 9 / Rocky 9, which share the perl packaging)
+when building OpenSSL from source.
+
+**Fix.** Pre-install the perl modules openssl's
+Configure script needs in the Containerfile's build
+stage:
+
+    RUN dnf install -y --setopt=install_weak_deps=False \
+            ... \
+            perl-FindBin \
+            perl-IPC-Cmd \
+            perl-Data-Dumper \
+            perl-Pod-Html \
+            perl-File-Compare \
+            perl-File-Copy \
+            perl-File-Path
+
+Six modules covers OpenSSL 3.6.x's Configure. If a
+future from-source Conan build fails on a different
+perl module, add it to this list with the same shape.
+
+**Why preempt instead of just adding `FindBin`?** The
+six modules above cover openssl's typical
+Configure-script needs — bundling them in one round
+means we don't iterate "add one module, rebuild, hit
+the next missing module" three more times. The build
+stage image gets thrown away by the multi-stage
+pattern anyway, so the extra packages cost nothing at
+runtime.
+
+**Why is openssl building from source at all?** Conan
+Center pre-builds the popular profile combinations:
+gcc 11/12/13 with cppstd 17/20, libstdc++11 ABI,
+shared and static. Our profile (gcc 14, cppstd 23,
+static) is enough off the typical that openssl
+specifically didn't have a binary cached; gRPC and
+protobuf likely fall through the same hole. The first
+build is slow because of this; subsequent runs hit
+Conan's local cache and don't recompile.
+
+**Mitigation if first-build time is unacceptable.**
+Drop `compiler.cppstd` from 23 to 20 in the conan
+profile. Conan deps don't need C++23; only the demo
+source does, and the gcc-14 invocation for the demo
+target gets `-std=c++23` from CMake regardless of the
+Conan profile setting. This is a one-line change in
+the Containerfile:
+
+    sed -i 's|^compiler.cppstd=.*|compiler.cppstd=20|' \
+        /root/.conan2/profiles/default
+
+Almost certainly more pre-builts available at
+cppstd=20 than at cppstd=23. Demo-04 keeps using
+std::print at the application layer because that's a
+compile-time choice, not a Conan-profile choice.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -3149,6 +3245,111 @@ The build needs to succeed before any post-build
 candidates can fire, so r32 either flips §10 to
 verified or addresses whichever Conan-related issue
 surfaced.
+
+### 2026-05-10 — r32: G-15 — add perl modules for openssl from-source build
+
+User reran after r31's Conan refactor. dnf install
+succeeded (no more EPEL/system-package issues —
+that's behind us). `pip install conan~=2.0` succeeded.
+`conan profile detect --force` succeeded. `conan install`
+started pulling deps from Conan Center, made it through
+12 packages, and on package 13 of 19 it began building
+openssl/3.6.2 from source (no pre-built binary in Conan
+Center for our gcc-14/cppstd-23/static profile). Openssl's
+Configure step died:
+
+    openssl/3.6.2: RUN: perl ./Configure ...
+    Can't locate FindBin.pm in @INC (you may need to
+    install the FindBin module) (@INC contains:
+    /usr/local/lib64/perl5/5.32 ...)
+    BEGIN failed--compilation aborted at ./Configure
+    line 15.
+
+This isn't a Conan or openssl bug. It's UBI 9's perl
+packaging model: `perl` itself is minimal, every
+standard-library module lives in its own `perl-<Module>`
+sub-package. `FindBin`, `IPC::Cmd`, `Data::Dumper`,
+`Pod::Html`, `File::Compare`, `File::Copy`,
+`File::Path` — all separate RPMs. OpenSSL's Configure
+script uses several of these and dies on the first
+missing one.
+
+**Fix.** Pre-install the perl modules openssl's
+Configure expects. Six modules covers OpenSSL 3.6.x's
+needs:
+
+    perl-FindBin
+    perl-IPC-Cmd
+    perl-Data-Dumper
+    perl-Pod-Html
+    perl-File-Compare
+    perl-File-Copy
+    perl-File-Path
+
+Added to the build-stage `dnf install` list in
+`examples/demo-04-observability/Containerfile`. Comment
+in the Containerfile points at G-15 and notes that
+additional from-source builds may need additional
+modules — to be added with the same shape if they fire.
+
+**Promoted to G-15** in the Gotchas section. Full
+problem/why/fix shape with:
+
+- The literal failure output.
+- UBI 9's perl-packaging model and why it's
+  unusually fine-grained.
+- Why preempt all six modules instead of adding one
+  per round (saves three more iterations as openssl
+  Configure progressively discovers each missing
+  module).
+- A "why is openssl building from source at all" note
+  about Conan Center's pre-built coverage gaps for
+  unusual profiles like gcc-14/cppstd-23/static.
+- A mitigation: drop `compiler.cppstd=23` to
+  `compiler.cppstd=20` in the conan profile if first-
+  build wall-clock time becomes unacceptable. C++20
+  vs C++23 is a Conan-deps choice; the demo source
+  still uses std::print via gcc-14's `-std=c++23` at
+  the application target level.
+
+**What this round does NOT do:**
+
+- Doesn't switch to compiler.cppstd=20. Holding that
+  in reserve for if first-build time turns out to be
+  intolerable on the user's machine.
+- Doesn't change the conanfile.txt (option set
+  unchanged).
+- Doesn't change Conan recipe versions. Sticking with
+  opentelemetry-cpp/1.16.1 because that's what we know
+  the existing demo-04 source compiles against.
+- Doesn't actually run the build. User's next attempt.
+
+**Anticipated next failures (still in play):**
+
+- **Another perl module needed for a different from-
+  source dep.** If grpc, protobuf, or abseil-cpp
+  builds from source and any of their build scripts
+  need a perl module not in our list, we add it. Same
+  Containerfile pattern.
+- **Build tools missing for autotools-based deps.**
+  c-ares uses autotools; Conan's recipe should
+  declare make/autoconf/automake as tool_requires
+  but if it doesn't, we'd need them in the build
+  stage's dnf install. Symptom would be "configure:
+  error: ..." or "command not found" messages.
+- **Disk pressure from from-source cache.** Each
+  source-build dep takes 200-500 MB in /root/.conan2/p.
+  Twelve from-source deps could push to 5+ GB. If the
+  build host doesn't have that, the build fails with
+  ENOSPC.
+- **Original post-build candidates** (metric name
+  drift, Loki label drop, dashboard UID mismatch from
+  r28's anticipation list) — still in play once the
+  build actually completes.
+
+The build needs to actually finish before any of the
+post-build issues can fire. r33 either flips §10 to
+verified or addresses whatever build issue surfaces next.
 
 ---
 
