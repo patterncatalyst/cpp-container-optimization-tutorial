@@ -370,7 +370,9 @@ PASS / FAIL line for each. **Run this before you touch any demo.**
 ./scripts/check-host.sh
 ```
 
-Expected output on a correctly-set-up Fedora 44 box:
+Expected output on a correctly-set-up Fedora 44 box (your registry
+warnings may vary depending on whether your network reaches
+`quay.io` and `docker.io`):
 
 ```
 [ ok ]  fedora baseline                  Fedora Linux 44 (Workstation Edition)
@@ -397,11 +399,19 @@ Expected output on a correctly-set-up Fedora 44 box:
 [ ok ]  bpftrace                         0.21.0
 [ ok ]  gdb                              14.2
 [ ok ]  registry.access.redhat.com       reachable
-[ ok ]  quay.io                          reachable
-[ ok ]  docker.io (hub)                  reachable
+[warn]  quay.io                          unreachable
+        ↳ Affects: future use; not currently required.
+[warn]  docker.io (hub)                  unreachable
+        ↳ Affects: demo-01 build, demo-04 runtime.
 
-All 26 checks passed.
+All 24 required checks passed.
+2 optional check(s) flagged warnings — review the table to see
+which demos are affected.
 ```
+
+Required checks (the 24) gate the script's exit code. Warnings
+don't — they're informational, telling you which demos may be
+constrained by your network.
 
 If any line says `FAIL`, scroll up — the script prints the exact
 remediation command for each failure.
@@ -413,23 +423,28 @@ remediation command for each failure.
 
 ## Pre-pull and verify-stacks
 
-Two convenience scripts at the repo root that save you debugging time:
+Two convenience scripts under `scripts/` that save you debugging time:
 
 ```bash
-./pre-pull.sh                 # pulls every image referenced by the project
-./verify-stacks.sh            # smoke-tests every podman-compose stack
-./verify-stacks.sh --quick    # skip the observability stack (slow)
+./scripts/pre-pull.sh                 # pulls every image referenced by the project
+./scripts/verify-stacks.sh            # smoke-tests the shared observability stack
+./scripts/verify-stacks.sh --quick    # skip slow stacks (e.g. observability)
 ```
 
-**Run `./pre-pull.sh` once after first clone** — it warms the local
-image cache so subsequent demo runs start in seconds instead of
+**Run `./scripts/pre-pull.sh` once after first clone** — it warms the
+local image cache so subsequent demo runs start in seconds instead of
 minutes. Especially important if you'll be presenting; you want
 the network surprises to happen now, not in front of an audience.
 
-**Run `./verify-stacks.sh` whenever you think something might have
-broken** — after a system update, after pulling fresh images, or
+**Run `./scripts/verify-stacks.sh` whenever you think something might
+have broken** — after a system update, after pulling fresh images, or
 before walking on stage. Each stack passes if it can `up`, respond
 to a health endpoint, and `down` cleanly.
+
+The verify script intentionally only tests **shared infrastructure**
+(currently just the observability stack). Per-demo verification lives
+in `scripts/test-demo-NN-*.sh` — run those when you're walking through
+a specific demo's section.
 
 If any pull fails, the message will say which image and why — usually
 either Docker Hub being throttled (re-run later) or a network /

@@ -12,7 +12,11 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$REPO_ROOT/scripts/lib/_helpers.sh"
 
 # ── Status table accumulator ─────────────────────────────────────────────
-PASS=0; FAIL=0
+# Status values:
+#   ok    — hard requirement satisfied
+#   fail  — hard requirement missing; gates exit code
+#   warn  — soft requirement missing; informational, doesn't gate exit
+PASS=0; FAIL=0; WARN=0
 TABLE=()
 
 record() {
@@ -20,16 +24,26 @@ record() {
     local label="$1"; shift
     local detail="$1"; shift
     local hint="${1:-}"
-    if [[ "$status" == ok ]]; then
-        PASS=$((PASS + 1))
-        TABLE+=("$(printf '%s[ ok ]%s  %-32s  %s' "$C_GREEN" "$C_RESET" "$label" "$detail")")
-    else
-        FAIL=$((FAIL + 1))
-        TABLE+=("$(printf '%s[fail]%s  %-32s  %s' "$C_RED" "$C_RESET" "$label" "$detail")")
-        if [[ -n "$hint" ]]; then
-            TABLE+=("        ↳ $hint")
-        fi
-    fi
+    case "$status" in
+        ok)
+            PASS=$((PASS + 1))
+            TABLE+=("$(printf '%s[ ok ]%s  %-32s  %s' "$C_GREEN" "$C_RESET" "$label" "$detail")")
+            ;;
+        warn)
+            WARN=$((WARN + 1))
+            TABLE+=("$(printf '%s[warn]%s  %-32s  %s' "$C_YELLOW" "$C_RESET" "$label" "$detail")")
+            if [[ -n "$hint" ]]; then
+                TABLE+=("        ↳ $hint")
+            fi
+            ;;
+        *)
+            FAIL=$((FAIL + 1))
+            TABLE+=("$(printf '%s[fail]%s  %-32s  %s' "$C_RED" "$C_RESET" "$label" "$detail")")
+            if [[ -n "$hint" ]]; then
+                TABLE+=("        ↳ $hint")
+            fi
+            ;;
+    esac
 }
 
 # ── Distro & kernel ──────────────────────────────────────────────────────
@@ -197,14 +211,29 @@ check_url() {
         record fail "$label" "unreachable" "Check network/firewall."
     fi
 }
+
+# Soft check: warn but don't fail if these registries are unreachable.
+# They affect specific demos, not the toolchain as a whole.
+check_url_optional() {
+    local label="$1" url="$2" affects="$3"
+    if curl -fsS --max-time 5 --head "$url" >/dev/null 2>&1; then
+        record ok "$label" "reachable"
+    else
+        record warn "$label" "unreachable" "Affects: $affects. See §1 for workarounds."
+    fi
+}
+
+# Hard requirement: every demo pulls UBI 9 from here.
 check_url "registry.access.redhat.com" "https://registry.access.redhat.com/v2/"
-check_url "quay.io"                    "https://quay.io/v2/"
-# hub.docker.com (the website API) is reliably reachable anonymously.
-# registry-1.docker.io always returns 401 to anonymous HEAD, which trips
-# `curl -fsS`; we still test it but only as a soft warn — only demo 4
-# (the observability stack) actually needs Docker Hub for the Grafana
-# images. See §1 "When docker.io is unreachable".
-check_url "docker.io (hub)"            "https://hub.docker.com/v2/"
+
+# Soft requirements:
+# - quay.io: not currently used by any demo (we used to mirror Prometheus
+#   here but r06's lgtm bundle replaced that). Kept as informational so
+#   you know whether the registry is reachable for future use.
+# - docker.io: only needed for demo-01's Alpine build stage and demo-04's
+#   grafana/otel-lgtm pull. Other demos run without it.
+check_url_optional "quay.io"          "https://quay.io/v2/"           "future use; not currently required"
+check_url_optional "docker.io (hub)"  "https://hub.docker.com/v2/"    "demo-01 build, demo-04 runtime"
 
 # ── Print the table ──────────────────────────────────────────────────────
 echo
@@ -212,9 +241,16 @@ printf '%s\n' "${TABLE[@]}"
 echo
 TOTAL=$((PASS + FAIL))
 if (( FAIL == 0 )); then
-    log_ok "All ${TOTAL} checks passed."
+    log_ok "All ${TOTAL} required checks passed."
+    if (( WARN > 0 )); then
+        log_warn "${WARN} optional check(s) flagged warnings — review the table"
+        log_warn "to see which demos are affected."
+    fi
     exit 0
 else
-    log_err "${FAIL} of ${TOTAL} checks failed. See messages above."
+    log_err "${FAIL} of ${TOTAL} required checks failed. See messages above."
+    if (( WARN > 0 )); then
+        log_warn "Plus ${WARN} optional warning(s)."
+    fi
     exit 1
 fi

@@ -92,5 +92,3 @@ exclude:
     # at /diagrams/<name>.{svg,excalidraw}) — but the README inside is
     # for editors of the diagrams, not site readers.
     - diagrams/README.md
-    - pre-pull.sh
-    - verify-stacks.sh
