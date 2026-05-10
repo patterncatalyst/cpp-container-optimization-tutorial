@@ -11,25 +11,31 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # CMakeDeps + CMakeToolchain. find_package() resolves against those
 # generator outputs.
 #
-# Note on target names: Conan's opentelemetry-cpp recipe normalizes
-# target names with an `opentelemetry_` prefix that doesn't appear in
-# upstream OTel-cpp's own CMake config. Building OTel-cpp from source
-# gives you `opentelemetry-cpp::trace`; getting it from Conan gives
-# you `opentelemetry-cpp::opentelemetry_trace`. Same library, different
-# target name. We use the Conan names because we're using Conan.
-# See G-19 in the reconciliation plan.
+# Note on target name: we link the umbrella target
+# `opentelemetry-cpp::opentelemetry-cpp` rather than the per-signal
+# component targets (opentelemetry_trace, opentelemetry_metrics, etc.)
+# Two reasons:
+#   1) The umbrella's INTERFACE_LINK_LIBRARIES encodes correct
+#      transitive ordering. Linking individual components produced
+#      a link line where libopentelemetry_proto_grpc.a came AFTER
+#      libgrpc++.a, so ld couldn't resolve grpc::Status::OK and
+#      grpc::GetGlobalCallbackHook() from a later archive (G-21).
+#   2) Conan's CMakeDeps generator literally suggests it in its
+#      output: "target_link_libraries(... opentelemetry-cpp::opentelemetry-cpp)".
+#
+# The --start-group/--end-group wrapper is belt-and-suspenders for
+# any remaining cross-archive ordering issues among the static libs
+# the umbrella pulls in. Linker iterates until no more symbols
+# resolve. Standard pattern for static-linkage cross-archive deps.
 find_package(opentelemetry-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 
 add_executable(demo-04-svc src/main.cpp)
 target_include_directories(demo-04-svc PRIVATE src/third_party)
 target_link_libraries(demo-04-svc PRIVATE
-    opentelemetry-cpp::opentelemetry_trace
-    opentelemetry-cpp::opentelemetry_metrics
-    opentelemetry-cpp::opentelemetry_logs
-    opentelemetry-cpp::opentelemetry_exporter_otlp_grpc
-    opentelemetry-cpp::opentelemetry_exporter_otlp_grpc_metrics
-    opentelemetry-cpp::opentelemetry_exporter_otlp_grpc_log
+    -Wl,--start-group
+    opentelemetry-cpp::opentelemetry-cpp
+    -Wl,--end-group
     Threads::Threads
 )
 target_compile_options(demo-04-svc PRIVATE -O2 -DNDEBUG)
