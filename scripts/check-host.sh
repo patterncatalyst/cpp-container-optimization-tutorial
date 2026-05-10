@@ -198,9 +198,12 @@ check_url() {
     fi
 }
 check_url "registry.access.redhat.com" "https://registry.access.redhat.com/v2/"
+check_url "quay.io"                    "https://quay.io/v2/"
 # hub.docker.com (the website API) is reliably reachable anonymously.
 # registry-1.docker.io always returns 401 to anonymous HEAD, which trips
-# `curl -fsS`; we still test it but only as a soft warn.
+# `curl -fsS`; we still test it but only as a soft warn — only demo 4
+# (the observability stack) actually needs Docker Hub for the Grafana
+# images. See §1 "When docker.io is unreachable".
 check_url "docker.io (hub)"            "https://hub.docker.com/v2/"
 
 # ── Print the table ──────────────────────────────────────────────────────

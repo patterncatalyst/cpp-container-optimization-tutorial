@@ -2,6 +2,21 @@
 # Demonstrates the absolute floor on image size when you give up
 # glibc compatibility and dynamic linking.
 #
+# ── Image registry exception ──────────────────────────────────────────
+# This is the *only* Containerfile in the project that uses a non-UBI
+# base image. Rationale:
+#
+#   - The whole point of this demo is producing a static binary that
+#     runs in `scratch` (no libc loader, no dynamic libraries).
+#   - Static linking against glibc is officially discouraged by Red Hat
+#     and breaks several common runtime patterns (NSS, getaddrinfo,
+#     locale).
+#   - Alpine ships musl libc, which supports clean static linking.
+#
+# This image is build-time only — nothing alpine-built ends up in the
+# final scratch runtime stage. The scratch image contains only the
+# stripped binary. See CONTRIBUTING.md for the full image policy.
+#
 # Build:
 #   podman build -f Containerfile.scratch-static -t demo-01-scratch-static .
 

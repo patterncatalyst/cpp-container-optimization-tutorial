@@ -343,6 +343,47 @@ green run on a fresh Fedora 44 VM before flipping to "verified".
 
 ---
 
+### 2026-05-09 — r05: container image policy (UBI-first)
+
+User asked to ensure all container images use UBI going forward.
+Audited every `FROM` and `image:` reference; results:
+
+- All 8 of our own demo Containerfiles already use UBI 9 base
+  images (one builder + one runtime stage each, mostly
+  `ubi9/ubi` → `ubi9/ubi-minimal`). No changes needed there.
+- One deliberate exception kept: `examples/demo-01-image-strategy/
+  Containerfile.scratch-static` uses `docker.io/alpine:3.20` for
+  the build stage. The demo's pedagogical point is producing a
+  static binary that runs in `scratch`, which requires musl libc;
+  UBI ships glibc and static-glibc is officially discouraged
+  (NSS, getaddrinfo, locale traps). Final runtime is `scratch`,
+  so nothing Alpine reaches the produced image. Documented inline
+  with rationale.
+- `observability/compose.yml`: switched Prometheus from
+  `docker.io/prom/prometheus` to `quay.io/prometheus/prometheus`
+  (Prometheus team's primary registry). Grafana, Loki, Tempo,
+  Mimir kept on `docker.io/grafana/...` because Grafana Labs
+  doesn't publish those to Quay or RH registries; documented
+  the GHCR alternative for the OTel Collector and the
+  `podman save | podman load` air-gap fallback for the rest.
+- Added "Container image policy" section to `CONTRIBUTING.md`
+  spelling out: UBI 9 for everything we build; documented
+  exceptions for the alpine-static build stage and the third-
+  party services; instructions for adding a future exception.
+- `scripts/check-host.sh`: added a `quay.io` reachability check
+  alongside the existing `registry.access.redhat.com` and
+  `docker.io (hub)` checks. Total checks now 26 instead of 25.
+- §1 Prerequisites: rewrote the "When docker.io is unreachable"
+  sub-section to reflect that demos 1/2/3/5/6 don't need Docker
+  Hub at all (UBI + Quay), and only demo 4 (the observability
+  stack) is affected by Hub blocks.
+
+Verification status: §1 still drafted — needs another clean
+check-host.sh run with 26 PASS lines including the new quay.io
+check before flipping to verified.
+
+---
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from

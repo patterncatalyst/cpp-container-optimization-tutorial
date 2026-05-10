@@ -307,12 +307,34 @@ A minority of corporate networks (and a few home setups with
 ad-blocking DNS) block `docker.io` outright. The host-check script
 will flag this with a `[fail] docker.io (hub) unreachable` line.
 
+By project policy (see
+[`CONTRIBUTING.md`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/blob/main/CONTRIBUTING.md#container-image-policy))
+all *our* container images come from Red Hat UBI, and Prometheus
+routes through Quay (`quay.io/prometheus/prometheus`). Demos 1, 2,
+3, 5, and 6 will run fine without Docker Hub reachability.
+
+The Grafana stack (Grafana, Loki, Tempo, Mimir) and the OTel
+Collector publish only to Docker Hub at the time of writing. **If
+Docker Hub is blocked, demo 4 (the observability stack) won't run.**
+
 Two workable fallbacks:
 
-**Mirror the Grafana stack from Quay.io.** Quay mirrors most of the
-Grafana Labs images. Edit `observability/compose.yml` and replace
-each `docker.io/grafana/...` with `quay.io/grafana/...`. The
-Prometheus image is on Quay as `quay.io/prometheus/prometheus`.
+**Switch the OTel Collector to GHCR.** The OpenTelemetry team also
+publishes to GitHub Container Registry. In `observability/compose.yml`,
+replace:
+
+```yaml
+image: docker.io/otel/opentelemetry-collector-contrib:0.103.0
+```
+
+with:
+
+```yaml
+image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.103.0
+```
+
+(Verify the tag exists on GHCR before swapping — they release
+slightly later than Docker Hub.)
 
 **Pre-pull and re-tag from a reachable host.** If you have a
 network-reachable jump box that *can* reach Docker Hub:
@@ -326,12 +348,11 @@ podman save docker.io/grafana/grafana:11.2.0 -o grafana.tar
 podman load -i grafana.tar
 ```
 
-Repeat for each `observability/` image. This is tedious but works
-in an air-gapped or DNS-blocked environment.
+Repeat for `grafana/loki`, `grafana/tempo`, `grafana/mimir`. This is
+tedious but works in an air-gapped or DNS-blocked environment.
 
-If neither fallback is available, **demo 4 (the observability stack)
-won't work** but everything else will. Demos 1, 2, 3, 5, and 6 use
-only UBI base images and don't touch Docker Hub.
+If neither fallback is viable, demo 4 simply won't run — but
+everything else will.
 
 ## Clone this repo
 
@@ -393,9 +414,10 @@ Expected output on a correctly-set-up Fedora 44 box:
 [ ok ]  bpftrace                         0.21.0
 [ ok ]  gdb                              14.2
 [ ok ]  registry.access.redhat.com       reachable
+[ ok ]  quay.io                          reachable
 [ ok ]  docker.io (hub)                  reachable
 
-All 25 checks passed.
+All 26 checks passed.
 ```
 
 If any line says `FAIL`, scroll up — the script prints the exact

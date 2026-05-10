@@ -10,9 +10,34 @@
 # production. All ports are bound to 127.0.0.1 (no external exposure)
 # and Grafana is set to anonymous viewer so the audience can browse
 # without typing a password.
+#
+# ── Image registry policy ────────────────────────────────────────────────
+# Our own builds (everything under examples/) use registry.access.redhat.com/
+# ubi9/... — the project's UBI-first container policy (see CONTRIBUTING.md).
+#
+# The third-party services below cannot all be sourced from UBI:
+#
+#   prometheus      → quay.io/prometheus/prometheus
+#                     (Prometheus team's primary registry; works without
+#                     docker.io reachability.)
+#
+#   otel-collector  → docker.io/otel/opentelemetry-collector-contrib
+#                     Alternative if docker.io is blocked:
+#                     ghcr.io/open-telemetry/opentelemetry-collector-releases/
+#                     opentelemetry-collector-contrib:<same-tag>
+#
+#   grafana, loki,  → docker.io/grafana/...
+#   tempo, mimir      Grafana Labs publishes these only to Docker Hub at
+#                     the time of writing. If your network blocks docker.io,
+#                     see §1 Prerequisites for the podman save/load workaround.
+#
+# Each docker.io reference above is a documented exception. Don't add new
+# ones without rationale.
 
 services:
   otel-collector:
+    # Note: also available as ghcr.io/open-telemetry/opentelemetry-collector-releases/
+    # opentelemetry-collector-contrib:<tag> — switch if docker.io is blocked.
     image: docker.io/otel/opentelemetry-collector-contrib:0.103.0
     container_name: tutorial-otel-collector
     command: ["--config=/etc/otel/config.yaml"]
@@ -29,7 +54,7 @@ services:
       - loki
 
   prometheus:
-    image: docker.io/prom/prometheus:v2.55.0
+    image: quay.io/prometheus/prometheus:v2.55.0
     container_name: tutorial-prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"

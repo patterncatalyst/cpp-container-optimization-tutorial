@@ -90,6 +90,55 @@ over a single mixed-type commit. The exception: when the doc change
 *explains* the fix and they share rationale; then bundle them and
 say so in the body.
 
+## Container image policy
+
+**All container images we build use Red Hat UBI 9 as the base.**
+
+- **Builder stage**: `registry.access.redhat.com/ubi9/ubi`
+- **Runtime stage**: `registry.access.redhat.com/ubi9/ubi-minimal` (or
+  `ubi9/ubi-micro` when even microdnf is overkill)
+
+This is non-negotiable for any new Containerfile in `examples/`. UBI
+gives us:
+
+- a stable, supported base with predictable security patching
+- consistent package availability across builder and runtime stages
+  via `dnf` / `microdnf`
+- no Docker Hub anonymous rate limit (UBI pulls from Red Hat's CDN)
+- license clarity for redistribution
+
+### Documented exceptions
+
+Two and only two:
+
+1. **`examples/demo-01-image-strategy/Containerfile.scratch-static`** uses
+   `docker.io/alpine:3.20` for the *build* stage. The demo's pedagogical
+   point is producing a static binary that runs in `scratch`, which
+   requires musl libc; UBI ships glibc, and static-linked glibc is both
+   officially discouraged and full of runtime traps (NSS, getaddrinfo,
+   locale). The final runtime stage is `scratch` — nothing Alpine
+   reaches the produced image.
+2. **`observability/compose.yml`** pulls the Grafana stack (Grafana,
+   Loki, Tempo, Mimir) and the OTel Collector from Docker Hub because
+   their maintainers don't publish to Red Hat or Quay registries. We
+   route Prometheus through Quay (`quay.io/prometheus/prometheus`) and
+   note the GHCR alternative for the OTel Collector. Each `docker.io/`
+   reference in that file has an explanatory comment.
+
+### Adding a new exception
+
+Don't, unless:
+
+- you've checked Quay.io and the project's GHCR namespace and confirmed
+  the upstream image isn't there, AND
+- the exception is documented inline (a `# Note:` comment above the
+  `FROM` or `image:` line stating *why* this image isn't UBI), AND
+- the rationale is added to the list above in this section.
+
+If a third-party image *does* publish to Quay or to a Red Hat registry,
+prefer that path even if the docker.io path also works. The goal is
+to minimize Docker Hub dependency, not just to satisfy a checkbox.
+
 ## Reconciliation plan
 
 Every substantive change should leave a corresponding entry in
