@@ -1,41 +1,32 @@
 """Demo-04 Conan recipe (Conan 2.x).
 
-Why conanfile.py instead of conanfile.txt: r45a tried to use a fixed set
-of pinned versions in conanfile.txt:
+Why conanfile.py instead of conanfile.txt: r45a's conanfile.txt approach
+hit a recipe-revision drift conflict when opentelemetry-cpp/1.14.2's
+current recipe revision was found to require protobuf/5.27.0 (not the
+3.21.12 from OneUptime's documented combo). conanfile.txt has no
+override mechanism; conanfile.py does, via
+`self.requires(..., override=True)`. See G-25.
 
-    [requires]
-    opentelemetry-cpp/1.14.2
-    grpc/1.62.0
-    protobuf/3.21.12
-    abseil/20240116.2
+Why this specific override set (G-26): r46 first tried grpc/1.62.0 from
+OneUptime's Feb 2026 guide, but Conan Center yanked that version
+sometime between Feb and May 2026:
 
-— matching the OneUptime "How to Manage OpenTelemetry C++ Dependencies"
-guide (Feb 2026) documented as a tested-as-a-block working combination.
-But recipe revisions can move post-publication: the *current* recipe
-revision of opentelemetry-cpp/1.14.2 requires protobuf/5.27.0, not
-protobuf/3.21.12. Result on r45a's run:
+    ERROR: Package 'grpc/1.62.0' not resolved: Unable to find
+    'grpc/1.62.0' in remotes.
 
-    ERROR: Version conflict: Conflict between protobuf/5.27.0 and
-    protobuf/3.21.12 in the graph.
-    Conflict originates from opentelemetry-cpp/1.14.2
-
-conanfile.txt has no override mechanism — it can pin top-level versions
-but can't say "I know OTel-cpp's recipe wants protobuf/5.27.0; use my
-3.21.12 anyway." conanfile.py does, via `self.requires(..., override=True)`.
+Per the conan-center-index config.yml, the gRPC versions still hosted
+are 1.50.0, 1.50.1, 1.54.3, 1.65.0, 1.67.1, 1.78.1. Of these, only
+≤ 1.64 still have grpc::Status::OK and grpc::GetGlobalCallbackHook()
+defined as linkable static members in libgrpc++.a (G-22). That leaves
+1.50.x and 1.54.3. We pick 1.54.3 — the most recent of the still-hosted
+"old enough" versions, paired with protobuf/3.21.12 in its release era,
+and well-tested.
 
 The cost of overriding: Conan can't reuse pre-built binaries that were
 compiled against the recipe-specified transitive versions. With
 --build=missing, it rebuilds opentelemetry-cpp 1.14.2 from source against
-our overridden grpc/protobuf/abseil. First-build penalty is large
-(30-60 min for the full chain) but caches afterward. See G-25 in the
-reconciliation plan.
-
-Why this exact combination (G-22, G-24): grpc/1.62.0 has Status::OK and
-GetGlobalCallbackHook() defined as linkable static members. gRPC versions
-1.65+ removed both as part of an ABI cleanup, while OTel-cpp's pre-built
-proto-grpc archives still reference them via inline templates. Pairing
-OTel-cpp with a gRPC version that still has the symbols is the only way
-to make the link resolve.
+our overridden grpc/protobuf/abseil chain. First-build penalty is large
+(30-60 min) but caches afterward.
 """
 
 from conan import ConanFile
@@ -65,20 +56,32 @@ class Demo04Conan(ConanFile):
         # Top-level: opentelemetry-cpp pulled normally.
         self.requires("opentelemetry-cpp/1.14.2")
 
-        # Overridden transitive deps — the OneUptime working combination.
-        # override=True tells Conan: "I know the recipe wants something
-        # different; use my version instead." Without this, recipe revision
-        # drift makes the working-as-of-Feb-2026 combination unresolvable.
+        # Overridden transitive deps — pinning to versions still on
+        # Conan Center that have the gRPC symbols OTel-cpp's
+        # pre-built archives reference.
         #
-        # The version choices:
-        # - grpc/1.62.0:   has Status::OK + GetGlobalCallbackHook() as
-        #                  linkable statics in libgrpc++.a (G-22).
-        # - protobuf/3.21.12: paired with grpc/1.62.0 in OneUptime's combo;
-        #                  modern enough for OTel-cpp 1.14.2's protobuf
-        #                  feature usage but old enough to predate
-        #                  protobuf/4.x's API breaking changes.
-        # - abseil/20240116.2: from the same documented combo.
-        self.requires("grpc/1.62.0",         override=True)
+        # Why grpc/1.54.3 specifically (G-26):
+        # - Conan Center yanked grpc/1.62.0 (the OneUptime-documented
+        #   version) sometime between Feb 2026 and May 2026. r46's
+        #   override=True for grpc/1.62.0 produced:
+        #     "Package 'grpc/1.62.0' not resolved: Unable to find
+        #      'grpc/1.62.0' in remotes."
+        # - Of the gRPC versions still hosted (per the conan-center-index
+        #   config.yml), only 1.50.0, 1.50.1, 1.54.3, 1.65.0, 1.67.1,
+        #   1.78.1 are present. Versions ≥ 1.65 have `Status::OK` and
+        #   `GetGlobalCallbackHook()` removed (G-22), so we need
+        #   ≤ 1.64. That leaves 1.50.x and 1.54.3.
+        # - 1.54.3 is the most recent of the available "old enough"
+        #   versions, so it's the closest to OneUptime's tested 1.62.0.
+        #
+        # Why protobuf/3.21.12 (despite Conan flagging it as deprecated):
+        # gRPC 1.54.3 was released paired with protobuf 3.21.x. The
+        # deprecation warning is informational; the package still
+        # builds and links correctly.
+        #
+        # Why abseil/20240116.2: Same as in r45's reasoning. Newer
+        # abseil works with older gRPC; abseil's API has been stable.
+        self.requires("grpc/1.54.3",         override=True)
         self.requires("protobuf/3.21.12",    override=True)
         self.requires("abseil/20240116.2",   override=True)
 

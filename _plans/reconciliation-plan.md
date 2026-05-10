@@ -1963,6 +1963,142 @@ to "version+revision pin"; the inspection tool is
 
 ---
 
+### G-26 · Conan Center yanks old versions; the documented working version may already be gone (r47)
+
+**Problem.** r46's `conanfile.py` with `override=True` for
+`grpc/1.62.0` worked at the override-resolution stage —
+Conan accepted the override and printed it in the
+`Overrides` section of the resolution graph:
+
+    Overrides
+        abseil/[>=20240116.1 <=20250127.0]: ['abseil/20240116.2']
+        protobuf/5.27.0: ['protobuf/3.21.12']
+        grpc/1.67.1: ['grpc/1.62.0']
+
+But then immediately failed when fetching:
+
+    ERROR: Package 'grpc/1.62.0' not resolved: Unable to find
+    'grpc/1.62.0' in remotes. Required by 'opentelemetry-cpp/1.14.2'
+
+`grpc/1.62.0` — the version OneUptime documented as
+working with their tested combo in February 2026 — was
+no longer in any of the configured remotes by May 2026.
+Yanked by Conan Center between publication and our use.
+
+**Why.** Conan Center curates a *limited window* of
+package versions. Old versions get pruned to keep the
+index manageable, and unused versions can get
+deprecated or removed entirely. The available list
+isn't published as a feed; it's encoded in the
+`config.yml` file of each recipe in the
+conan-center-index GitHub repo.
+
+For `grpc`, the `config.yml` shows the available
+versions as approximately:
+
+    "1.78.1":  folder: "all"   # latest as of May 2026
+    "1.67.1":  folder: "all"
+    "1.65.0":  folder: "all"
+    "1.54.3":  folder: "all"
+    "1.50.1":  folder: "all"
+    "1.50.0":  folder: "all"
+
+(plus possibly 1.48.4 in some snapshots).
+
+What's *missing* tells the story: `1.51`, `1.52`,
+`1.53`, `1.55`–`1.64` are all gone. The version OneUptime
+documented (1.62.0) is in that gap. By the time we
+came to install it, the recipe had been removed.
+
+**Implication.** A pinned combination is only
+reproducible if every pinned version is still hosted.
+"OneUptime tested this in Feb 2026" doesn't mean Conan
+Center still has it in May 2026. Documentation that
+references specific Conan versions has a half-life.
+
+**Fix.** Switch the gRPC override to a still-hosted
+version that meets the same constraint (≤ 1.64 to keep
+`Status::OK` as a linkable symbol):
+
+    self.requires("grpc/1.54.3", override=True)
+
+`1.54.3` is the most recent of the still-hosted
+"old enough" versions; 1.50.x are the older fallbacks if
+1.54.3 turns out to have its own surprises (e.g., abseil
+or protobuf compatibility issues we haven't anticipated).
+
+The other overrides (`protobuf/3.21.12`,
+`abseil/20240116.2`) stay; they're still hosted, and
+3.21.12 is paired with gRPC 1.54.x's release era.
+
+**Discoverability lessons:**
+
+- **The `Overrides` section in Conan resolution output
+  is not a success indicator.** It only shows what
+  Conan *would* override if it could find the package.
+  The actual fetch happens after, and that's where
+  yanked versions surface.
+- **Conan Center's `config.yml` is the authoritative
+  list of available versions for a recipe.** When
+  pinning fails with "not resolved in remotes," check
+  https://github.com/conan-io/conan-center-index/blob/master/recipes/<package>/config.yml
+  to see what's actually hosted. Don't trust documentation
+  that's more than a few months old without verifying.
+- **`Conflict originates from X` (G-25) and `Unable to
+  find Y` (G-26) are different problems with different
+  fixes.** G-25 was about recipe revisions of
+  available versions changing; G-26 is about versions
+  themselves disappearing. Both produce error messages
+  that point at the same general "version mismatch"
+  area but require different responses.
+- **The `Deprecated` annotation in Conan output is
+  informational, not blocking.** The `protobuf/3.21.12`
+  resolution succeeded with a deprecation warning;
+  the package still installs and links. The warning
+  gives advance notice that this version may be yanked
+  in the future — a hint to plan for migration but
+  not an immediate failure.
+
+**Tutorial value.** This pairs naturally with G-25.
+G-25 was about *transitive constraints* in recipes that
+move; G-26 is about the *recipes themselves* moving.
+Both contribute to the §13 (Reproducibility) lesson:
+**a package version pin is not actually reproducible
+unless paired with both a recipe revision pin and a
+guarantee that the recipe is still hosted.** The only
+mechanism for the latter in Conan is to mirror packages
+to your own remote (or a proxy like JFrog Artifactory).
+For a tutorial demo, we accept the brittleness and
+document what happens; for a production pipeline,
+mirroring the dep graph is part of the job.
+
+**Anticipated outcomes of r47:**
+
+- **Best case:** Conan resolves to grpc/1.54.3,
+  rebuilds OTel-cpp from source against the new chain,
+  link succeeds because grpc/1.54.3's libgrpc++.a has
+  Status::OK and GetGlobalCallbackHook() as linkable
+  statics. Demo runs. r48 verifies signal flow.
+- **gRPC 1.54.3 also gets yanked between our writing
+  this and our running it:** very unlikely (1.54.3 is
+  marked as a long-term version), but if it happens,
+  fall back to grpc/1.50.1.
+- **Compile error inside OTel-cpp 1.14.2 source against
+  grpc/1.54.3 + protobuf/3.21.12:** we're using an
+  older grpc than OTel-cpp 1.14.2 was originally
+  tested against. There may be API drift. Possible
+  fixes: bump abseil to a version older than
+  20240116.2 (gRPC 1.54.3 was released paired with
+  abseil/20230125.x), or pin grpc/1.50.1 (older,
+  closer to OTel-cpp 1.14.2's original release era).
+- **Compile succeeds, link still has the same
+  undefined refs:** would mean grpc/1.54.3's Conan
+  recipe somehow doesn't expose Status::OK either.
+  Unlikely but diagnosable: `nm libgrpc++.a | grep
+  Status::OK` inside the container.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -6327,6 +6463,123 @@ project that uses transitive deps with version constraints
 will eventually hit one of these. Documenting them
 permanently means the tutorial captures more value than
 just demo-04's eventual passing.
+
+### 2026-05-10 — r47: G-26 — Conan Center yanked grpc/1.62.0; switch override to grpc/1.54.3 (still hosted, has Status::OK)
+
+User reran with r46's `conanfile.py` + override=True. The
+override mechanism worked perfectly — Conan accepted all
+three overrides and printed them in the resolution graph:
+
+    Overrides
+        abseil/[>=20240116.1 <=20250127.0]: ['abseil/20240116.2']
+        protobuf/5.27.0: ['protobuf/3.21.12']
+        grpc/1.67.1: ['grpc/1.62.0']
+
+But then immediately failed at the fetch stage:
+
+    ERROR: Package 'grpc/1.62.0' not resolved: Unable to find
+    'grpc/1.62.0' in remotes. Required by 'opentelemetry-cpp/1.14.2'
+
+Conan Center yanked `grpc/1.62.0` sometime between
+OneUptime's Feb 2026 publication and our May 2026 use.
+The version OneUptime documented as working with the
+combo isn't hosted anymore.
+
+**Web search for available versions** (the conan-center-index
+config.yml is the authoritative list):
+
+    "1.78.1":  folder: "all"
+    "1.67.1":  folder: "all"
+    "1.65.0":  folder: "all"
+    "1.54.3":  folder: "all"
+    "1.50.1":  folder: "all"
+    "1.50.0":  folder: "all"
+
+What's missing tells the story: 1.51 through 1.64 are
+all gone except 1.54.3. The OneUptime version is in
+that gap.
+
+For our purpose (link `Status::OK` and
+`GetGlobalCallbackHook()` from libgrpc++.a), we need
+≤ 1.64. That leaves 1.50.x and 1.54.3. Picking
+`grpc/1.54.3` — most recent of the still-hosted
+"old enough" versions, paired with protobuf/3.21.x in
+its release era.
+
+**One-line fix in conanfile.py:**
+
+    -    self.requires("grpc/1.62.0", override=True)
+    +    self.requires("grpc/1.54.3", override=True)
+
+Other overrides unchanged: protobuf/3.21.12 and
+abseil/20240116.2 are both still hosted.
+
+Updated the docstring at top of conanfile.py and the
+inline comment block to explain why 1.54.3 specifically
+(future readers shouldn't have to re-derive the analysis).
+
+**Promoted to G-26** with full Problem/Why/Fix shape:
+
+- The Conan Center yanking pattern (versions get
+  pruned over time)
+- The `Overrides` section in resolution output isn't
+  a success indicator — fetches happen after resolution
+- conan-center-index's `config.yml` as the authoritative
+  source-of-truth for available versions
+- `Conflict originates from X` (G-25) vs `Unable to
+  find Y` (G-26) as distinct problem categories
+- The `Deprecated` annotation as informational, not
+  blocking
+- §13 Reproducibility lesson: a version pin is only
+  reproducible if both the recipe revision and the
+  package itself are still hosted; the only durable
+  fix is mirroring to your own remote
+
+**What r47 specifically ships:**
+
+1. conanfile.py: change `grpc/1.62.0` → `grpc/1.54.3`
+   in the override line
+2. conanfile.py: rewrite top-of-file docstring + the
+   inline comment block above `self.requires`
+3. G-26 promoted in plan
+4. r47 round entry
+
+**What this round does NOT do:**
+
+- Doesn't change the abseil or protobuf overrides
+- Doesn't actually run the build
+- Doesn't change anything outside conanfile.py and the
+  plan
+
+**Anticipated outcomes:**
+
+- **Best case:** Conan resolves grpc/1.54.3 (still
+  hosted), rebuilds OTel-cpp from source against the
+  new chain, link succeeds because grpc/1.54.3's
+  libgrpc++.a has Status::OK + GetGlobalCallbackHook()
+  as linkable statics. Demo runs. r48 verifies signal
+  flow.
+- **grpc/1.54.3 also gets yanked between our writing
+  this and running it:** unlikely (it's positioned as
+  a long-term version), but if so, fall back to
+  grpc/1.50.1.
+- **Compile error in OTel-cpp 1.14.2 source against
+  grpc/1.54.3 + protobuf/3.21.12 + abseil/20240116.2:**
+  possible if the dep chain isn't tested-as-a-block.
+  Fall back: bump abseil to 20230125.x (closer to
+  grpc/1.54.3's release era) or downshift grpc to
+  1.50.1.
+- **Compile succeeds, link still has the same
+  undefined refs:** would mean grpc/1.54.3's recipe
+  somehow hides Status::OK. Diagnostic: `nm
+  libgrpc++.a | grep Status::OK` inside the container.
+
+**Cumulative round count: r47.** Demo-04 is 19 rounds in.
+G-12 through G-26 are now permanently documented; together
+they form a fairly complete tour of the Conan + modern-C++
+ecosystem's failure modes. The user's continued patience
+is converting each failure into a teaching moment for the
+tutorial.
 
 ---
 
