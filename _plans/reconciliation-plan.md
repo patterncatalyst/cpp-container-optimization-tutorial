@@ -708,7 +708,8 @@ when building OpenSSL from source.
 
 **Fix.** Pre-install the perl modules openssl's
 Configure script needs in the Containerfile's build
-stage:
+stage. The full required-modules list comes from
+openssl's `INSTALL.md`:
 
     RUN dnf install -y --setopt=install_weak_deps=False \
             ... \
@@ -716,13 +717,24 @@ stage:
             perl-IPC-Cmd \
             perl-Data-Dumper \
             perl-Pod-Html \
+            perl-Pod-Usage \
             perl-File-Compare \
             perl-File-Copy \
-            perl-File-Path
+            perl-File-Path \
+            perl-Time-Piece \
+            perl-Getopt-Long
 
-Six modules covers OpenSSL 3.6.x's Configure. If a
-future from-source Conan build fails on a different
-perl module, add it to this list with the same shape.
+Ten modules covers OpenSSL 3.6.x's Configure step.
+The first iteration (r32) used only seven, dropped
+three from the upstream list, and r33 hit the next
+missing one (`Time::Piece`). The lesson — when
+preempting a list of dependencies, use the upstream
+project's documented requirements instead of the
+"common ones" rule of thumb.
+
+If a future from-source Conan build fails on a
+different perl module, add it to this list with the
+same shape.
 
 **Why preempt instead of just adding `FindBin`?** The
 six modules above cover openssl's typical
@@ -3350,6 +3362,106 @@ problem/why/fix shape with:
 The build needs to actually finish before any of the
 post-build issues can fire. r33 either flips §10 to
 verified or addresses whatever build issue surfaces next.
+
+### 2026-05-10 — r33: G-15 expanded — three more perl modules for openssl Configure
+
+User reran after r32. dnf install with the seven perl
+modules I added succeeded. conan install ran. openssl
+got past `BEGIN failed--compilation aborted` on
+`FindBin.pm` (the r32 fix worked), got further into
+Configure — past `Configuring OpenSSL version 3.6.2 for
+target ... ` and `Created Makefile.in` — and died on
+the next missing module:
+
+    Can't locate Time/Piece.pm in @INC ...
+    BEGIN failed--compilation aborted at Makefile.in line 37.
+
+Same shape as r32, different module. Configure had
+gotten further this time (past my earlier "BEGIN failed
+on Configure line 15" failure point) before hitting
+`Time::Piece`.
+
+The lesson is on me. r32's "preempt all six" approach
+in r32 used a list I'd assembled from "common openssl
+build deps" memory rather than checking openssl's own
+documented requirements. OpenSSL/INSTALL.md has the
+complete list:
+
+  - File::Compare
+  - File::Copy
+  - File::Path
+  - File::Spec::Functions (in perl-libs, not separately needed)
+  - FindBin
+  - Getopt::Long
+  - IPC::Cmd
+  - Pod::Html
+  - Pod::Usage
+  - Time::Piece
+
+Ten required modules. r32 included seven. The three
+that bit on the next iteration: `Pod::Usage`,
+`Time::Piece`, `Getopt::Long`. r33 adds those three.
+
+**Fix.** Three additional perl module packages in the
+build-stage `dnf install`:
+
+    perl-Pod-Usage
+    perl-Time-Piece
+    perl-Getopt-Long
+
+This brings the build-stage perl module list to ten,
+matching openssl's full INSTALL.md required-modules
+list. Configure shouldn't hit another missing-module
+error.
+
+**G-15 amended in place** rather than added as a new
+G-NN. The gotcha is the same — UBI 9 ships a minimal
+perl, openssl Configure needs many modules, the fix is
+to pre-install. The detail "which modules" is just a
+list update. G-15's fix block now shows the full
+ten-module list, and the entry has a one-paragraph
+"the lesson" note about using upstream's documented
+requirements rather than working from "common ones"
+memory.
+
+**What this round does NOT do:**
+
+- Doesn't change the conanfile.txt or compose files.
+- Doesn't drop `compiler.cppstd=23` to `=20` to hit
+  more pre-builts. Holding that mitigation in reserve
+  per G-15 — if first-build wall-clock time becomes
+  intolerable.
+- Doesn't pre-emptively add autotools (autoconf,
+  automake, libtool) to the build image. c-ares or
+  another autotools-based dep might need them when
+  it builds from source; we'll add them if they fire.
+- Doesn't actually run the build. User's next attempt.
+
+**What might fire next:**
+
+- Some other perl-using build dep might have its own
+  module needs (Conan recipes for protobuf, gRPC, etc.
+  could invoke perl). Less likely than openssl, but
+  possible.
+- `c-ares` from source uses autotools. If it builds
+  from source for our profile, it needs `autoconf`,
+  `automake`, `libtool`, `pkg-config`. These aren't
+  currently in the build image. If c-ares fails with
+  "configure: command not found" or similar, that's
+  the fix.
+- gRPC from source can be slow (5-10 min) and uses a
+  lot of memory at link time. If the build host has
+  < 4 GB of RAM, ld may OOM. Mitigation: pass
+  `-DCMAKE_CXX_FLAGS=-g0` to reduce debug info, or
+  reduce parallelism with `cmake --build -j2`.
+- After-build candidates (G-13/14/15 from r28's
+  anticipated list — metric name drift, Loki label
+  drop, dashboard UID mismatch) still in play.
+
+The build is now progressing iteratively further each
+attempt. r34 either hits the post-build phase with
+real signals to verify, or addresses whichever
+remaining build issue fires.
 
 ---
 

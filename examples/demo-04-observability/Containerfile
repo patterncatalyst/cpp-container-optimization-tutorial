@@ -18,9 +18,10 @@ RUN rm -f /etc/yum.repos.d/redhat.repo && \
 #
 # The perl-* modules are for openssl's Configure script, which Conan
 # runs when building openssl from source. UBI 9 ships a minimal perl;
-# the modules each need a separate package. See G-15. Any additional
-# from-source Conan builds that fail on missing perl modules can have
-# the module added to this list.
+# the modules each need a separate package. The full list comes from
+# openssl/INSTALL.md required-perl-modules — preempting all of them
+# saves "add one module, rebuild, hit next" iteration. See G-15/G-16
+# in the plan.
 RUN dnf install -y --setopt=install_weak_deps=False \
         gcc-toolset-14 \
         cmake \
@@ -31,9 +32,12 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         perl-IPC-Cmd \
         perl-Data-Dumper \
         perl-Pod-Html \
+        perl-Pod-Usage \
         perl-File-Compare \
         perl-File-Copy \
         perl-File-Path \
+        perl-Time-Piece \
+        perl-Getopt-Long \
     && dnf clean all
 
 ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
