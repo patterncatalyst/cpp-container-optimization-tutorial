@@ -1,14 +1,131 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" role="img" aria-label="Four-layer mental model placeholder">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 560" role="img"
+     aria-label="The four-layer mental model: toolchain, image, kernel, runtime, with examples in each layer and an arrow tracing demo-01's glibc-mismatch story across layers">
   <defs>
+    <style><![CDATA[
+      .bg       { fill: #fdfbf7; }
+      .grid     { stroke: #e8e1d3; stroke-width: 0.5; fill: none; }
+      .band     { stroke: #2d2d2d; stroke-width: 1.5; rx: 6; ry: 6; }
+      .b-tool   { fill: #e8f0fb; stroke: #4a73b8; }
+      .b-img    { fill: #f0e8d8; stroke: #b89540; }
+      .b-kern   { fill: #ecdfd8; stroke: #b86742; }
+      .b-run    { fill: #d8e8df; stroke: #5a8870; }
+      .chip     { fill: #fdfbf7; stroke: #2d2d2d; stroke-width: 1; rx: 4; ry: 4; }
+      .ttl      { font: 700 18px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .lbl      { font: 600 13px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .chip-t   { font: 12px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .sec      { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #555; }
+      .cap      { font: 13px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .trace    { stroke: #c0392b; stroke-width: 2; fill: none; stroke-linecap: round; }
+      .trace-l  { font: italic 600 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+      .arrow    { stroke: #2d2d2d; stroke-width: 1.4; fill: none; }
+    ]]></style>
     <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e6dfd2" stroke-width="0.5"/>
+      <path d="M 20 0 L 0 0 0 20" class="grid"/>
     </pattern>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+    <marker id="trace-head" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="9" markerHeight="9" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
   </defs>
-  <rect width="800" height="360" fill="#fdfbf7"/>
-  <rect width="800" height="360" fill="url(#grid)"/>
-  <rect x="40" y="40" width="720" height="280" rx="14" ry="14" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="6 4"/>
-  <text x="400" y="155" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="28" font-weight="700" fill="#1a1a1a">Four-layer mental model</text>
-  <text x="400" y="195" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="13" fill="#767676">02-introduction-four-layers.svg</text>
-  <text x="400" y="245" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="14" fill="#4a4a4a">Diagram pending — see assets/diagrams/README.md to draw.</text>
+
+  <rect class="bg" width="920" height="560"/>
+  <rect width="920" height="560" fill="url(#grid)"/>
+
+  <!-- Title -->
+  <text x="460" y="36" text-anchor="middle" class="ttl">The four-layer mental model</text>
+  <text x="460" y="56" text-anchor="middle" class="cap">A C++ container's latency story has knobs at four layers, in this order</text>
+
+  <!-- Layer bands. Each: 800px wide, ~95px tall. -->
+
+  <!-- 1 Toolchain -->
+  <rect class="band b-tool" x="60" y="80" width="800" height="92"/>
+  <text x="80" y="106" class="lbl">1. Toolchain</text>
+  <text x="80" y="124" class="sec">§4 Compile-time wins · §12 Reproducibility &amp; ABI</text>
+  <rect class="chip" x="245" y="132" width="80"  height="28"/>
+    <text x="285" y="151" text-anchor="middle" class="chip-t">LTO</text>
+  <rect class="chip" x="335" y="132" width="80"  height="28"/>
+    <text x="375" y="151" text-anchor="middle" class="chip-t">PGO</text>
+  <rect class="chip" x="425" y="132" width="80"  height="28"/>
+    <text x="465" y="151" text-anchor="middle" class="chip-t">PIE / -fPIE</text>
+  <rect class="chip" x="515" y="132" width="120" height="28"/>
+    <text x="575" y="151" text-anchor="middle" class="chip-t">CMake presets</text>
+  <rect class="chip" x="645" y="132" width="100" height="28"/>
+    <text x="695" y="151" text-anchor="middle" class="chip-t">-static / pie</text>
+  <rect class="chip" x="755" y="132" width="80"  height="28"/>
+    <text x="795" y="151" text-anchor="middle" class="chip-t">cppcheck</text>
+
+  <!-- 2 Image -->
+  <rect class="band b-img" x="60" y="190" width="800" height="92"/>
+  <text x="80" y="216" class="lbl">2. Image</text>
+  <text x="80" y="234" class="sec">§3 Container strategy</text>
+  <rect class="chip" x="245" y="242" width="120" height="28"/>
+    <text x="305" y="261" text-anchor="middle" class="chip-t">UBI multistage</text>
+  <rect class="chip" x="375" y="242" width="100" height="28"/>
+    <text x="425" y="261" text-anchor="middle" class="chip-t">ubi-micro</text>
+  <rect class="chip" x="485" y="242" width="120" height="28"/>
+    <text x="545" y="261" text-anchor="middle" class="chip-t">static linkage</text>
+  <rect class="chip" x="615" y="242" width="120" height="28"/>
+    <text x="675" y="261" text-anchor="middle" class="chip-t">OCI labels / ABI</text>
+  <rect class="chip" x="745" y="242" width="90"  height="28"/>
+    <text x="790" y="261" text-anchor="middle" class="chip-t">layer cache</text>
+
+  <!-- 3 Kernel -->
+  <rect class="band b-kern" x="60" y="300" width="800" height="92"/>
+  <text x="80" y="326" class="lbl">3. Kernel</text>
+  <text x="80" y="344" class="sec">§7 I/O latency · §8 Networking · §10 Isolation</text>
+  <rect class="chip" x="245" y="352" width="80"  height="28"/>
+    <text x="285" y="371" text-anchor="middle" class="chip-t">io_uring</text>
+  <rect class="chip" x="335" y="352" width="100" height="28"/>
+    <text x="385" y="371" text-anchor="middle" class="chip-t">cgroups v2</text>
+  <rect class="chip" x="445" y="352" width="80"  height="28"/>
+    <text x="485" y="371" text-anchor="middle" class="chip-t">NUMA</text>
+  <rect class="chip" x="535" y="352" width="120" height="28"/>
+    <text x="595" y="371" text-anchor="middle" class="chip-t">scheduler / CFS</text>
+  <rect class="chip" x="665" y="352" width="80"  height="28"/>
+    <text x="705" y="371" text-anchor="middle" class="chip-t">veth</text>
+  <rect class="chip" x="755" y="352" width="80"  height="28"/>
+    <text x="795" y="371" text-anchor="middle" class="chip-t">eBPF</text>
+
+  <!-- 4 Runtime -->
+  <rect class="band b-run" x="60" y="410" width="800" height="92"/>
+  <text x="80" y="436" class="lbl">4. Runtime</text>
+  <text x="80" y="454" class="sec">§6 Memory · §9 Observability · §10 Isolation · §11 Debugging</text>
+  <rect class="chip" x="245" y="462" width="120" height="28"/>
+    <text x="305" y="481" text-anchor="middle" class="chip-t">requests/limits</text>
+  <rect class="chip" x="375" y="462" width="80"  height="28"/>
+    <text x="415" y="481" text-anchor="middle" class="chip-t">ASLR</text>
+  <rect class="chip" x="465" y="462" width="80"  height="28"/>
+    <text x="505" y="481" text-anchor="middle" class="chip-t">gdbserver</text>
+  <rect class="chip" x="555" y="462" width="80"  height="28"/>
+    <text x="595" y="481" text-anchor="middle" class="chip-t">Valgrind</text>
+  <rect class="chip" x="645" y="462" width="80"  height="28"/>
+    <text x="685" y="481" text-anchor="middle" class="chip-t">perf / OTel</text>
+  <rect class="chip" x="735" y="462" width="100" height="28"/>
+    <text x="785" y="481" text-anchor="middle" class="chip-t">p50/p95/p99</text>
+
+  <!-- Vertical "decisions flow down" arrow on the left -->
+  <line x1="42" y1="90" x2="42" y2="490" class="arrow" marker-end="url(#arrowhead)"/>
+  <text x="36" y="290" text-anchor="middle" class="sec" transform="rotate(-90 36 290)">decisions cascade ↓</text>
+
+  <!-- Cross-layer trace arrow: demo-01's glibc-mismatch story -->
+  <!-- From -static-libstdcxx in toolchain (around chip "static linkage" we'll use, but we'll
+       draw from the toolchain's "-static / pie" chip down through the image to the runtime).
+       We'll also annotate it. -->
+  <path d="M 695 161 C 695 200, 695 230, 545 256
+           C 545 280, 545 320, 305 478"
+        class="trace" marker-end="url(#trace-head)"/>
+  <text x="868" y="205" class="trace-l" text-anchor="end">demo-01 trace:</text>
+  <text x="868" y="222" class="trace-l" text-anchor="end">toolchain choice (-static-libstdc++)</text>
+  <text x="868" y="237" class="trace-l" text-anchor="end">→ image variant (ubi-micro static-only)</text>
+  <text x="868" y="252" class="trace-l" text-anchor="end">→ runtime exit 1: GLIBC_2.35 not found</text>
+
+  <!-- Footer caption -->
+  <text x="460" y="535" text-anchor="middle" class="cap">
+    Most production tail-latency stories come from a knob at one layer being measured against a workload shaped by another.
+  </text>
 </svg>

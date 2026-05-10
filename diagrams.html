@@ -10,7 +10,7 @@ permalink: /diagrams/
         <span class="hero__eyebrow">Reference</span>
         <h1>Excalidraw diagrams.</h1>
         <p class="hero__lead">
-            Thirteen diagrams covering the tutorial's architectures and
+            Fourteen diagrams covering the tutorial's architectures and
             flows. Click any diagram to open it fullscreen. Each is also
             available as <code>.excalidraw</code> source — open it on
             <a href="https://excalidraw.com" rel="noopener">excalidraw.com</a>
@@ -33,6 +33,12 @@ permalink: /diagrams/
                 section="§2"
                 title="The four-layer mental model"
                 caption="Compile time → image layout → kernel boundary → runtime isolation. Where each performance lever lives." %}
+
+            {% include diagram-card.html
+                file="02-threading-models"
+                section="§2"
+                title="Threading models in C++"
+                caption="std::thread / jthread, library pools, Boost.Fibers, Boost.Context, C++20 coroutines — laid out by stack model and kernel visibility, with I/O-bound vs CPU-bound fit." %}
 
             {% include diagram-card.html
                 file="03-image-strategy-multistage"

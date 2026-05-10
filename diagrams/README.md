@@ -22,6 +22,7 @@ Examples that already have placeholders pointed at them:
 |---------------------------------------|---------|----------------------------------------|
 | `01-prerequisites-toolchain`          | §1      | toolchain layout                       |
 | `02-introduction-four-layers`         | §2      | the four-layer mental model            |
+| `02-threading-models`                 | §2      | C++ threading models — stack vs scheduler |
 | `03-image-strategy-multistage`        | §3      | multi-stage image strategy             |
 | `04-compile-time-pgo-flow`            | §4      | LTO / PGO build flow                   |
 | `05-stl-layout-flat-vs-node`          | §5      | flat vs node containers                |

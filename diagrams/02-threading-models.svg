@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 580" role="img"
+     aria-label="Threading models laid out on two axes — stackful vs stackless and kernel-visible vs invisible — with notes on which fits I/O-bound versus CPU-bound workloads">
+  <defs>
+    <style><![CDATA[
+      .bg       { fill: #fdfbf7; }
+      .grid     { stroke: #e8e1d3; stroke-width: 0.5; fill: none; }
+      .axis     { stroke: #2d2d2d; stroke-width: 1.6; fill: none; }
+      .axis-l   { font: italic 600 13px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #2d2d2d; }
+      .quad-l   { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #888; }
+      .ttl      { font: 700 18px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .cap      { font: 13px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .pill     { stroke-width: 1.5; rx: 8; ry: 8; }
+      .p-stdthr { fill: #e8f0fb; stroke: #4a73b8; }
+      .p-pool   { fill: #e8f0fb; stroke: #4a73b8; }
+      .p-fiber  { fill: #f0e8d8; stroke: #b89540; }
+      .p-ctx    { fill: #f0e8d8; stroke: #b89540; }
+      .p-coro   { fill: #d8e8df; stroke: #5a8870; }
+      .pill-h   { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .pill-s   { font: 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .pill-n   { font: 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #4a4a4a; }
+      .legend-l { font: 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .annot    { font: italic 600 12px -apple-system, system-ui, "Segoe UI", sans-serif; }
+      .annot-io { fill: #5a8870; }
+      .annot-cpu{ fill: #c0392b; }
+    ]]></style>
+    <pattern id="grid2" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" class="grid"/>
+    </pattern>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="920" height="580"/>
+  <rect width="920" height="580" fill="url(#grid2)"/>
+
+  <!-- Title -->
+  <text x="460" y="36" text-anchor="middle" class="ttl">Threading models in C++</text>
+  <text x="460" y="58" text-anchor="middle" class="cap">
+    Stack model on one axis · kernel visibility on the other · I/O-bound vs CPU-bound on the diagonal
+  </text>
+
+  <!-- Axes -->
+  <!-- X axis: stackful (left) → stackless (right) -->
+  <line x1="100" y1="500" x2="820" y2="500" class="axis" marker-end="url(#ah)"/>
+  <text x="100" y="525" class="axis-l" text-anchor="start">stackful (own stack per task, ~64KB+)</text>
+  <text x="820" y="525" class="axis-l" text-anchor="end">stackless (state machine, locals only)</text>
+  <text x="460" y="545" class="axis-l" text-anchor="middle">stack model →</text>
+
+  <!-- Y axis: kernel-visible (bottom) → invisible (top) -->
+  <line x1="100" y1="500" x2="100" y2="100" class="axis" marker-end="url(#ah)"/>
+  <text x="80" y="495" class="axis-l" text-anchor="end" transform="rotate(-90 80 495)">
+    kernel-visible (1:1, schedulable, counts in pids.max)
+  </text>
+  <text x="80" y="105" class="axis-l" text-anchor="end" transform="rotate(-90 80 105)">
+    user-space only (M:N, invisible)
+  </text>
+
+  <!-- Quadrant labels (faint) -->
+  <text x="280" y="155" class="quad-l">stackful · kernel-known</text>
+  <text x="640" y="155" class="quad-l">stackless · kernel-invisible</text>
+  <text x="280" y="475" class="quad-l">stackful · 1:1</text>
+  <text x="640" y="475" class="quad-l">stackless · 1:1 (rare)</text>
+
+  <!-- Pills (the threading models) -->
+
+  <!-- std::thread / std::jthread (stackful, kernel-visible, bottom-left) -->
+  <rect class="pill p-stdthr" x="170" y="380" width="200" height="80"/>
+  <text x="270" y="402" text-anchor="middle" class="pill-h">std::thread / std::jthread</text>
+  <text x="270" y="422" text-anchor="middle" class="pill-s">1:1 · ~8 MB virt stack · in pids.max</text>
+  <text x="270" y="440" text-anchor="middle" class="pill-n">C++11 / C++20 jthread joins on dtor</text>
+  <text x="270" y="455" text-anchor="middle" class="pill-n">default; long-lived workers</text>
+
+  <!-- httplib / Asio / gRPC pools (1:1 under the hood) -->
+  <rect class="pill p-pool" x="170" y="280" width="200" height="80"/>
+  <text x="270" y="302" text-anchor="middle" class="pill-h">Library pools</text>
+  <text x="270" y="322" text-anchor="middle" class="pill-s">httplib / Asio / gRPC</text>
+  <text x="270" y="340" text-anchor="middle" class="pill-n">N pre-spawned std::threads</text>
+  <text x="270" y="355" text-anchor="middle" class="pill-n">size off cgroup, not host</text>
+
+  <!-- Boost.Fibers (stackful, M:N, top-left) -->
+  <rect class="pill p-fiber" x="170" y="170" width="200" height="80"/>
+  <text x="270" y="192" text-anchor="middle" class="pill-h">Boost.Fibers</text>
+  <text x="270" y="212" text-anchor="middle" class="pill-s">M:N · ~64 KB stack · cooperative</text>
+  <text x="270" y="230" text-anchor="middle" class="pill-n">blocking-style code, user-space switch</text>
+  <text x="270" y="245" text-anchor="middle" class="pill-n">stack memory adds up</text>
+
+  <!-- Boost.Context (stackful primitive) -->
+  <rect class="pill p-ctx" x="380" y="170" width="200" height="80"/>
+  <text x="480" y="192" text-anchor="middle" class="pill-h">Boost.Context</text>
+  <text x="480" y="212" text-anchor="middle" class="pill-s">make_fcontext / jump_fcontext</text>
+  <text x="480" y="230" text-anchor="middle" class="pill-n">low-level primitive</text>
+  <text x="480" y="245" text-anchor="middle" class="pill-n">build your own scheduler</text>
+
+  <!-- C++20 coroutines (stackless, M:N, top-right) -->
+  <rect class="pill p-coro" x="590" y="170" width="220" height="80"/>
+  <text x="700" y="192" text-anchor="middle" class="pill-h">C++20 coroutines</text>
+  <text x="700" y="212" text-anchor="middle" class="pill-s">stackless · heap-allocated frames</text>
+  <text x="700" y="230" text-anchor="middle" class="pill-n">cppcoro / libfork / hand-rolled</text>
+  <text x="700" y="245" text-anchor="middle" class="pill-n">cheap suspension; no built-in sched.</text>
+
+  <!-- I/O bound vs CPU bound diagonal annotation -->
+  <text x="650" y="470" class="annot annot-io" text-anchor="end">
+    ↑ better fit for I/O-bound, high fan-out
+  </text>
+  <text x="350" y="385" class="annot annot-cpu" text-anchor="end">
+    ↓ better fit for CPU-bound work
+  </text>
+
+  <!-- Footer -->
+  <text x="460" y="565" text-anchor="middle" class="cap">
+    Right answer for I/O fan-out: coroutines / fibers / io_uring (§7).  Right answer for CPU work: pool sized to cgroup quota.
+  </text>
+</svg>

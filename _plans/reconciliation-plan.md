@@ -46,7 +46,7 @@ on a clean Fedora 44 host; that's what the verification pass turns
 |----|--------------------------------------------------------------------|---------|-----------------------------|------------------------------------------------------|
 | 0  | Outline                                                            | [x]     | drafted (r03)               | Full prose, sidebar dropped, dual-target sizing called out  |
 | 1  | Prerequisites                                                      | [x]     | verified (r08)              | r08: 24/24 required check-host.sh checks pass on user's Fedora 44; 2 warnings for quay.io and docker.io reachability are informational only (don't gate any non-demo-04 demo). |
-| 2  | Introduction & Mental Model                                        | [x]     | unverified                  | —                                                    |
+| 2  | Introduction & Mental Model                                        | [x]     | drafted with prose (r22)    | r22: ~4500 words; four-layer model spine; LTO/PGO/PIE/ASLR explainers; threading deep-dive (std::thread/jthread, library pools, coroutines, Boost.Fibers/Context) with I/O-vs-CPU dimension and three container traps; toolkit subsection (gdb/Valgrind/perf/eBPF) with forward refs; two real Excalidraw diagrams committed (`02-introduction-four-layers`, `02-threading-models`) |
 | 3  | Container Strategy: UBI, scratch, multi-stage builds               | [x]     | verified (r20)              | demo-01 measured: 689 MB single-stage-naive → 114 MB ubi-multistage (6×) → 26.4 MB ubi-micro w/ fully-static -static binary (26×); ubi-micro-glibc-mismatch teaching variant captures the cross-image glibc symbol-version trap live (`GLIBC_2.35 not found`) |
 | 4  | Compile-Time Wins: LTO, PGO, constexpr                             | [x]     | verified (r20)              | demo-01: all four variants build with thin LTO; PGO captures real .gcda data and rebuilds with -fprofile-use; wall-clock latency at -c 50 shows no toolchain delta (40.7-40.8 ms p50 across all variants) — that IS the §4 lesson: PGO/LTO show in CPU profiles, not p50 latency, when queue dynamics dominate |
 | 5  | STL, Layout, and C++20/23 Containers                               | [x]     | unverified                  | Tied to Demo 2; verify GCC 14 supports `flat_set`    |
@@ -1431,6 +1431,90 @@ reader doesn't repeat the mistake.
 This is a pure bug fix; no other changes. Demo-01
 verification is still closed; r21 just makes r20's polish
 actually run end-to-end.
+
+### 2026-05-09 — r22: Round 2 — §2 full prose + first two real Excalidraw diagrams
+
+Demo-01 verification campaign closed. §2 was promoted from
+"drafted (r03 stub)" to "drafted with full prose" by replacing
+the 72-line stub with the round-2 expansion the user requested.
+
+**Scope additions to §2 (per user direction):**
+
+1. LTO and PGO explained — what each is, full-vs-thin LTO,
+   PGO's two-stage workflow, the importance of representative
+   workloads, the trade-offs and where they break.
+2. PIE and ASLR explained — compile-time half (`-fPIE` /
+   `-pie`) and runtime half (kernel-side randomization).
+   Connects directly to the demo-01 r19 trade where we
+   accepted non-PIE for the static binary.
+3. Threading deep-dive: std::thread, std::jthread, library
+   pools (httplib / Asio / gRPC), C++20 coroutines,
+   Boost.Fibers, Boost.Context. Laid out on the stackful-vs-
+   stackless × kernel-visible-vs-invisible axes.
+4. I/O-bound vs CPU-bound dimension — the single axis that
+   decides which threading model fits.
+5. Container interaction with threading: the three traps
+   (`hardware_concurrency()` returning host count;
+   requests vs limits; non-policed creation), with concrete
+   mitigations.
+6. The toolkit subsection — four classes (static analysis,
+   process-attach debuggers like gdb, dynamic analyzers like
+   Valgrind, live-system tracers like perf/eBPF), with brief
+   what/when guidance and forward references to §11 + §9.
+
+The user's question on debugging cards: I added the toolkit
+section to §2 (introductory level) but kept the deep dive in
+§11 / demo-06 where it belongs. So §11 already covers gdb /
+gdbserver / Valgrind / ephemeral debug sidecars; §2 now
+introduces them at the conceptual level so readers know which
+tool answers which question.
+
+**Length:** ~4500 words / ~18 minutes spoken. The duration
+metadata in the page front-matter updated from "8 minutes" to
+"18 minutes" to reflect the expanded scope. The pacing for the
+overall 1.5-3 hour talk still works because §2 functions as
+the conceptual spine that subsequent sections lean on.
+
+**Two real Excalidraw diagrams committed (replacing
+placeholders):**
+
+- `02-introduction-four-layers` — four horizontal bands
+  (Toolchain / Image / Kernel / Runtime), example chips in
+  each, vertical "decisions cascade" arrow, and a red
+  cross-layer trace arrow that retells demo-01's
+  glibc-mismatch story across the layers as a worked
+  example.
+- `02-threading-models` — two-axis comparison: stackful (left)
+  vs stackless (right), kernel-visible (bottom) vs invisible
+  (top). Five model pills positioned in the right quadrants,
+  with diagonal annotations marking the I/O-bound vs
+  CPU-bound axis.
+
+Both delivered as `.svg` (rendered for inline embed and
+gallery) and `.excalidraw` (editable JSON source). The
+`diagrams.html` gallery hero count updated from 13 to 14;
+the `diagrams/README.md` catalog table got the new row.
+
+§2 still references `02-introduction-four-layers` in the
+existing place; the new threading diagram is referenced from
+the new threading-models subsection.
+
+**Verification matrix progress:** §2 promoted from "drafted
+(stub)" to "drafted with full prose" — but stays unverified
+until the diagrams render correctly on the live Jekyll site
+and the prose passes a real read-through. That's a separate
+gate; flipping to verified is a future-round decision.
+
+Image audit unchanged: 23 UBI references + 1 docker.io
+exception. No demo changes; no shell-script changes.
+
+**Next:** option B — observability stack end-to-end
+verification. The compose stack collapses to a single
+`grafana/otel-lgtm:0.8.1` container per the r06 simplification,
+but it's never been brought up against a real OTel-emitting
+client and exercised through to a Grafana dashboard. That
+verification gate clears §9 (Observability & Profiling) for
+prose work in a later round.
 
 
 ---

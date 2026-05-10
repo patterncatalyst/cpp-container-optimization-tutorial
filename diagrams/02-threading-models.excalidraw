@@ -1,0 +1,208 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "type": "text", "id": "title", "x": 200, "y": 30, "width": 600, "height": 30,
+      "text": "Threading models in C++",
+      "fontSize": 26, "fontFamily": 1, "textAlign": "center",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100
+    },
+    {
+      "type": "text", "id": "subtitle", "x": 100, "y": 70, "width": 800, "height": 20,
+      "text": "Stack model · kernel visibility · I/O-bound vs CPU-bound fit",
+      "fontSize": 14, "fontFamily": 1, "textAlign": "center",
+      "strokeColor": "#555", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100
+    },
+
+    {
+      "type": "arrow", "id": "x-axis",
+      "x": 100, "y": 500, "width": 720, "height": 0,
+      "points": [[0, 0], [720, 0]],
+      "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "roughness": 1, "opacity": 100,
+      "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "id": "y-axis",
+      "x": 100, "y": 500, "width": 0, "height": -400,
+      "points": [[0, 0], [0, -400]],
+      "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "roughness": 1, "opacity": 100,
+      "endArrowhead": "arrow"
+    },
+    {
+      "type": "text", "id": "x-label-left", "x": 100, "y": 510, "width": 320, "height": 16,
+      "text": "stackful (~64KB+ per task)",
+      "fontSize": 12, "fontFamily": 1, "textAlign": "left",
+      "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "x-label-right", "x": 600, "y": 510, "width": 220, "height": 16,
+      "text": "stackless (state machine)",
+      "fontSize": 12, "fontFamily": 1, "textAlign": "right",
+      "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+
+    {
+      "type": "rectangle", "id": "p-jthread", "x": 170, "y": 380, "width": 200, "height": 80,
+      "strokeColor": "#4a73b8", "backgroundColor": "#e8f0fb",
+      "fillStyle": "solid", "strokeWidth": 2, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "p-jthread-h", "x": 175, "y": 392, "width": 190, "height": 22,
+      "text": "std::thread / std::jthread",
+      "fontSize": 14, "fontFamily": 1, "textAlign": "center",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "p-jthread-s", "x": 175, "y": 415, "width": 190, "height": 16,
+      "text": "1:1 · ~8 MB virt stack · pids.max",
+      "fontSize": 11, "fontFamily": 3, "textAlign": "center",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "p-jthread-n", "x": 175, "y": 433, "width": 190, "height": 16,
+      "text": "long-lived workers; default",
+      "fontSize": 11, "fontFamily": 1, "textAlign": "center",
+      "strokeColor": "#4a4a4a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+
+    {
+      "type": "rectangle", "id": "p-pools", "x": 170, "y": 280, "width": 200, "height": 80,
+      "strokeColor": "#4a73b8", "backgroundColor": "#e8f0fb",
+      "fillStyle": "solid", "strokeWidth": 2, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "p-pools-h", "x": 175, "y": 292, "width": 190, "height": 22,
+      "text": "Library pools",
+      "fontSize": 14, "fontFamily": 1, "textAlign": "center",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "p-pools-s", "x": 175, "y": 315, "width": 190, "height": 16,
+      "text": "httplib / Asio / gRPC",
+      "fontSize": 11, "fontFamily": 3, "textAlign": "center",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "p-pools-n", "x": 175, "y": 333, "width": 190, "height": 16,
+      "text": "size off cgroup, not host",
+      "fontSize": 11, "fontFamily": 1, "textAlign": "center",
+      "strokeColor": "#4a4a4a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+
+    {
+      "type": "rectangle", "id": "p-fiber", "x": 170, "y": 170, "width": 200, "height": 80,
+      "strokeColor": "#b89540", "backgroundColor": "#f0e8d8",
+      "fillStyle": "solid", "strokeWidth": 2, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "p-fiber-h", "x": 175, "y": 182, "width": 190, "height": 22,
+      "text": "Boost.Fibers",
+      "fontSize": 14, "fontFamily": 1, "textAlign": "center",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "p-fiber-s", "x": 175, "y": 205, "width": 190, "height": 16,
+      "text": "M:N · ~64 KB stack · cooperative",
+      "fontSize": 11, "fontFamily": 3, "textAlign": "center",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "p-fiber-n", "x": 175, "y": 223, "width": 190, "height": 16,
+      "text": "blocking-style; user-space switch",
+      "fontSize": 11, "fontFamily": 1, "textAlign": "center",
+      "strokeColor": "#4a4a4a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+
+    {
+      "type": "rectangle", "id": "p-context", "x": 380, "y": 170, "width": 200, "height": 80,
+      "strokeColor": "#b89540", "backgroundColor": "#f0e8d8",
+      "fillStyle": "solid", "strokeWidth": 2, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "p-context-h", "x": 385, "y": 182, "width": 190, "height": 22,
+      "text": "Boost.Context",
+      "fontSize": 14, "fontFamily": 1, "textAlign": "center",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "p-context-s", "x": 385, "y": 205, "width": 190, "height": 16,
+      "text": "make_fcontext / jump_fcontext",
+      "fontSize": 11, "fontFamily": 3, "textAlign": "center",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "p-context-n", "x": 385, "y": 223, "width": 190, "height": 16,
+      "text": "low-level primitive",
+      "fontSize": 11, "fontFamily": 1, "textAlign": "center",
+      "strokeColor": "#4a4a4a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+
+    {
+      "type": "rectangle", "id": "p-coro", "x": 590, "y": 170, "width": 220, "height": 80,
+      "strokeColor": "#5a8870", "backgroundColor": "#d8e8df",
+      "fillStyle": "solid", "strokeWidth": 2, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "p-coro-h", "x": 595, "y": 182, "width": 210, "height": 22,
+      "text": "C++20 coroutines",
+      "fontSize": 14, "fontFamily": 1, "textAlign": "center",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "p-coro-s", "x": 595, "y": 205, "width": 210, "height": 16,
+      "text": "stackless · heap-allocated frames",
+      "fontSize": 11, "fontFamily": 3, "textAlign": "center",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "p-coro-n", "x": 595, "y": 223, "width": 210, "height": 16,
+      "text": "cppcoro / libfork / hand-rolled",
+      "fontSize": 11, "fontFamily": 1, "textAlign": "center",
+      "strokeColor": "#4a4a4a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+
+    {
+      "type": "text", "id": "annot-io", "x": 450, "y": 250, "width": 350, "height": 20,
+      "text": "↑ better fit for I/O-bound, high fan-out",
+      "fontSize": 12, "fontFamily": 1, "textAlign": "right",
+      "strokeColor": "#5a8870", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "annot-cpu", "x": 100, "y": 360, "width": 250, "height": 20,
+      "text": "↓ better fit for CPU-bound work",
+      "fontSize": 12, "fontFamily": 1, "textAlign": "right",
+      "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    }
+  ],
+  "appState": {
+    "viewBackgroundColor": "#fdfbf7",
+    "currentItemFontFamily": 1,
+    "gridSize": 20
+  },
+  "files": {}
+}

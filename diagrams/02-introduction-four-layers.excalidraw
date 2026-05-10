@@ -1,45 +1,153 @@
 {
-    "type": "excalidraw",
-    "version": 2,
-    "source": "https://excalidraw.com",
-    "elements": [
-        {
-            "type": "text",
-            "version": 1,
-            "id": "02-introduction-four-layers-placeholder-text",
-            "x": 100,
-            "y": 100,
-            "width": 600,
-            "height": 40,
-            "text": "Four-layer mental model — replace this placeholder",
-            "fontSize": 24,
-            "fontFamily": 1,
-            "textAlign": "left",
-            "verticalAlign": "top",
-            "strokeColor": "#1a1a1a",
-            "backgroundColor": "transparent",
-            "fillStyle": "solid",
-            "strokeWidth": 1,
-            "strokeStyle": "solid",
-            "roughness": 1,
-            "opacity": 100,
-            "groupIds": [],
-            "frameId": null,
-            "roundness": null,
-            "seed": 1,
-            "boundElements": null,
-            "updated": 1,
-            "link": null,
-            "locked": false,
-            "containerId": null,
-            "originalText": "Four-layer mental model — replace this placeholder",
-            "lineHeight": 1.25,
-            "baseline": 18
-        }
-    ],
-    "appState": {
-        "gridSize": 20,
-        "viewBackgroundColor": "#fdfbf7"
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "type": "text", "id": "title", "x": 200, "y": 40, "width": 600, "height": 30,
+      "text": "The four-layer mental model",
+      "fontSize": 28, "fontFamily": 1, "textAlign": "center",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100
     },
-    "files": {}
+    {
+      "type": "text", "id": "subtitle", "x": 200, "y": 80, "width": 600, "height": 20,
+      "text": "Toolchain → Image → Kernel → Runtime",
+      "fontSize": 16, "fontFamily": 1, "textAlign": "center",
+      "strokeColor": "#555", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100
+    },
+
+    {
+      "type": "rectangle", "id": "band-toolchain", "x": 60, "y": 130, "width": 800, "height": 90,
+      "strokeColor": "#4a73b8", "backgroundColor": "#e8f0fb",
+      "fillStyle": "solid", "strokeWidth": 2, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "lbl-toolchain", "x": 80, "y": 145, "width": 200, "height": 20,
+      "text": "1. Toolchain",
+      "fontSize": 18, "fontFamily": 1, "textAlign": "left",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "ref-toolchain", "x": 80, "y": 168, "width": 400, "height": 16,
+      "text": "§4 Compile-time wins · §12 Reproducibility & ABI",
+      "fontSize": 13, "fontFamily": 1, "textAlign": "left",
+      "strokeColor": "#555", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "tools-toolchain", "x": 280, "y": 188, "width": 560, "height": 22,
+      "text": "LTO · PGO · -fPIE · CMake presets · -static / static-pie · cppcheck",
+      "fontSize": 13, "fontFamily": 3, "textAlign": "left",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+
+    {
+      "type": "rectangle", "id": "band-image", "x": 60, "y": 240, "width": 800, "height": 90,
+      "strokeColor": "#b89540", "backgroundColor": "#f0e8d8",
+      "fillStyle": "solid", "strokeWidth": 2, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "lbl-image", "x": 80, "y": 255, "width": 200, "height": 20,
+      "text": "2. Image",
+      "fontSize": 18, "fontFamily": 1, "textAlign": "left",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "ref-image", "x": 80, "y": 278, "width": 400, "height": 16,
+      "text": "§3 Container strategy",
+      "fontSize": 13, "fontFamily": 1, "textAlign": "left",
+      "strokeColor": "#555", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "tools-image", "x": 280, "y": 298, "width": 560, "height": 22,
+      "text": "UBI multistage · ubi-micro · static linkage · OCI labels / ABI · layer cache",
+      "fontSize": 13, "fontFamily": 3, "textAlign": "left",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+
+    {
+      "type": "rectangle", "id": "band-kernel", "x": 60, "y": 350, "width": 800, "height": 90,
+      "strokeColor": "#b86742", "backgroundColor": "#ecdfd8",
+      "fillStyle": "solid", "strokeWidth": 2, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "lbl-kernel", "x": 80, "y": 365, "width": 200, "height": 20,
+      "text": "3. Kernel",
+      "fontSize": 18, "fontFamily": 1, "textAlign": "left",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "ref-kernel", "x": 80, "y": 388, "width": 400, "height": 16,
+      "text": "§7 I/O latency · §8 Networking · §10 Isolation",
+      "fontSize": 13, "fontFamily": 1, "textAlign": "left",
+      "strokeColor": "#555", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "tools-kernel", "x": 280, "y": 408, "width": 560, "height": 22,
+      "text": "io_uring · cgroups v2 · NUMA · scheduler / CFS · veth · eBPF",
+      "fontSize": 13, "fontFamily": 3, "textAlign": "left",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+
+    {
+      "type": "rectangle", "id": "band-runtime", "x": 60, "y": 460, "width": 800, "height": 90,
+      "strokeColor": "#5a8870", "backgroundColor": "#d8e8df",
+      "fillStyle": "solid", "strokeWidth": 2, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "lbl-runtime", "x": 80, "y": 475, "width": 200, "height": 20,
+      "text": "4. Runtime",
+      "fontSize": 18, "fontFamily": 1, "textAlign": "left",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "ref-runtime", "x": 80, "y": 498, "width": 480, "height": 16,
+      "text": "§6 Memory · §9 Observability · §10 Isolation · §11 Debugging",
+      "fontSize": 13, "fontFamily": 1, "textAlign": "left",
+      "strokeColor": "#555", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+    {
+      "type": "text", "id": "tools-runtime", "x": 280, "y": 518, "width": 560, "height": 22,
+      "text": "requests / limits · ASLR · gdbserver · Valgrind · perf / OTel · p50/p95/p99",
+      "fontSize": 13, "fontFamily": 3, "textAlign": "left",
+      "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
+    },
+
+    {
+      "type": "arrow", "id": "cascade-arrow",
+      "x": 42, "y": 140, "width": 0, "height": 400,
+      "points": [[0, 0], [0, 400]],
+      "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100,
+      "endArrowhead": "arrow"
+    },
+    {
+      "type": "text", "id": "cascade-label",
+      "x": 18, "y": 320, "width": 50, "height": 20,
+      "text": "cascade ↓",
+      "fontSize": 11, "fontFamily": 1, "textAlign": "center",
+      "strokeColor": "#555", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100,
+      "angle": -1.5707963267948966
+    }
+  ],
+  "appState": {
+    "viewBackgroundColor": "#fdfbf7",
+    "currentItemFontFamily": 1,
+    "gridSize": 20
+  },
+  "files": {}
 }
