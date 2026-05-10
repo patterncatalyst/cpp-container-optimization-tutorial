@@ -583,6 +583,88 @@ subscription-manager plugin and no `redhat.repo`.
 Verification status: pending demo-01 re-run on user's host. If it
 runs clean, §3 and §4 (the demo-01 sections) get promoted.
 
+### 2026-05-09 — r10: r08 fixes confirmed on real host; observability stack verified
+
+User re-ran the host & stack scripts post-r08. Three clean runs:
+
+1. **`./scripts/check-host.sh`** — 24/24 required checks pass.
+   The two `[warn]` lines for `quay.io` and `docker.io` are
+   expected on the user's network and correctly classified as
+   informational (don't gate exit code).
+
+2. **`./scripts/verify-stacks.sh`** (full mode) — `observability`
+   stack brought up, Grafana's `/api/health` returned 200, stack
+   tore down cleanly. The URL-parsing crash from r07's run is
+   gone (parallel-arrays fix held). The false-failure spam from
+   demo-03/04/06 is gone (conservative-scope fix held).
+
+3. **`./scripts/verify-stacks.sh --quick`** — correctly skipped
+   the slow stack and reported "nothing verified" without erroring.
+   Edge case handled.
+
+What this confirms beyond r08's verified §1 row:
+- The `grafana/otel-lgtm` observability stack pulls, runs, and
+  cleans up on a stock Fedora 44 with rootless podman 5.8. The
+  `user: root + tmpfs: /data` pattern from r06 (adopted from
+  patterncatalyst/otel-observability-demos) works as advertised.
+- Image cache warming via `./scripts/pre-pull.sh` works — implied,
+  since verify-stacks couldn't have brought up lgtm without the
+  image being available.
+
+Effect on the matrix:
+- §1 stays `verified (r08)`; this round didn't surface anything
+  to revisit.
+- The observability stack is now end-to-end verified on a real
+  host. No matrix row directly tracks "shared infra"; this is
+  recorded in the log instead.
+- §9 (Observability & profiling) row in the matrix gets a note
+  pointing at this entry, but stays drafted-only — the section's
+  prose hasn't been written yet, so we can't promote it on
+  infrastructure verification alone.
+
+Outstanding: the user reported the demo-01 build issue separately
+in r09, where we applied the UBI subscription-manager fix to all
+8 Containerfiles. Demo-01 re-run is the next verification gate;
+when it lands clean we promote §3 and §4.
+
+User reported demo-01 build failed with the classic UBI-without-
+entitlement issue: `dnf install` triggers the `subscription-manager`
+plugin to refresh entitlement-only repos, which fails with `Unable
+to read consumer identity` and on some configurations exits non-zero,
+killing the build. Resolved in the user's reference projects
+(otel-observability-demos, hummingbird-tutorial, optimizing-java).
+
+Fix applied uniformly: right after every `FROM
+registry.access.redhat.com/ubi9/ubi:...` line (the "full" UBI base
+that uses `dnf`, not the minimal one that uses `microdnf`):
+
+    RUN rm -f /etc/yum.repos.d/redhat.repo && \
+        sed -i 's/^enabled=1/enabled=0/' \
+            /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
+
+Removing `redhat.repo` stops dnf trying to refresh the entitlement
+repos (which is what triggers the consumer-identity check); the
+plugin disable silences any residual warnings. UBI's free repos in
+`/etc/yum.repos.d/ubi.repo` are unaffected, so `dnf install`
+continues working normally — UBI without entitlement is a documented
+Red Hat configuration.
+
+Files patched (Python script in r09 commit): 8 Containerfiles,
+9 FROM lines total (demo-06 has two `ubi9/ubi` stages — toolchain
+and gdbserver — both got the fix). Plus the throwaway PGO merge
+container in `examples/demo-01-image-strategy/demo.sh`.
+
+Convention documented in CONTRIBUTING.md → "UBI without a Red Hat
+subscription" sub-section so future Containerfiles include it.
+Future `ubi9/ubi` builder stages without this fragment should be
+flagged in review.
+
+`ubi9/ubi-minimal` runtime stages need no fix; microdnf has no
+subscription-manager plugin and no `redhat.repo`.
+
+Verification status: pending demo-01 re-run on user's host. If it
+runs clean, §3 and §4 (the demo-01 sections) get promoted.
+
 ---
 
 ## Known divergences from the PRD
