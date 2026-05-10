@@ -22,7 +22,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="07-io-uring-submission" caption="`io_uring` submission and completion queues, with the kernel-side submission thread" %}
+{% include excalidraw.html name="07-io-uring-rings" caption="`io_uring` submission and completion queues, with the kernel-side submission thread" %}
 
 ## Planned content
 

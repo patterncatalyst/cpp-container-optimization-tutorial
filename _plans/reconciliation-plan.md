@@ -28,7 +28,7 @@ G.1 Sections drafted:             15 / 15  (stub level — outlines only)
 G.2 Sections verified:             0 / 15  ← the one to watch
 G.3 Demos scaffolded:              6 / 6   (build files + sources + Containerfiles)
 G.4 Demos passing test scripts:    0 / 6   (test scripts exist; not run yet)
-G.5 Diagrams paired (SVG+JSON):    0 / 13  (placeholders only; not drawn yet)
+G.5 Diagram pairs in place:       13 / 13  (placeholders; not drawn yet)
 G.6 PPTX export validated:        no
 ```
 
@@ -81,21 +81,27 @@ prints a pass/fail summary at the end.
 
 ## G.5 — Diagrams matrix
 
-| Diagram (basename)                         | `.svg` | `.excalidraw` | Embedded in §  | Notes                                              |
-|--------------------------------------------|--------|---------------|----------------|----------------------------------------------------|
-| 02-mental-model-four-layers                | [ ]    | [ ]           | §2             | Toolchain → image → kernel → runtime               |
-| 03-image-strategy-ubi-vs-scratch           | [ ]    | [ ]           | §3             | Trade-off matrix with rows: size, debug, attack    |
-| 04-compile-pgo-flow                        | [ ]    | [ ]           | §4             | Instrumented build → workload → optimized build    |
-| 05-stl-layout-cache-lines                  | [ ]    | [ ]           | §5             | Cache-line footprint: vector / flat_set / map      |
-| 06-allocator-stack                         | [ ]    | [ ]           | §6             | App → PMR resource → upstream → cgroup memory.high |
-| 07-io-uring-submission                     | [ ]    | [ ]           | §7             | SQ/CQ mental model with kernel submission thread   |
-| 08-veth-vs-host-networking                 | [ ]    | [ ]           | §8             | Packet path under each mode                        |
-| 09-observability-stack                     | [ ]    | [ ]           | §9             | The compose graph + data flow                      |
-| 10-noisy-neighbor-cgroup-tree              | [ ]    | [ ]           | §10            | cgroup hierarchy with tenants + load gen           |
-| 11-debug-sidecar-pattern                   | [ ]    | [ ]           | §11            | Ephemeral sidecar attaching to running pod         |
-| 12-hermetic-build-flow                     | [ ]    | [ ]           | §12            | Conan lockfile + preset → image with ABI labels    |
-| 13-avx512-mismatch                         | [ ]    | [ ]           | §13            | The SIGILL trap visualized                         |
-| 14-where-to-go-next                        | [ ]    | [ ]           | §14            | Map of related topics for further reading          |
+Two state columns: **placeholder** (the auto-generated SVG/.excalidraw
+stub committed to the repo so the site renders cleanly on day one) and
+**drawn** (a real diagram has replaced the stub). Promotion only after
+the SVG actually communicates the section's idea — placeholders that
+just look "filled in" don't count.
+
+| Diagram (basename)                    | placeholder | drawn  | Embedded in §  | Notes                                              |
+|---------------------------------------|-------------|--------|----------------|----------------------------------------------------|
+| 01-prerequisites-toolchain            | [x]         | [ ]    | §1 (gallery)   | Toolchain → Conan cache → Podman storage           |
+| 02-introduction-four-layers           | [x]         | [ ]    | §2             | Compile time → image → kernel → runtime            |
+| 03-image-strategy-multistage          | [x]         | [ ]    | §3             | Trade-off matrix: size, debug, attack surface       |
+| 04-compile-time-pgo-flow              | [x]         | [ ]    | §4             | Instrumented build → workload → optimized build    |
+| 05-stl-layout-flat-vs-node            | [x]         | [ ]    | §5             | Cache-line footprint: set / flat_set / vector       |
+| 06-allocator-stack                    | [x]         | [ ]    | §6             | App → PMR → glibc/jemalloc/mimalloc → cgroup        |
+| 07-io-uring-rings                     | [x]         | [ ]    | §7             | SQ/CQ mental model + multishot recv                 |
+| 08-networking-veth-vs-host            | [x]         | [ ]    | §8             | Packet path under each networking mode              |
+| 09-observability-otel-stack           | [x]         | [ ]    | §9             | OTel collector fan-out to Prom/Mimir/Tempo/Loki     |
+| 10-isolation-cgroup-tree              | [x]         | [ ]    | §10            | cgroup hierarchy: weight + cpuset + NUMA            |
+| 11-debug-sidecar-pattern              | [x]         | [ ]    | §11            | Ephemeral sidecar sharing PID namespace             |
+| 12-reproducibility-conan-flow         | [x]         | [ ]    | §12            | Conan lockfile + preset → image with ABI labels     |
+| 13-pitfalls-avx512-mismatch           | [x]         | [ ]    | §13            | The SIGILL trap visualized                          |
 
 ---
 
@@ -129,6 +135,53 @@ memory), what was tested, what passed, what surprised the verifier.
   duration 2h 40m → 2h 46m.
 - Both sections still **unverified** — content drafted from sources
   the user provided; not walked through on a Fedora 44 host.
+
+### 2026-05-09 — Site refactored to hummingbird-tutorial conventions; Excalidraw folder seeded; PRD dual-target sizing
+
+- Adopted `patterncatalyst/hummingbird-tutorial` Jekyll conventions for
+  CSS, layouts, includes, and top-level listing pages so the
+  `patterncatalyst` family of tutorial sites shares a visual language.
+  - Rewrote `assets/css/site.css` (~480 lines) around the same class
+    system (`hero`, `hero--compact`, `card`, `chip`, `btn--primary`,
+    `gallery-card`, `modal__*`, `tutorial__*`, `doc-card`) with a
+    C++-flavored deep-red accent (`#c0392b`) and proper
+    `prefers-color-scheme: dark` tokens.
+  - Replaced `_layouts/{default,tutorial,plan}.html`,
+    `_includes/{header,footer,excalidraw}.html`, and `index.html`.
+  - Added `_includes/diagram-card.html` partial used by the gallery.
+  - Added top-level pages `diagrams.html` (fullscreen-modal gallery,
+    JS verbatim from hummingbird so future patches apply to both)
+    and `examples.html` (cards listing the six demos).
+  - Updated `_config.yml` to match: `permalink: /:path/:basename/`,
+    `jekyll-redirect-from` plugin, `sectionid` defaults, the
+    "trailing slash on `examples/`" exclude pattern. Added
+    `jekyll-redirect-from` to the Gemfile.
+
+- Seeded `assets/diagrams/` with 13 placeholder pairs (`.svg` and
+  `.excalidraw`) so every inline include and gallery card resolves to
+  *something* on first build. Each placeholder is a labelled gray box
+  that says "diagram pending"; the `.excalidraw` stub opens cleanly on
+  excalidraw.com so the editor doesn't have to hand-craft the JSON
+  envelope. Conventions written up in `assets/diagrams/README.md`.
+
+- Renamed every inline diagram reference in `_docs/*.md` to the
+  canonical basenames used by the gallery (`02-introduction-four-layers`,
+  `06-allocator-stack`, `12-reproducibility-conan-flow`, etc.) so
+  inline embeds and the gallery resolve to the same SVG file.
+
+- PRD dual-target sizing made explicit:
+  - **PPTX deck**: 1.5–3 hours when delivered live.
+  - **Jekyll site**: untimed; written for self-paced reading.
+  - **Demos**: standalone runnable examples used in both targets;
+    live during the talk *or* swapped for pre-recorded video.
+  - Per-section "duration" fields in `_docs/` are reading time for
+    the site; PPTX talk-time for the deck is in PRD §5.
+  - Section table now labels its time column "PPTX talk" rather than
+    a generic "duration", and PRD §5 spells out which sections are
+    in the 1.5h cut vs. the 3h cut.
+
+- Verification state unchanged: nothing has been walked through on
+  Fedora 44 yet.
 
 ---
 

@@ -23,7 +23,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="12-hermetic-build-flow" caption="The hermetic build flow: Conan lockfile + CMake preset + multi-stage Containerfile → labeled image" %}
+{% include excalidraw.html name="12-reproducibility-conan-flow" caption="The hermetic build flow: Conan lockfile + CMake preset + multi-stage Containerfile → labeled image" %}
 
 ## Planned content
 

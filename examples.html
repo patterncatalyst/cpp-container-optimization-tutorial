@@ -1,0 +1,147 @@
+---
+layout: default
+title: Example demos
+description: Six runnable companion demos covering image strategy, memory, I/O, observability, isolation, and the quality pipeline. Each runs via ./demo.sh on Fedora 44.
+permalink: /examples/
+---
+
+<section class="hero hero--compact">
+    <div class="container">
+        <span class="hero__eyebrow">Example demos</span>
+        <h1>Six runnable companions to the tutorial.</h1>
+        <p class="hero__lead">
+            Every claim made in the tutorial body has a demo behind it.
+            Each demo is a self-contained Podman project with its own
+            <code>./demo.sh</code>, its own Containerfile(s), and the
+            CMake / Conan plumbing to build hermetically. Read the
+            matching tutorial section for context, then run the demo
+            from its directory.
+        </p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <h2 class="section-heading">Demos</h2>
+        <p class="section-sub">
+            Each card links to the demo's README on GitHub. Each demo
+            also stands alone — run the demo without reading the
+            tutorial first if you'd rather poke at it directly.
+        </p>
+
+        <div class="cards">
+            <a class="card"
+               href="https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-01-image-strategy"
+               rel="noopener">
+                <div class="card__eyebrow">Demo 01 · <strong>§3, §4</strong></div>
+                <h3 class="card__title">Image strategy &amp; PGO</h3>
+                <p class="card__desc">
+                    UBI multi-stage vs scratch-static vs single-stage-naive,
+                    plus a two-pass PGO build. <code>hey</code> drives load
+                    against each variant; the demo prints a p50/p95/p99 table
+                    side by side.
+                </p>
+                <div class="card__meta"><span>Source ↗</span></div>
+            </a>
+
+            <a class="card"
+               href="https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-02-memory-and-stl"
+               rel="noopener">
+                <div class="card__eyebrow">Demo 02 · <strong>§5, §6</strong></div>
+                <h3 class="card__title">Memory &amp; STL</h3>
+                <p class="card__desc">
+                    <code>set</code> vs <code>flat_set</code>, default <code>new</code>
+                    vs mimalloc-via-<code>LD_PRELOAD</code> vs PMR arena, plus a
+                    random-access workload with cgroup <code>memory.high</code> applied.
+                </p>
+                <div class="card__meta"><span>Source ↗</span></div>
+            </a>
+
+            <a class="card"
+               href="https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-03-io-uring-grpc"
+               rel="noopener">
+                <div class="card__eyebrow">Demo 03 · <strong>§7, §8</strong></div>
+                <h3 class="card__title">io_uring &amp; async gRPC</h3>
+                <p class="card__desc">
+                    Multishot accept + multishot recv with provided buffer
+                    rings; async gRPC with completion-queue workers and
+                    <code>SO_REUSEPORT</code>. Rootless vs host networking
+                    comparison built in.
+                </p>
+                <div class="card__meta"><span>Source ↗</span></div>
+            </a>
+
+            <a class="card"
+               href="https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-04-observability"
+               rel="noopener">
+                <div class="card__eyebrow">Demo 04 · <strong>§9</strong></div>
+                <h3 class="card__title">Observability stack</h3>
+                <p class="card__desc">
+                    Full Grafana + Prometheus + Mimir + Tempo + Loki + OTel
+                    Collector compose stack with a C++ service emitting
+                    traces, metrics, and logs over OTLP/gRPC. Optional
+                    bpftrace probes live alongside.
+                </p>
+                <div class="card__meta"><span>Source ↗</span></div>
+            </a>
+
+            <a class="card"
+               href="https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-05-isolation"
+               rel="noopener">
+                <div class="card__eyebrow">Demo 05 · <strong>§10</strong></div>
+                <h3 class="card__title">Noisy neighbor isolation</h3>
+                <p class="card__desc">
+                    Twin-tenant scenario: a latency-sensitive HTTP service
+                    next to a CPU/memory-bound noisy neighbor. Compares
+                    baseline, unisolated, <code>cpu.weight</code>, and
+                    <code>cpuset.cpus</code> pinning.
+                </p>
+                <div class="card__meta"><span>Source ↗</span></div>
+            </a>
+
+            <a class="card"
+               href="https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-06-quality-pipeline"
+               rel="noopener">
+                <div class="card__eyebrow">Demo 06 · <strong>§11, §12</strong></div>
+                <h3 class="card__title">Quality &amp; ABI pipeline</h3>
+                <p class="card__desc">
+                    cppcheck and clang-tidy as build stages, gtest+gmock
+                    suite, <code>abidiff</code> against a checked-in ABI
+                    reference, plus a gdbserver sidecar for live debugging.
+                    Hermetic Conan 2 lockfile + CMake presets throughout.
+                </p>
+                <div class="card__meta"><span>Source ↗</span></div>
+            </a>
+        </div>
+    </div>
+</section>
+
+<section class="section" style="background: var(--bg-soft);">
+    <div class="container container-prose">
+        <h2 class="section-heading">Running every demo</h2>
+        <p>
+            Clone the repo and invoke each <code>demo.sh</code> from its
+            directory. The scripts assume Podman 5.x rootless and a
+            handful of host tools (<code>hey</code>, <code>jq</code>,
+            <code>curl</code>) — see <a href="{{ '/docs/01-prerequisites/' | relative_url }}">§1
+            Prerequisites</a> for the full list.
+        </p>
+<pre><code>git clone https://github.com/{{ site.github_username }}/{{ site.github_repo }}.git
+cd {{ site.github_repo }}/examples/demo-01-image-strategy
+./demo.sh
+# ... or run them all in sequence:
+cd {{ site.github_repo }}
+./scripts/test-all-demos.sh
+</code></pre>
+
+        <h2 class="section-heading">If a demo fails</h2>
+        <p>
+            Most failures are kernel-feature gaps (<code>io_uring</code>
+            multishot needs ≥ 5.19) or rootless cgroup limits. The
+            <a href="{{ '/plans/reconciliation-plan/' | relative_url }}">reconciliation plan</a>
+            tracks every demo's verification state per host class. If
+            your host isn't covered, an entry there is the right
+            contribution.
+        </p>
+    </div>
+</section>

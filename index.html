@@ -1,44 +1,159 @@
 ---
 layout: default
-title: Home
+title: "Optimizing C++20/23 with Containers"
+description: "A 1.5–3 hour PPTX presentation, an untimed companion Jekyll site, and six runnable Podman demos that teach modern-C++ performance under realistic container constraints."
 ---
 
-<section class="hero" style="padding: 2rem 0 1rem; border-bottom: 1px solid var(--border);">
-  <p style="font-size: 0.95rem; color: var(--muted); margin: 0;">A 1.5–3 hour technical presentation + tutorial</p>
-  <h1 style="font-size: 2.4rem; line-height: 1.15; margin-top: 0.25em;">{{ site.title }}</h1>
-  <p style="font-size: 1.15rem; color: var(--muted); max-width: 640px;">
-    {{ site.description }}
-  </p>
-  <p>
-    <a href="{{ '/docs/00-outline/' | relative_url }}" style="background: var(--accent); color: white; padding: 0.6em 1.2em; border-radius: 6px; display: inline-block;">Start with the outline →</a>
-  </p>
+<section class="hero">
+    <div class="container">
+        <span class="hero__eyebrow">Hands-on tutorial</span>
+        <h1>Modern C++ performance,&nbsp;in&nbsp;containers.</h1>
+        <p class="hero__lead">
+            Fifteen tutorial sections, six runnable Podman demos, an
+            instrumented Grafana stack, and 13 Excalidraw diagrams that
+            explain where C++20/23 performance work actually lives once
+            your code is shipping in an OCI image.
+        </p>
+        <div class="hero__chips">
+            <span class="chip chip--accent">Fedora 44</span>
+            <span class="chip">Podman 5.x rootless</span>
+            <span class="chip">GCC 14 / Clang 18</span>
+            <span class="chip">CMake · Conan 2 · Ninja</span>
+            <span class="chip">io_uring · gRPC · OTel</span>
+            <span class="chip">cgroups v2 · NUMA</span>
+        </div>
+        <div class="hero__cta">
+            <a class="btn btn--primary"
+               href="{{ '/docs/00-outline/' | relative_url }}">
+                Start with the outline →
+            </a>
+            <a class="btn btn--secondary"
+               href="{{ '/docs/01-prerequisites/' | relative_url }}">
+                Skip to prerequisites
+            </a>
+        </div>
+    </div>
 </section>
 
-<section style="margin-top: 2rem;">
-  <h2 style="font-size: 1.4rem;">What you'll learn</h2>
-  <ul>
-    <li>Compile-time wins: LTO, PGO, <code>constexpr</code></li>
-    <li>C++20/23 data structures: <code>flat_map</code>, <code>flat_set</code>, PMR allocators</li>
-    <li>Memory: huge pages, cgroups v2 <code>memory.high</code>, mimalloc/jemalloc</li>
-    <li>I/O: <code>io_uring</code>, async gRPC, <code>SO_REUSEPORT</code></li>
-    <li>Container strategy: UBI vs scratch, multi-stage, ABI labels</li>
-    <li>Observability with the Grafana stack — Prometheus, Tempo, Loki, Mimir</li>
-    <li>Profiling with <code>perf</code>, <code>bcc</code>, <code>bpftrace</code></li>
-    <li>Isolation: cgroup weights, CPU pinning, NUMA, veth latency</li>
-    <li>Reproducibility: Conan 2 lockfiles, CMake presets, <code>abidiff</code></li>
-  </ul>
+<section class="section-tight">
+    <div class="container">
+        <div class="stats">
+            <div class="stat">
+                <span class="stat__value">15</span>
+                <span class="stat__label">Tutorial sections</span>
+            </div>
+            <div class="stat">
+                <span class="stat__value">6</span>
+                <span class="stat__label">Runnable Podman demos</span>
+            </div>
+            <div class="stat">
+                <span class="stat__value">13</span>
+                <span class="stat__label">Excalidraw diagrams</span>
+            </div>
+            <div class="stat">
+                <span class="stat__value">1.5–3h</span>
+                <span class="stat__label">PPTX talk-time range</span>
+            </div>
+            <div class="stat">
+                <span class="stat__value">4</span>
+                <span class="stat__label">Reference books cited</span>
+            </div>
+        </div>
+    </div>
 </section>
 
-<section style="margin-top: 3rem;">
-  <h2 style="font-size: 1.4rem;">Sections</h2>
-  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; margin-top: 1rem;">
-    {% assign sorted_docs = site.docs | sort: "order" %}
-    {% for d in sorted_docs %}
-    <a href="{{ d.url | relative_url }}" style="display: block; padding: 1rem; border: 1px solid var(--border); border-radius: 6px; color: var(--fg);">
-      <p style="margin: 0; color: var(--muted); font-size: 0.85rem;">§{{ d.order }} · {{ d.duration }}</p>
-      <p style="margin: 0.25rem 0 0; font-weight: 600;">{{ d.title }}</p>
-      {% if d.description %}<p style="margin: 0.5rem 0 0; color: var(--muted); font-size: 0.9rem;">{{ d.description }}</p>{% endif %}
-    </a>
-    {% endfor %}
-  </div>
+<section class="section">
+    <div class="container">
+        <h2 class="section-heading">Tutorial</h2>
+        <p class="section-sub">
+            Read in order the first time. Each section ends with a
+            prev/next pager. Per-section duration is reading time for
+            the site; the PPTX deck has its own talk-time pacing — see
+            <a href="{{ '/plans/reconciliation-plan/' | relative_url }}">the plan</a>.
+        </p>
+        <div class="cards">
+            {%- assign tutorial_docs = site.docs | sort: "order" -%}
+            {%- for doc in tutorial_docs -%}
+                {%- case doc.order -%}
+                    {%- when 0 -%}{%- assign section_kind = "Map" -%}
+                    {%- when 1 -%}{%- assign section_kind = "Setup" -%}
+                    {%- when 2 -%}{%- assign section_kind = "Concepts" -%}
+                    {%- when 3, 4 -%}{%- assign section_kind = "Build" -%}
+                    {%- when 5, 6 -%}{%- assign section_kind = "Memory" -%}
+                    {%- when 7, 8 -%}{%- assign section_kind = "I/O" -%}
+                    {%- when 9 -%}{%- assign section_kind = "Observe" -%}
+                    {%- when 10 -%}{%- assign section_kind = "Isolate" -%}
+                    {%- when 11, 12 -%}{%- assign section_kind = "Quality" -%}
+                    {%- when 13 -%}{%- assign section_kind = "Pitfalls" -%}
+                    {%- when 14 -%}{%- assign section_kind = "Next" -%}
+                    {%- else -%}{%- assign section_kind = "Section" -%}
+                {%- endcase -%}
+                <a class="card" href="{{ doc.url | relative_url }}">
+                    <div class="card__eyebrow">
+                        {{ section_kind }} · <strong>§{{ doc.order }}</strong>
+                    </div>
+                    <h3 class="card__title">{{ doc.title }}</h3>
+                    <p class="card__desc">{{ doc.description }}</p>
+                    <div class="card__meta">
+                        {%- if doc.duration -%}<span>⏱ {{ doc.duration }}</span>{%- endif -%}
+                    </div>
+                </a>
+            {%- endfor -%}
+        </div>
+    </div>
+</section>
+
+<section class="section" style="background: var(--bg-soft);">
+    <div class="container">
+        <h2 class="section-heading">Reference</h2>
+        <p class="section-sub">
+            Out-of-band documents that support the tutorial. Read the
+            plan if something doesn't work as written — chances are
+            it's tracked there.
+        </p>
+        <div class="cards">
+            <a class="doc-card" href="{{ '/docs/00-outline/' | relative_url }}">
+                <span class="doc-card__icon" aria-hidden="true">🗺️</span>
+                <span>
+                    <span class="doc-card__title">Outline &amp; reading order</span>
+                    <span class="doc-card__desc">The whole map on one page — section coverage, what's in scope, the 1.5h vs 3h PPTX cuts.</span>
+                </span>
+            </a>
+            <a class="doc-card" href="{{ '/docs/01-prerequisites/' | relative_url }}">
+                <span class="doc-card__icon" aria-hidden="true">🧰</span>
+                <span>
+                    <span class="doc-card__title">Prerequisites — Fedora 44</span>
+                    <span class="doc-card__desc">Podman 5.x rootless, GCC 14 / Clang 18, Conan 2, CMake, Ninja, hey, jq — full install.</span>
+                </span>
+            </a>
+            <a class="doc-card" href="{{ '/plans/reconciliation-plan/' | relative_url }}">
+                <span class="doc-card__icon" aria-hidden="true">📋</span>
+                <span>
+                    <span class="doc-card__title">Reconciliation plan</span>
+                    <span class="doc-card__desc">What's verified end-to-end vs. what's drafted but still needs validation on Fedora 44.</span>
+                </span>
+            </a>
+            <a class="doc-card" href="{{ '/diagrams/' | relative_url }}">
+                <span class="doc-card__icon" aria-hidden="true">📐</span>
+                <span>
+                    <span class="doc-card__title">Excalidraw diagrams</span>
+                    <span class="doc-card__desc">13 architecture and flow diagrams in an embedded gallery — click for fullscreen, download .excalidraw to edit.</span>
+                </span>
+            </a>
+            <a class="doc-card" href="{{ '/examples/' | relative_url }}">
+                <span class="doc-card__icon" aria-hidden="true">📦</span>
+                <span>
+                    <span class="doc-card__title">Six runnable demos</span>
+                    <span class="doc-card__desc">image strategy · memory & STL · io_uring + gRPC · observability · noisy neighbors · quality pipeline.</span>
+                </span>
+            </a>
+            <a class="doc-card" href="{{ '/docs/14-where-to-go-next/' | relative_url }}">
+                <span class="doc-card__icon" aria-hidden="true">📚</span>
+                <span>
+                    <span class="doc-card__title">Reference books cited</span>
+                    <span class="doc-card__desc">Andrist &amp; Sehr · Iglberger · Enberg · Ghosh — and how each complements this tutorial.</span>
+                </span>
+            </a>
+        </div>
+    </div>
 </section>

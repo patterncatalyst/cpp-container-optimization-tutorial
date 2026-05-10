@@ -25,7 +25,7 @@ and silently invalidates a measurement.
 This tutorial is structured around four layers, in the order the
 photons hit them:
 
-{% include excalidraw.html name="02-mental-model-four-layers" caption="The four-layer model: toolchain, image, kernel, runtime" %}
+{% include excalidraw.html name="02-introduction-four-layers" caption="The four-layer model: toolchain, image, kernel, runtime" %}
 
 1. **Toolchain.** Compiler, linker, optimization passes, profile
    data. Sections 4 and 12 live here.

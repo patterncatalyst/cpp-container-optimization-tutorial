@@ -22,7 +22,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="13-avx512-mismatch" caption="The AVX-512 mismatch trap: build host has it, runtime host doesn't, kernel sends SIGILL" %}
+{% include excalidraw.html name="13-pitfalls-avx512-mismatch" caption="The AVX-512 mismatch trap: build host has it, runtime host doesn't, kernel sends SIGILL" %}
 
 ## Planned content
 

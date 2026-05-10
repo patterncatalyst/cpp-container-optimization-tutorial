@@ -22,7 +22,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="04-compile-pgo-flow" caption="The three-step PGO pipeline: instrumented build → workload run → optimized build" %}
+{% include excalidraw.html name="04-compile-time-pgo-flow" caption="The three-step PGO pipeline: instrumented build → workload run → optimized build" %}
 
 ## Planned content
 

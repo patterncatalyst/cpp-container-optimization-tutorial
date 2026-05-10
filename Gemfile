@@ -8,6 +8,7 @@ group :jekyll_plugins do
   gem "jekyll-feed"
   gem "jekyll-seo-tag"
   gem "jekyll-sitemap"
+  gem "jekyll-redirect-from"
 end
 
 # Performance booster on Linux/macOS local dev

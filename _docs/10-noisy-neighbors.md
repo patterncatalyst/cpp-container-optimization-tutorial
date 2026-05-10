@@ -21,7 +21,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="10-noisy-neighbor-cgroup-tree" caption="cgroup hierarchy: two tenants and a load generator under a parent slice" %}
+{% include excalidraw.html name="10-isolation-cgroup-tree" caption="cgroup hierarchy: two tenants and a load generator under a parent slice" %}
 
 ## Planned content
 

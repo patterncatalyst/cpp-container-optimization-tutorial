@@ -20,7 +20,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="03-image-strategy-ubi-vs-scratch" caption="UBI vs scratch trade-off matrix" %}
+{% include excalidraw.html name="03-image-strategy-multistage" caption="UBI vs scratch trade-off matrix" %}
 
 ## Planned content
 

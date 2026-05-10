@@ -22,7 +22,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="09-observability-stack" caption="The Grafana observability stack: Prometheus + Tempo + Loki + Mimir + Grafana, in one compose graph" %}
+{% include excalidraw.html name="09-observability-otel-stack" caption="The Grafana observability stack: Prometheus + Tempo + Loki + Mimir + Grafana, in one compose graph" %}
 
 ## Planned content
 
