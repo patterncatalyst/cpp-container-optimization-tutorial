@@ -92,12 +92,16 @@ if [[ $DO_PGO -eq 1 ]]; then
 
   header "Merging profile data with llvm-profdata"
   # Run llvm-profdata inside a throwaway toolchain image so the host
-  # doesn't need clang installed.
+  # doesn't need clang installed. The leading rm + sed silence the
+  # subscription-manager plugin (UBI w/o entitlement); free UBI repos
+  # are unaffected so `dnf install -y llvm` proceeds normally.
   podman run --rm \
     -v "$PWD/pgo-profiles:/profiles:Z" \
     registry.access.redhat.com/ubi9/ubi:9.4 \
-    bash -c 'dnf install -y llvm >/dev/null 2>&1 \
-      && llvm-profdata merge -output=/profiles/default.profdata /profiles/*.profraw'
+    bash -c 'rm -f /etc/yum.repos.d/redhat.repo && \
+      sed -i "s/^enabled=1/enabled=0/" /etc/dnf/plugins/subscription-manager.conf 2>/dev/null; \
+      dnf install -y llvm >/dev/null 2>&1 && \
+      llvm-profdata merge -output=/profiles/default.profdata /profiles/*.profraw'
   note "Merged profile: pgo-profiles/default.profdata ($(stat -c %s pgo-profiles/default.profdata 2>/dev/null || echo 0) bytes)"
 
   header "Building PGO step 2 (optimized using gathered profile)"

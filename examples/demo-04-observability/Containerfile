@@ -2,6 +2,12 @@ ARG UBI_VERSION=9.4
 
 FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build
 
+# UBI w/o entitlement: silence subscription-manager.
+# Free UBI repos in ubi.repo are unaffected — dnf install works normally.
+RUN rm -f /etc/yum.repos.d/redhat.repo && \
+    sed -i 's/^enabled=1/enabled=0/' \
+        /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
+
 RUN dnf install -y --setopt=install_weak_deps=False \
         gcc-toolset-14 \
         cmake \

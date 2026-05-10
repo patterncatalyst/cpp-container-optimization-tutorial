@@ -131,6 +131,39 @@ We also route Prometheus through Quay (`quay.io/prometheus/prometheus`)
 where applicable; that's a registry-preference improvement, not an
 exception.
 
+### UBI without a Red Hat subscription
+
+Every Containerfile that uses `registry.access.redhat.com/ubi9/ubi:` as
+a build stage (the "full" UBI base, which uses `dnf` rather than
+`microdnf`) must include this fragment **right after the `FROM` line**:
+
+```dockerfile
+# UBI w/o entitlement: silence subscription-manager.
+# Free UBI repos in ubi.repo are unaffected — dnf install works normally.
+RUN rm -f /etc/yum.repos.d/redhat.repo && \
+    sed -i 's/^enabled=1/enabled=0/' \
+        /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
+```
+
+**Why**: UBI ships with `/etc/yum.repos.d/redhat.repo` configured to
+fetch entitlement-only RHEL repos. Without a Red Hat subscription
+registered inside the container (which we don't, and shouldn't), every
+`dnf install` triggers the `subscription-manager` plugin to refresh
+those repos. The refresh fails with `Unable to read consumer identity`
+and on some configurations exits non-zero, killing the build. The
+`redhat.repo` removal stops the refresh attempt; the plugin disable
+silences any residual warnings.
+
+**Free UBI content is unaffected** — the open `ubi-*-rpms` repos in
+`/etc/yum.repos.d/ubi.repo` work without entitlement and provide
+everything the demos need. UBI without subscription is a documented,
+supported Red Hat configuration; we just need this one-line opt-out
+of the entitlement plumbing that's also installed by default.
+
+This applies only to **`ubi9/ubi`** stages. **`ubi9/ubi-minimal`**
+uses `microdnf`, which has no subscription-manager plugin and no
+`redhat.repo`; runtime stages on `ubi-minimal` need no fix.
+
 ### Adding a new exception
 
 Don't, unless:
