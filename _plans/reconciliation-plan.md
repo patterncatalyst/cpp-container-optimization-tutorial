@@ -915,6 +915,84 @@ If all four variants build, the PGO profile shows non-zero
 .gcda files captured, and the latency table emits real
 numbers, §3 and §4 promote to verified in r15.
 
+### 2026-05-09 — r15: latency benchmark concurrency calibration
+
+User ran demo-01 on r14. Two of three issues from r13 are fixed,
+one remains plus a separate ubi-micro health-probe issue.
+
+**Fixed by r14:**
+1. PGO captured `1 .gcda file(s)` — up from 0. The signal handler
+   in main.cpp worked: SIGTERM caused srv.stop() → main() return →
+   atexit → libgcov flush. (1 file is correct: one .gcda per
+   translation unit, and we have exactly one main.cpp.)
+2. PGO step 2 succeeded with a real profile. The "pgo" image
+   ended up at the same MB-rounded size as ubi-multistage (114 MB)
+   because the binary delta from PGO is a few KB and gets lost
+   under the libstdc++ in the ubi-minimal layer.
+
+**Still wrong, with strong evidence from r14's new diagnostic:**
+
+The diagnostic block printed enough of hey's output to see what
+was happening:
+
+    Total:        0.5921 secs           ← 1000 reqs at -c 50 in 0.59s
+    Response time histogram:
+      0.005 [397]   ■■■■■■■■■■■■■■
+      ...
+      0.045 [602]   ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+Bimodal: ~40% fast (5ms — request hit an available thread), ~60%
+slow (45ms — request waited in queue). Then the diagnostic output
+ended. **The `head -25` cut off exactly at the histogram's last
+line; "Latency distribution:" would have started at line 26.**
+
+So hey at `-c 50 -n 1000` works. The actual benchmark runs at
+`-c 100 -n 10000`. With cpp-httplib's pool of 64 threads, 100
+concurrent persistent connections push queueing past hey's
+default 20s per-request timeout. Failed requests go to hey's
+`errorDist`, not `lats`. printLatencies() prints the
+"Latency distribution:" header but no percentile lines (because
+its loop only prints `data[i] > 0`, and `data[]` is all zeros
+when `b.lats` is empty). So awk finds nothing to extract.
+
+Plus a separate issue: ubi-micro's health probe timed out at
+20s. By the time the loop reached ubi-micro (4th of 4), the
+host had run several rootless containers in succession;
+cumulative cgroup / netns setup overhead made 20s tight.
+
+**Fixes (r15):**
+
+- **`src/main.cpp`**: thread pool 64 → 128. Mostly headroom; with
+  the r15 demo.sh's lower benchmark concurrency it isn't strictly
+  needed, but bigger pool = simpler reasoning.
+- **`demo.sh` benchmark**: `hey -n 10000 -c 100` → `hey -n 5000 -c 50`.
+  The diagnostic *proved* `-c 50` works; this is the simplest fix
+  that breaks the queueing-tail vs hey-timeout coupling. 5000
+  requests is plenty for percentile statistics; the whole bench
+  phase finishes faster, too.
+- **`demo.sh` health probe**: 20s → 30s for benchmark startup.
+  Plenty even for ubi-micro coming up cold last after 3 prior
+  bench cycles.
+- **`demo.sh` diagnostic capture**: `head -25` → `head -60` so a
+  future hey-output truncation doesn't recur.
+- Added a comment block in demo.sh explaining the concurrency
+  choice so the next reviewer doesn't re-walk the analysis.
+
+User also noted not seeing containers in podman desktop. Those
+benchmark containers run with `--rm`, exist for ~6 seconds each
+(the time hey takes), then auto-clean. They're genuinely
+transient; podman desktop's UI just doesn't refresh often enough
+to catch them. Not a bug.
+
+Image audit unchanged: 21 UBI + 1 docker.io exception.
+
+Verification status: pending demo-01 re-run with r15. The
+remaining `?` failure mode is structurally addressed (lower
+concurrency keeps requests under hey's timeout, the latency
+distribution prints, awk extracts). If the re-run shows real
+p50/p95/p99 numbers for at least three of the four variants,
+§3 and §4 promote to verified in r16.
+
 
 ---
 

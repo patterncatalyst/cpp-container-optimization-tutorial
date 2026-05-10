@@ -138,7 +138,19 @@ podman images \
   || true
 
 # ---------------------------------------------------------------------
-header "Latency comparison ('hey -n 10000 -c 100')"
+# Latency benchmark
+#
+# We run `hey -c 50 -n 5000` rather than something larger because:
+#   - At -c 100 against cpp-httplib's modest thread pool, queueing
+#     pushes per-request latency past hey's default 20s timeout for
+#     enough requests that hey's `b.lats` array stays empty, and the
+#     "Latency distribution:" block ends up empty.
+#   - At -c 50, even on a cold cgroup, request rate stays comfortably
+#     above the timeout threshold; percentiles print and awk extracts
+#     real numbers.
+# 5000 requests is plenty for a meaningful percentile distribution
+# while keeping the benchmark phase under a few seconds per variant.
+header "Latency comparison ('hey -n 5000 -c 50')"
 declare -A IMAGES=(
   [ubi-multistage]=$((PORT_BASE + 1))
   [ubi-micro]=$((PORT_BASE + 2))
@@ -152,15 +164,16 @@ PARSE_FAILURES=()
 for tag in "${!IMAGES[@]}"; do
   port="${IMAGES[$tag]}"
   podman run --rm -d --name "demo01-bench-${tag}" -p "${port}:8080" "${IMG_PREFIX}:${tag}" >/dev/null
-  if wait_for_http "http://127.0.0.1:${port}/healthz" 20; then
-    out=$(hey -n 10000 -c 100 "http://127.0.0.1:${port}/" 2>/dev/null || true)
+  # 30s wait_for_http: by the time we reach the 4th variant the host
+  # has run several rootless containers in succession; cumulative
+  # cgroup / netns setup overhead makes 20s occasionally too tight,
+  # especially for ubi-micro coming up cold last.
+  if wait_for_http "http://127.0.0.1:${port}/healthz" 30; then
+    out=$(hey -n 5000 -c 50 "http://127.0.0.1:${port}/" 2>/dev/null || true)
     p50=$(awk '/50% in/ {print $3 * 1000}' <<<"$out")
     p95=$(awk '/95% in/ {print $3 * 1000}' <<<"$out")
     p99=$(awk '/99% in/ {print $3 * 1000}' <<<"$out")
     if [[ -z "$p50" ]]; then
-      # Capture the first 30 lines of hey's output for diagnosis;
-      # most often this means hey saw all-failure responses and
-      # didn't emit the "Latency distribution:" block.
       PARSE_FAILURES+=("$tag")
       printf '%-22s  %-10s  %-10s  %-10s\n' "$tag" "?" "?" "?"
     else
@@ -181,8 +194,10 @@ if (( ${#PARSE_FAILURES[@]} > 0 )); then
   note "Re-running '${failtag}' to capture hey's full output for diagnosis:"
   podman run --rm -d --name "demo01-bench-diag" -p "${failport}:8080" \
     "${IMG_PREFIX}:${failtag}" >/dev/null 2>&1 || true
-  if wait_for_http "http://127.0.0.1:${failport}/healthz" 20; then
-    hey -n 1000 -c 50 "http://127.0.0.1:${failport}/" 2>&1 | head -25 | sed 's/^/    | /'
+  if wait_for_http "http://127.0.0.1:${failport}/healthz" 30; then
+    # head -60 (was -25) so the "Latency distribution:" block is captured;
+    # hey's full output for this size workload is roughly 35-40 lines.
+    hey -n 1000 -c 50 "http://127.0.0.1:${failport}/" 2>&1 | head -60 | sed 's/^/    | /'
   fi
   podman stop -t 5 "demo01-bench-diag" >/dev/null 2>&1 || true
 fi

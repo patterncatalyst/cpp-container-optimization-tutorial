@@ -55,10 +55,10 @@ int main() {
   std::signal(SIGINT, handle_signal);
 
   // cpp-httplib's default task queue is `std::thread::hardware_concurrency()`,
-  // which is fine for steady-state but starves under benchmark loads
-  // (hey -c 100). Bump to 64 so the latency table shows real numbers
-  // instead of "?" because every request timed out.
-  srv.new_task_queue = []() { return new httplib::ThreadPool(64); };
+  // which is fine for steady-state but starves under benchmark loads.
+  // We size to 128 — well above demo.sh's hey -c 50 default, with
+  // headroom for anyone bumping concurrency further.
+  srv.new_task_queue = []() { return new httplib::ThreadPool(128); };
 
   std::atomic<std::uint64_t> req_count{0};
 
