@@ -291,6 +291,15 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5rem 0; }
 }
 .card__eyebrow strong { color: var(--accent); font-weight: 700; }
 .card__title { margin: 0 0 .4rem; font-size: 1.1rem; }
+.card__num {
+    /* Two-digit zero-padded section number prefix, in the accent red,
+       monospace so the column edge always lines up between cards. */
+    display: inline-block;
+    margin-right: .5em;
+    color: var(--accent);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-weight: 700;
+}
 .card__desc  { margin: 0; color: var(--fg-muted); font-size: .94rem; }
 .card__meta {
     display: flex; gap: 1rem; margin-top: .85rem;
@@ -328,7 +337,15 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5rem 0; }
 
 /* ── Tutorial layout (single doc page, sidebar-free) ─────────────────── */
 
-.tutorial { padding: 2.5rem 0; }
+/* Tutorial pages render against a pure white background, distinct
+   from the warm cream hero/landing surfaces, matching hummingbird-
+   tutorial's reading-page convention. The .tutorial wrapper paints
+   white edge-to-edge under the page; the body's --bg cream peeks
+   through only on landing/gallery pages. */
+.tutorial {
+    padding: 2.5rem 0;
+    background: #ffffff;
+}
 
 .tutorial__main { min-width: 0; }      /* prevent overflow on long lines */
 .tutorial__header {
@@ -350,12 +367,21 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5rem 0; }
     margin: 0;
 }
 
+/* Inline section headings inside tutorial prose render in the accent
+   red, matching hummingbird-tutorial. h2 is the section heading,
+   h3 the subsection; both pick up the accent. h4+ stay neutral so
+   deeply-nested headings don't compete. */
 .tutorial__main h2 {
     margin-top: 2.5rem;
     font-size: 1.4rem;
     letter-spacing: -.01em;
+    color: var(--accent);
 }
-.tutorial__main h3 { margin-top: 2rem; font-size: 1.15rem; }
+.tutorial__main h3 {
+    margin-top: 2rem;
+    font-size: 1.15rem;
+    color: var(--accent);
+}
 
 .tutorial__main p,
 .tutorial__main ul,

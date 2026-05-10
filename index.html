@@ -90,9 +90,12 @@ description: "A 1.5–3 hour PPTX presentation, an untimed companion Jekyll site
                 {%- endcase -%}
                 <a class="card" href="{{ doc.url | relative_url }}">
                     <div class="card__eyebrow">
-                        {{ section_kind }} · <strong>§{{ doc.order }}</strong>
+                        {{ section_kind }}
                     </div>
-                    <h3 class="card__title">{{ doc.title }}</h3>
+                    <h3 class="card__title">
+                        <span class="card__num">{{ doc.order | prepend: '0' | slice: -2, 2 }}</span>
+                        {{ doc.title }}
+                    </h3>
                     <p class="card__desc">{{ doc.description }}</p>
                     <div class="card__meta">
                         {%- if doc.duration -%}<span>⏱ {{ doc.duration }}</span>{%- endif -%}

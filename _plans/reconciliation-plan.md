@@ -105,6 +105,301 @@ just look "filled in" don't count.
 
 ---
 
+## Gotchas
+
+Discrete issues encountered building this tutorial, each with a
+problem statement, root cause, and fix. This section is a search-
+ready reference: if you hit one of these running the demos or
+porting them to your own services, the entry tells you what to
+do without making you re-derive the analysis.
+
+The chronological narrative for each one lives in the round log
+below; the round number after each gotcha title points there.
+
+### G-01 · `GLIBC_2.X.Y not found` on a minimal runtime image (r17 → r19)
+
+**Problem.** A C++ binary built on `ubi:9.4` and copied into
+`ubi-micro:9.4` exits at startup with:
+
+    /lib64/libc.so.6: version `GLIBC_2.35' not found
+    (required by /app/demo-svc)
+
+**Why.** `ubi:9.4` and `ubi-micro:9.4` carry the same tag but are
+separate images on different patch cadences. The build host's
+glibc had backports stamped with newer symbol versions
+(`GLIBC_2.35` here) that the older runtime image's glibc didn't
+expose. `-static-libstdc++` doesn't help — the missing symbol is
+in libc itself, which was still linked dynamically.
+
+**Fix.** Link glibc statically too:
+
+    CMAKE_EXE_LINKER_FLAGS = "-static -static-libgcc -static-libstdc++"
+
+The resulting binary has no runtime libc dependency at all, so the
+runtime image's glibc version no longer matters. Trade-offs: image
+size grows by ~10-15 MB, NSS / `getaddrinfo` / iconv loadable
+plugins / locale loading stop working at runtime. None matter for
+a service that binds to `0.0.0.0` and doesn't resolve hostnames.
+See `Containerfile.ubi-micro` and the
+`Containerfile.ubi-micro-glibc-mismatch` teaching variant.
+
+---
+
+### G-02 · `-static-pie` + LTO + `strip --strip-all` produces a SIGSEGV at startup (r18)
+
+**Problem.** A binary built with
+`CMAKE_EXE_LINKER_FLAGS=-static-pie -static-libgcc -static-libstdc++`,
+LTO enabled, and `strip --strip-all` post-link exits 139 (SIGSEGV)
+~250 µs after `execve()`, with no log output.
+
+**Why.** A `-static-pie` binary applies its own dynamic relocations
+at load time and needs the relocation tables preserved.
+`--strip-all` is too aggressive in some toolchain combinations and
+can remove sections the loader depends on. LTO can also miscompile
+some PIE startup paths under `-fno-plt`.
+
+**Fix.** Either drop `-static-pie` for plain `-static` (non-PIE),
+or use `--strip-unneeded` instead of `--strip-all`. The demo-01
+working ubi-micro variant uses plain `-static`; the security
+trade is minimal inside a single-process container that has no
+other code to ASLR around.
+
+---
+
+### G-03 · `cpp-httplib` `Server::listen()` swallows SIGTERM, blocks PGO `.gcda` capture (r14)
+
+**Problem.** A PGO instrumented binary running cpp-httplib
+shut down via `podman stop` produced zero `.gcda` profile files.
+podman would log:
+
+    StopSignal SIGTERM failed in 10 seconds, resorting to SIGKILL
+
+**Why.** `httplib::Server::listen()` blocks in `accept()` with no
+default signal handling. SIGTERM is ignored; podman SIGKILLs after
+the timeout; `atexit()` doesn't run; `libgcov` never flushes
+profile data.
+
+**Fix.** Install a SIGTERM handler in `main.cpp` that calls
+`srv.stop()`, which unblocks `listen()` and lets `main()` return
+normally:
+
+    httplib::Server srv;
+    g_srv = &srv;
+    std::signal(SIGTERM, [](int){ if (g_srv) g_srv->stop(); });
+    std::signal(SIGINT,  [](int){ if (g_srv) g_srv->stop(); });
+
+Bump `podman stop -t 20` so glibc has time to flush. See demo-01
+`src/main.cpp`.
+
+---
+
+### G-04 · `std::thread::hardware_concurrency()` returns the host count, not the cgroup's (r14)
+
+**Problem.** A service inside a 2-core cgroup spawns the host's
+worth of threads (e.g. 64) and gets throttled into the ground.
+
+**Why.** The C++ standard predates cgroups. The function reads
+`sched_getaffinity()` or `/proc/cpuinfo`. On a many-core host
+with a small cgroup limit, you'll spawn far more workers than the
+cgroup allows to run concurrently.
+
+**Fix.** Read the cgroup quota directly:
+
+    /sys/fs/cgroup/cpu.max  →  "300000 100000"  (3 cores' worth)
+
+Two numbers: bandwidth and period. `bandwidth / period` gives the
+effective core count. Fall back to `hardware_concurrency()` only
+when the file says `max max`. Size all worker pools off the
+calculated value. Pin to your *requests* setting, not your *limits*
+— burst capacity is for the kernel, not your app to count on.
+
+---
+
+### G-05 · `hey -c 100` against cpp-httplib gives empty `Latency distribution:` block (r15)
+
+**Problem.** `hey -n 10000 -c 100` against a cpp-httplib service
+prints "Latency distribution:" header but no percentile lines
+under it. awk extraction returns empty; latency table prints `?`.
+
+**Why.** With 100 concurrent persistent connections and a modest
+worker pool, queueing pushes per-request latency past hey's
+default 20-second per-request timeout. Failed requests go into
+hey's `errorDist`, not `lats`. `printLatencies()` prints the
+header but the print loop only emits a row when `data[i] > 0`,
+which fails when `lats` is empty.
+
+**Fix.** Drop concurrency to a level that doesn't bury queueing
+beyond hey's timeout:
+
+    hey -n 5000 -c 50 ...
+
+5000 requests is plenty for a meaningful percentile distribution.
+Bump cpp-httplib's pool above the test concurrency for headroom:
+
+    srv.new_task_queue = []() { return new httplib::ThreadPool(128); };
+
+---
+
+### G-06 · `hey` emits `%%` in latency lines; awk regex `/50% in/` doesn't match (r16)
+
+**Problem.** awk `/50% in/` returns nothing from `hey`'s output
+even though the latency distribution renders correctly in the
+captured log:
+
+    | Latency distribution:
+    |   50%% in 0.0409 secs
+
+**Why.** This `hey` build emits `%%` (literal double-percent), not
+`%`, in the latency distribution. The regex `/50% in/` requires
+`50%` followed by a space; the actual input is `50%%` followed by
+a space, which doesn't match.
+
+**Fix.** Match one-or-more `%` characters:
+
+    awk '/50%+ in/  {print $3 * 1000}'
+    awk '/95%+ in/  {print $3 * 1000}'
+    awk '/99%+ in/  {print $3 * 1000}'
+
+`%+` matches both `50% in` and `50%% in`. Defensive against future
+hey versions normalizing one way or the other.
+
+---
+
+### G-07 · `podman run --rm` reaps the container before `podman logs` can probe (r17)
+
+**Problem.** A container that exits unexpectedly leaves the
+diagnostic in a state where `podman logs <name>` returns
+"no such container", because `--rm` cleaned it up the moment the
+process exited.
+
+**Why.** `--rm` schedules the container for removal as soon as the
+process dies. If the binary exits immediately at startup (segfault,
+glibc mismatch, missing dep), there's a tight race: `podman logs`
+loses the container before it can read `stdout/stderr`.
+
+**Fix.** Drop `--rm` from `podman run` for diagnosis-prone
+containers. Capture both state and logs in the failure path before
+tearing down manually:
+
+    podman inspect "$name" --format='
+        status:   {{.State.Status}}
+        exit:     {{.State.ExitCode}}
+        oom:      {{.State.OOMKilled}}
+        started:  {{.State.StartedAt}}
+        finished: {{.State.FinishedAt}}'
+    podman logs "$name" 2>&1 | tail -30
+    podman rm -f "$name"
+
+The startup → exit timestamps in the inspect output usually tell
+you within microseconds whether the binary even reached `main()`.
+
+---
+
+### G-08 · Bash associative-array iteration order is non-deterministic (r20)
+
+**Problem.** A loop over `"${!IMAGES[@]}"` produces a different
+order on different runs of the same script, which makes
+pedagogically-ordered output (e.g. "real cases first, teaching
+case last") unreliable.
+
+**Why.** Bash hashes associative-array keys; iteration order is
+the hash bucket order, not the insertion order. It's deterministic
+within one bash version but isn't part of the contract.
+
+**Fix.** Use an explicit ordered array for iteration; keep the
+associative array only for the value lookup:
+
+    declare -A IMAGES=( [a]=1 [b]=2 [c]=3 )
+    ORDER=("a" "b" "c")
+    for tag in "${ORDER[@]}"; do
+      port="${IMAGES[$tag]}"
+      ...
+    done
+
+---
+
+### G-09 · `set -e` doesn't exempt commands inside an `if/else`-block (r21)
+
+**Problem.** Restructuring an `if cmd; then ...; else ...; fi` to
+"if condition; then run cmd_a; else run cmd_b; fi; if [[ $? -eq 0 ]]"
+silently terminates the script when `cmd_a` (or `cmd_b`) returns
+non-zero, even though the next `if [[ $? -eq 0 ]]` was supposed
+to handle both branches.
+
+**Why.** `set -e` is exempt only for commands in *test* contexts:
+the test of an `if`, the test of a `while`/`until`, or all but the
+last command in an `&&`/`||` chain. A bare command in a then/else
+block is NOT exempt — its non-zero exit triggers script
+termination immediately.
+
+**Fix.** Keep the call inside an exempt context. The cleanest
+pattern is `cmd && var=1`, since every command in a `&&` chain
+except the last is exempt:
+
+    wait_ok=0
+    if [[ "${tag}" == "teaching-variant" ]]; then
+      cmd_quiet "$args" && wait_ok=1
+    else
+      cmd_normal "$args" && wait_ok=1
+    fi
+    if (( wait_ok == 1 )); then ...
+
+`wait_ok` stays 0 if the call failed; the script keeps running.
+
+---
+
+### G-10 · UBI build without subscription warns loudly but works (r05, r09)
+
+**Problem.** `dnf install` on `ubi9/ubi:9.4` without a Red Hat
+entitlement emits scary subscription-manager warnings:
+
+    Subscription Manager is operating in container mode.
+    Found 0 entitlement certificates
+
+…leading first-time readers to believe the build is broken.
+
+**Why.** UBI is freely redistributable, but the subscription-
+manager plugin runs anyway and complains about missing
+entitlements. The default repos (`ubi-9-baseos-rpms`, etc.) work
+without entitlement; the plugin's complaints are cosmetic.
+
+**Fix.** Silence the plugin with two lines at the top of every
+build stage:
+
+    RUN rm -f /etc/yum.repos.d/redhat.repo && \
+        sed -i 's/^enabled=1/enabled=0/' \
+            /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
+
+Free UBI repos are unaffected.
+
+---
+
+### G-11 · podman 5.x prefixes locally-built images with `localhost/` (r13)
+
+**Problem.** A grep over `podman images` output that worked on
+podman 4.x stopped matching anything on podman 5.x:
+
+    podman images | grep "^cpp-tut/demo-01:"   # 0 matches
+    # but `podman images` clearly shows the images...
+
+**Why.** podman 5.x prepends `localhost/` to locally-built images
+in the human-readable output. The `^cpp-tut/...` anchor never
+matches; the script's grep returns empty; `set -e` + `pipefail`
+kills the script.
+
+**Fix.** Use `podman images --filter "reference=..."` instead of
+`grep`, which understands both prefix shapes:
+
+    podman images --filter "reference=cpp-tut/demo-01:*" \
+                   --format "{{.Repository}}:{{.Tag}} {{.Size}}"
+
+If you need shell pattern matching specifically, accept both
+prefixes:
+
+    grep -E "^(localhost/)?cpp-tut/demo-01:"
+
+---
+
 ## Verification log
 
 Append-only entries documenting verification runs. Each entry
@@ -1559,6 +1854,78 @@ Both files updated in lockstep:
 No prose changes; §2 is unchanged. The §2 review is still
 open for the rest of the prose and the four-layers diagram.
 
+### 2026-05-09 — r24: site-style alignment with hummingbird-tutorial; new Gotchas section
+
+User reviewing the §2 page and the index landing called out
+three small style misalignments with hummingbird-tutorial,
+plus asked for the reconciliation plan to expose discrete
+issue/fix entries the way hummingbird's gotchas section does.
+
+**Site styling changes (per user direction):**
+
+1. **Section cards on the index page now lead with a 2-digit
+   zero-padded section number prefix in the accent red,
+   matching "00 Outline" / "01 Prerequisites" / etc.** Cards
+   previously showed `Map · §0` as eyebrow above the title;
+   now they show the section kind alone in the eyebrow and
+   embed `00 Outline` directly in the title with a new
+   `.card__num` span styled in red monospace. The two-digit
+   pad is done with `{{ doc.order | prepend: '0' | slice:
+   -2, 2 }}`. Lines up the column edge between cards.
+
+2. **Inline section headers in tutorial prose render in red.**
+   `.tutorial__main h2` and `.tutorial__main h3` rules in
+   `assets/css/site.css` now set `color: var(--accent)`. h4+
+   stay neutral so deeply-nested headings don't compete.
+
+3. **Tutorial pages render against pure white**, distinct from
+   the warm cream hero/landing surfaces that the body's `--bg`
+   keeps. The `.tutorial` wrapper got a `background: #ffffff`
+   declaration. Cream still shows on landing/gallery pages.
+
+**Gotchas section added to the reconciliation plan.**
+
+The user pointed out that issues and resolutions in the round
+log are interleaved as prose narrative — useful for a
+chronological audit trail but hard to use as reference when
+you hit the same problem six months later and want the
+problem statement and the fix on one screen.
+
+Added a new top-level `## Gotchas` section between the matrices
+and the Verification log, with eleven discrete entries pulled
+from the demo-01 verification campaign (rounds r05–r21). Each
+entry has a stable `G-NN` identifier and the same three-block
+shape:
+
+  - **Problem.** Symptom you'd see in your terminal.
+  - **Why.** The mechanism the symptom comes from.
+  - **Fix.** The minimal change that resolves it, with a
+    code snippet where the change is more than a sentence.
+
+The chronological round log stays intact — gotchas reference
+their originating round so the full narrative is one click
+away. The format mirrors hummingbird-tutorial's gotchas
+section.
+
+The eleven entries cover:
+- G-01: GLIBC_2.X.Y not found on minimal runtime image
+- G-02: -static-pie + LTO + strip-all SIGSEGV at startup
+- G-03: cpp-httplib swallows SIGTERM, blocks PGO .gcda capture
+- G-04: hardware_concurrency() returns host count, not cgroup's
+- G-05: hey -c 100 + httplib queue tail = empty latency block
+- G-06: hey emits %% in latency lines; awk regex needs %+
+- G-07: podman run --rm reaps before podman logs can probe
+- G-08: bash assoc-array iteration order is non-deterministic
+- G-09: set -e doesn't exempt commands inside if/else blocks
+- G-10: UBI without subscription warns loudly but works
+- G-11: podman 5.x prefixes locally-built images with localhost/
+
+This list is the concentrated lesson from the demo-01
+campaign. Future demos will add more gotchas; the section
+grows over time.
+
+No prose changes to §2; demo-01 unchanged. Pure
+plan/style/markup work. Image audit unchanged.
 
 ---
 
