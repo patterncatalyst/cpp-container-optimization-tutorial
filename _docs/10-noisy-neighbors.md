@@ -50,6 +50,10 @@ the same data.
 
 - Enberg, *Latency*, ch. 5-6 (CPU scheduling and isolation under
   contention)
+- Ghosh, *Building Low Latency Applications with C++*, ch. 7 —
+  CPU pinning, NUMA placement, and busy-spin vs blocking-wait
+  trade-offs from a low-latency trading angle. The container
+  framing is ours; the underlying patterns are his.
 
 ## What's next
 

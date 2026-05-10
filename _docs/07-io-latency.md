@@ -55,6 +55,10 @@ after each tuning toggle.
   in particular)
 - Andrist & Sehr, *C++ High Performance*, ch. 11 (concurrency
   patterns)
+- Ghosh, *Building Low Latency Applications with C++*, ch. 8-9 —
+  network programming and a worked async I/O ecosystem; concrete
+  end-to-end pairing of TCP/UDP code with the kernel-side knobs §8
+  covers.
 
 ## What's next
 

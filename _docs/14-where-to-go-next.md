@@ -24,6 +24,14 @@ extends what we did:
   systems-side complement. Where this tutorial said "use
   `io_uring`," Enberg explains *why* the syscall model has been
   the bottleneck and what alternatives have looked like.
+- **Ghosh, *Building Low Latency Applications with C++*** — a
+  full worked example: a complete low-latency trading ecosystem
+  built from scratch in modern C++. The trading domain is
+  incidental; the value is seeing every pattern this tutorial
+  introduced (memory pools, lock-free queues, busy-spin, NUMA
+  placement, kernel bypass) composed into one running system. Read
+  it after this if you want to see the patterns at full scale,
+  before it if you want a worked example to compare ours against.
 - **Iglberger, *C++ Software Design*** — what to do once your
   service is fast. The architectural patterns that survive scale
   and that don't paint you into ABI corners.

@@ -52,7 +52,8 @@ reproduce on their own machine.
 
 ### What's their pain today?
 
-The good C++ performance books (Andrist & Sehr, Iglberger, Enberg)
+The good C++ performance and low-latency books (Andrist & Sehr,
+Iglberger, Enberg, Ghosh)
 are excellent on the language and on system-level latency, but they
 predate or set aside the container reality most production C++ now
 runs in. The good container books are language-agnostic and rarely
@@ -158,17 +159,17 @@ pre-recorded output.
 | 3  | Container Strategy: UBI, scratch, multi-stage builds               | When to use which base; layer caching; the AVX-512 mismatch trap                   | 12 min        | 1    |
 | 4  | Compile-Time Wins: LTO, PGO, constexpr                             | What each does, when each is worth the build-time tax, instrumentation runs        | 12 min        | 1    |
 | 5  | STL, Layout, and C++20/23 Containers                               | `std::vector` vs `std::deque`, C++23 `flat_map`/`flat_set`, silent overhead        | 15 min        | 2    |
-| 6  | Memory Management: Allocators, Huge Pages, cgroups v2              | PMR allocators, `madvise(MADV_HUGEPAGE)`, mimalloc/jemalloc, memory.high           | 12 min        | 2    |
+| 6  | Memory Management: Allocators, Huge Pages, cgroups v2, OOM        | PMR, `madvise(MADV_HUGEPAGE)`, mimalloc/jemalloc, `memory.max`, `malloc_trim()`, OOM killer, RSS vs working set, the LinuxMemoryChecker pattern | 15 min        | 2    |
 | 7  | I/O Latency: io_uring, Async gRPC, SO_REUSEPORT                    | Where syscall overhead actually lives; building blocks for low-tail-latency I/O    | 15 min        | 3    |
 | 8  | Networking & Kernel Parameters                                     | veth pairs vs host networking, sysctl tuning, when to use `--network=host`         | 10 min        | 3    |
 | 9  | Observability & Profiling: Grafana Stack, perf, eBPF               | The compose stack; OTel from C++; `perf`, `bcc`, `bpftrace` against containers     | 15 min        | 4    |
 | 10 | Noisy Neighbor Isolation: cgroups, CPU pinning, NUMA               | Two-tenant scenario; cpuset, cpu.weight, io.weight, `numactl --membind`            | 12 min        | 5    |
-| 11 | Static Analysis & Debugging in Containers                          | cppcheck + clang-tidy pipeline; ephemeral gdb sidecar; gdbserver                   | 12 min        | 6    |
+| 11 | Static Analysis & Debugging in Containers                          | cppcheck + clang-tidy pipeline; AddressSanitizer/Valgrind in containers; Meta's Object Introspection; ephemeral gdb sidecar; gdbserver | 15 min        | 6    |
 | 12 | Reproducibility & ABI: Conan, CMake Presets, Hermetic Builds       | Conan lockfiles, CMake presets, ABI tracking with `abidiff`, hermetic CI           | 12 min        | 6    |
 | 13 | Pitfalls: AVX-512 mismatch, abstraction overhead, build delays     | The traps people fall into and how each one shows up in the metrics                | 10 min        | —    |
 | 14 | Where to Go Next                                                   | Pointers to deeper resources; the three reference books                            | 3 min         | —    |
 
-**Total estimated duration:** 2h 40m
+**Total estimated duration:** 2h 46m
 
 ### Optional appendices
 
@@ -329,10 +330,19 @@ displacement)
 - Andrist & Sehr, *C++ High Performance, 2nd Edition*
 - Iglberger, *C++ Software Design*
 - Enberg, *Latency: Reduce delay in software systems*
+- Ghosh, *Building Low Latency Applications with C++: Develop a complete low latency trading ecosystem from scratch using modern C++* (Packt, 2023)
 
 The tutorial points readers to specific chapters of these books for
 deeper coverage of any topic the tutorial only introduces. The
 tutorial is positioned as a runnable companion, not a replacement.
+
+Ghosh's book complements Enberg's: where Enberg covers latency as a
+general-systems problem, Ghosh walks through a concrete low-latency
+C++ ecosystem (trading-system framing, but the patterns —
+lock-free queues, custom memory pools, busy-spin vs futex, NIC
+configuration — generalize). It's the natural pointer for §6 (memory
+pools), §7 (I/O latency), and §10 (CPU pinning, NUMA) for readers who
+want a full worked example outside the container framing.
 
 ### Dependencies
 

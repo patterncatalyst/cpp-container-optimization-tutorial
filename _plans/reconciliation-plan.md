@@ -50,12 +50,12 @@ on a clean Fedora 44 host; that's what the verification pass turns
 | 3  | Container Strategy: UBI, scratch, multi-stage builds               | [x]     | unverified                  | Tied to Demo 1                                       |
 | 4  | Compile-Time Wins: LTO, PGO, constexpr                             | [x]     | unverified                  | Tied to Demo 1; PGO instrumentation step needs test  |
 | 5  | STL, Layout, and C++20/23 Containers                               | [x]     | unverified                  | Tied to Demo 2; verify GCC 14 supports `flat_set`    |
-| 6  | Memory Management: Allocators, Huge Pages, cgroups v2              | [x]     | unverified                  | Tied to Demo 2; verify rootless cgroup limits work   |
+| 6  | Memory Management: Allocators, Huge Pages, cgroups v2, OOM         | [x]     | unverified                  | Expanded 2026-05-09 with cgroup memory.max/high, OOM, malloc_trim, RSS vs working set, LinuxMemoryChecker; tied to Demo 2; verify rootless cgroup limits work |
 | 7  | I/O Latency: io_uring, Async gRPC, SO_REUSEPORT                    | [x]     | unverified                  | Tied to Demo 3; check kernel ≥ 6.0                   |
 | 8  | Networking & Kernel Parameters                                     | [x]     | unverified                  | Tied to Demo 3; veth vs host comparison              |
 | 9  | Observability & Profiling: Grafana Stack, perf, eBPF               | [x]     | unverified                  | Tied to Demo 4; full stack must come up clean        |
 | 10 | Noisy Neighbor Isolation: cgroups, CPU pinning, NUMA               | [x]     | unverified                  | Tied to Demo 5; needs ≥ 8 cores ideally              |
-| 11 | Static Analysis & Debugging in Containers                          | [x]     | unverified                  | Tied to Demo 6; gdbserver attach pattern             |
+| 11 | Static Analysis & Debugging in Containers                          | [x]     | unverified                  | Expanded 2026-05-09 with ASan/UBSan/MSan/TSan in containers, Valgrind tradeoffs, Meta Object Introspection; tied to Demo 6; gdbserver attach pattern |
 | 12 | Reproducibility & ABI: Conan, CMake Presets, Hermetic Builds       | [x]     | unverified                  | Tied to Demo 6; verify abidiff catches a real break  |
 | 13 | Pitfalls: AVX-512 mismatch, abstraction overhead, build delays     | [x]     | unverified                  | AVX-512 demo crash recovery needs hardware variance  |
 | 14 | Where to Go Next                                                   | [x]     | unverified                  | —                                                    |
@@ -110,6 +110,25 @@ memory), what was tested, what passed, what surprised the verifier.
 - Repo scaffolded from `patterncatalyst/skeleton-tutorial`
 - All sections marked unverified per the matrix above
 - Verification work has not yet begun
+
+### 2026-05-09 — §6 / §11 expansion, Ghosh book added
+
+- Added Ghosh, *Building Low Latency Applications with C++* to the
+  PRD reference list and to §7, §10, §14's "deeper coverage" pointers.
+- Expanded §6 (Memory Management): added cgroups v2 `memory.max` /
+  `memory.high` distinction, OOM killer behaviour, glibc
+  `malloc_trim` / `MALLOC_TRIM_THRESHOLD_` / `MALLOC_ARENA_MAX`
+  tuning, RSS vs working set vs `memory.current`, the Presto
+  `LinuxMemoryChecker` pattern. Reframed the section as "the
+  application-level concern, not the things-went-wrong concern."
+- Expanded §11 (Static Analysis & Debugging): added a sanitizer
+  comparison table (ASan/UBSan/MSan/TSan with slowdowns), Valgrind
+  trade-offs, Meta's Object Introspection for diagnosing the silent
+  STL overhead from §5/§13.
+- Bumped §6 from 12 → 15 minutes, §11 from 12 → 15 minutes; total
+  duration 2h 40m → 2h 46m.
+- Both sections still **unverified** — content drafted from sources
+  the user provided; not walked through on a Fedora 44 host.
 
 ---
 
