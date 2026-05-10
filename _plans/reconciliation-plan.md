@@ -1077,6 +1077,105 @@ manually or via presets, single-config or multi-config.
 
 ---
 
+### G-19 · Conan's `opentelemetry-cpp` recipe normalizes target names with an `opentelemetry_` prefix that upstream's CMake config doesn't use (r39)
+
+**Problem.** With Conan's deps successfully resolved and
+`find_package(opentelemetry-cpp CONFIG REQUIRED)` succeeding,
+the cmake step prints a long list of "Conan: Component target
+declared 'opentelemetry-cpp::opentelemetry_*'" lines and then
+fails:
+
+    CMake Error at CMakeLists.txt:18 (target_link_libraries):
+      Target "demo-04-svc" links to:
+        opentelemetry-cpp::trace
+      but the target was not found.  Possible reasons include:
+        * There is a typo in the target name.
+        * A find_package call is missing for an IMPORTED target.
+        * An ALIAS target is missing.
+
+The CMakeLists.txt asks for `opentelemetry-cpp::trace`, but the
+Conan recipe declares `opentelemetry-cpp::opentelemetry_trace`.
+Same library, different target name.
+
+**Why.** Two ecosystems converge here, and they don't agree
+on naming:
+
+- **Upstream OTel-cpp's own CMake config** (what you get from
+  `make install` after building from source, or from system
+  packages that wrap the upstream CMake config) exposes:
+  `opentelemetry-cpp::trace`, `::metrics`, `::logs`,
+  `::otlp_grpc_exporter`, `::otlp_grpc_metrics_exporter`,
+  `::otlp_grpc_log_record_exporter`.
+- **Conan Center's recipe** for the same library exposes:
+  `opentelemetry-cpp::opentelemetry_trace`,
+  `::opentelemetry_metrics`, `::opentelemetry_logs`,
+  `::opentelemetry_exporter_otlp_grpc`,
+  `::opentelemetry_exporter_otlp_grpc_metrics`,
+  `::opentelemetry_exporter_otlp_grpc_log`.
+
+The Conan recipe normalizes target names through
+`cpp_info.components` declarations to follow Conan's
+own naming conventions (lib name = component name, prefixed
+with the package name). Upstream OTel-cpp uses shorter aliases.
+Worth noting: the `_record` suffix on the log exporter
+disappears in the Conan version; it's just `_log` not `_log_record`.
+
+This means the same `target_link_libraries(...)` line can work
+in one project and fail in another depending on whether the
+project gets OTel-cpp via Conan or from a from-source install.
+A search-and-replace migration is required when switching
+between source-build and Conan-build approaches.
+
+**Fix.** Update CMakeLists.txt to use the Conan recipe's
+target names:
+
+```cmake
+target_link_libraries(demo-04-svc PRIVATE
+    opentelemetry-cpp::opentelemetry_trace
+    opentelemetry-cpp::opentelemetry_metrics
+    opentelemetry-cpp::opentelemetry_logs
+    opentelemetry-cpp::opentelemetry_exporter_otlp_grpc
+    opentelemetry-cpp::opentelemetry_exporter_otlp_grpc_metrics
+    opentelemetry-cpp::opentelemetry_exporter_otlp_grpc_log
+    Threads::Threads
+)
+```
+
+Comment in CMakeLists.txt explains the upstream-vs-Conan
+naming difference so a future reader who tries to align with
+documentation they find online doesn't break the build.
+
+**Alternative simpler fix.** Conan's CMakeDeps generator
+suggests using the umbrella target:
+
+    target_link_libraries(... opentelemetry-cpp::opentelemetry-cpp)
+
+which links *everything* OTel-cpp exposes (including
+exporters we don't use, in-memory backends, etc.). Cleaner
+in CMakeLists at the cost of pulling unused symbols into the
+binary. For static linkage with `-Wl,--gc-sections` (which
+we get implicitly through default Release flags), unused
+symbols get dropped at link time anyway, so the binary size
+cost is minimal.
+
+We use the specific component targets for *educational
+clarity*: the CMakeLists shows what the demo actually needs.
+A reader can see "this binary uses trace, metrics, logs, plus
+the three OTLP gRPC exporters" without having to chase the
+umbrella target's transitive dep graph.
+
+**How to discover the right target names.** Inspect the
+generated config file Conan creates:
+
+    cat build/conan/cmake/opentelemetry-cppTargets.cmake
+
+It lists all the `add_library(<name> STATIC IMPORTED)` calls.
+Or run cmake's first pass and grep the "Conan: Component target
+declared" lines from the output — that's how this fix was
+discovered for r39.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -4357,6 +4456,122 @@ The closest we've been to a working build. The
 remaining failure modes are demo-source-and-cmake-
 shaped rather than dep-tree-shaped, which is a
 different (smaller) class of problem.
+
+### 2026-05-10 — r39: G-19 — fix CMakeLists target names to Conan's `opentelemetry_*`-prefixed naming
+
+User reran after r38. Two huge wins:
+
+1. **G-18 fix worked perfectly.** `Using Conan toolchain:
+   /src/build/conan/conan_toolchain.cmake` — the path
+   matches what the Containerfile expects. Toolchain
+   loaded cleanly; -m64 + C++23 + gcc 14.2.1 detected.
+2. **`find_package(opentelemetry-cpp CONFIG REQUIRED)`
+   succeeded.** Long stream of "Conan: Component target
+   declared 'opentelemetry-cpp::opentelemetry_*'" lines
+   — the deps are visible to CMake.
+
+Configuration completed. Then `target_link_libraries`
+failed:
+
+    CMake Error at CMakeLists.txt:18 (target_link_libraries):
+      Target "demo-04-svc" links to:
+        opentelemetry-cpp::trace
+      but the target was not found.
+
+This is exactly the "CMake target name mismatch" failure
+mode I called out in G-18's "what might fire next" list.
+Confirmed.
+
+**Why.** CMakeLists.txt asks for `opentelemetry-cpp::trace`,
+but Conan's recipe declares `opentelemetry-cpp::opentelemetry_trace`.
+Two ecosystems, two naming conventions:
+
+- Upstream OTel-cpp's CMake config (from `make install` or
+  upstream-derived system packages) uses short aliases:
+  `::trace`, `::metrics`, `::logs`,
+  `::otlp_grpc_exporter`, `::otlp_grpc_metrics_exporter`,
+  `::otlp_grpc_log_record_exporter`.
+- Conan Center's recipe normalizes through
+  `cpp_info.components` to:
+  `::opentelemetry_trace`, `::opentelemetry_metrics`,
+  `::opentelemetry_logs`,
+  `::opentelemetry_exporter_otlp_grpc`,
+  `::opentelemetry_exporter_otlp_grpc_metrics`,
+  `::opentelemetry_exporter_otlp_grpc_log` (note: no
+  `_record` suffix on the log exporter — Conan drops it).
+
+The CMakeLists was written using upstream's naming
+(natural assumption from the OTel-cpp documentation).
+After the Conan refactor in r31, the targets weren't
+the same names anymore.
+
+**Fix.** Update `examples/demo-04-observability/CMakeLists.txt`
+to use the Conan recipe's actual target names. Six
+target names changed; everything else (find_package,
+target_include_directories, target_compile_options) is
+identical.
+
+A comment block at the top of CMakeLists.txt explains
+the upstream-vs-Conan naming difference so a future
+reader who tries to align with online docs (which mostly
+show upstream names) doesn't break the build.
+
+**Promoted to G-19** — separate from G-18 because the
+problem is qualitatively different. G-18 was about *path
+mechanics* (where Conan puts files); G-19 is about
+*naming conventions* (what Conan calls things). Both
+are Conan-shaped failures but they teach different
+lessons.
+
+G-19 also documents the discoverability fix: how to
+find out the right target names (cat the generated
+opentelemetry-cppTargets.cmake, or grep "Conan:
+Component target declared" from the cmake output).
+That's reusable: any future Conan + CMake mismatch
+follows the same diagnostic pattern.
+
+**What this round does NOT do:**
+
+- Doesn't switch to the umbrella target
+  `opentelemetry-cpp::opentelemetry-cpp` (which Conan's
+  CMakeDeps suggests). The umbrella links everything;
+  specific component targets are more educational
+  because they show what the demo actually needs.
+- Doesn't update demo-03's CMakeLists.txt if it has
+  similar gRPC target names. Demo-03 uses gRPC directly
+  but isn't the immediate target of verification; if it
+  hits similar target-name issues when verified, the
+  same lookup pattern applies.
+- Doesn't actually run the build. User's next attempt.
+
+**What might fire next:**
+
+- **C++ source compile errors.** demo-04's src/main.cpp
+  uses OTel-cpp APIs at the source level: trace::Provider,
+  metrics::SyncInstrument, logs::Logger, etc. These are
+  header-level APIs that don't depend on CMake target
+  names. They could still drift between OTel-cpp versions
+  if the demo source was written against a different
+  version than 1.16.1. Less likely; mostly stable APIs
+  in this version range. Fix: source-level patch.
+- **Linker errors.** A symbol mentioned in main.cpp but
+  not in the linked component targets. If an OTel-cpp
+  utility used by main.cpp is in (e.g.)
+  `opentelemetry_common` and we don't link that, ld
+  fails. Fix: add the missing component target.
+- **Runtime startup failure.** Binary builds but
+  crashes/exits at container start. Symptom in the test
+  script: healthz never responds. Possible causes:
+  static linkage missing some .so the binary actually
+  needs at runtime, OTel SDK init failing because the
+  collector isn't ready, signal handler issue.
+- **Original post-build candidates** finally come into
+  play if compile + runtime both succeed: r28's metric
+  drift, log label drop, dashboard UID mismatch.
+
+This is the closest we've been to a binary actually
+running. r40 either flips §10 to verified or addresses
+the next demo-source-level issue.
 
 ---
 
