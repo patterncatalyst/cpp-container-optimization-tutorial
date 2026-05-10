@@ -39,20 +39,20 @@ photons hit them:
 
 1. **Toolchain.** Compiler, linker, optimization passes, profile
    data. LTO and PGO live here. So does PIE (the compiler-side
-   half of ASLR). §4 and §12 own this layer.
+   half of ASLR). {% include section.html n=4 %} and {% include section.html n=12 %} own this layer.
 2. **Image.** What you packaged. Base image, multi-stage strip,
    library linkage decisions, ABI labels. The choice between
    `ubi-multistage` and `ubi-micro` from demo-01 is an image-layer
-   choice. §3 owns this layer.
+   choice. {% include section.html n=3 %} owns this layer.
 3. **Kernel.** The host kernel your container shares. `io_uring`,
    sysctls, scheduling policy, cgroup controllers, NUMA topology.
    Threading models hit this layer hardest because every
-   `std::thread` you create is a kernel-visible task. §7, §8, §10
+   `std::thread` you create is a kernel-visible task. {% include section.html n=7 %}, {% include section.html n=8 %}, {% include section.html n=10 %}
    own this layer.
 4. **Runtime.** What's running right now. The cgroup the runtime
    put you in, the CPUs it pinned you to, the memory ceiling, the
    network namespace. ASLR (the runtime-side half of PIE) and the
-   debugging toolkit you can attach live here. §6, §9, §10, §11
+   debugging toolkit you can attach live here. {% include section.html n=6 %}, {% include section.html n=9 %}, {% include section.html n=10 %}, {% include section.html n=11 %}
    own this layer.
 
 Most production tail-latency stories I've seen come from a knob
@@ -76,7 +76,7 @@ Three different things, frequently conflated:
   request. The number FinOps cares about.
 
 Improving one almost always means trading the others. The
-observability stack in §9 exists to keep you honest about which
+observability stack in {% include section.html n=9 %} exists to keep you honest about which
 one you're moving. Demo-01's surprise — same p50 across all
 four working variants — is a clean example: the toolchain
 changes were real, but at that load the latency budget was
@@ -86,7 +86,7 @@ showed a delta; wall-clock latency hid it.
 ## Compile-time foundations: LTO, PGO, PIE
 
 These three concepts sit at the toolchain layer and surface
-in every later section. §4 verifies them with real numbers;
+in every later section. {% include section.html n=4 %} verifies them with real numbers;
 §2 introduces what they are and why they matter.
 
 ### LTO (Link-Time Optimization)
@@ -299,7 +299,7 @@ extra concurrency wins. For modest fan-out (tens of in-
 flight requests), `std::thread` and library pools are fine.
 For huge fan-out (10k+ in-flight per process), the kernel
 cost of 10k threads becomes prohibitive and coroutines or
-fibers — or a coroutine-aware I/O API like `io_uring`, §7 —
+fibers — or a coroutine-aware I/O API like `io_uring`, {% include section.html n=7 %} —
 become the default.
 
 The mistake to avoid: picking coroutines for a CPU-bound
@@ -370,7 +370,7 @@ buys 100× more in-flight work.
   capacity is for the kernel, not for your application
   to count on.
 - **For I/O-bound services with high fan-out, prefer
-  coroutines or `io_uring` (§7) over more threads.** The
+  coroutines or `io_uring` ({% include section.html n=7 %}) over more threads.** The
   cgroup `pids.max` and per-thread RSS will both thank you.
 - **Set explicit stack sizes for `std::thread`.** A 64-KB
   stack via `pthread_attr_setstacksize()` is plenty for
@@ -379,7 +379,7 @@ buys 100× more in-flight work.
   /sys/fs/cgroup/pids.current`** during load tests, not
   just at peak. Drift here is invisible from the inside.
 
-§6 covers the memory-budget side of these decisions. §10
+{% include section.html n=6 %} covers the memory-budget side of these decisions. {% include section.html n=10 %}
 covers the cgroup CPU-share side. Demo-05 will show the
 cost of getting it wrong with twin tenants on the same
 host.
@@ -387,17 +387,17 @@ host.
 ## The toolkit
 
 Four classes of tools, each useful at a different layer and
-a different scale. §11 owns the deep dive; §2 introduces them.
+a different scale. {% include section.html n=11 %} owns the deep dive; §2 introduces them.
 
 - **Static analysis.** `cppcheck`, `clang-tidy`, `clang-analyzer`,
   ABI-diff via `abidiff`. Runs at build time; finds bugs
   the compiler doesn't. Cheap to add to CI; expensive to
-  retrofit on a legacy code base. §11 + demo-06.
+  retrofit on a legacy code base. {% include section.html n=11 %} + demo-06.
 - **Process-attach debuggers.** `gdb`, `gdbserver`. Attach to
   a running process, set a breakpoint, inspect state. In a
   container, `gdb` from a sidecar pod with `SYS_PTRACE`
   granted is the modern pattern; baking gdb into the
-  service image is the *anti*-pattern. §11 covers
+  service image is the *anti*-pattern. {% include section.html n=11 %} covers
   ephemeral debug sidecars.
 - **Dynamic analyzers.** Valgrind (Memcheck for memory,
   Callgrind for cache, Helgrind for races); the sanitizers
@@ -405,9 +405,19 @@ a different scale. §11 owns the deep dive; §2 introduces them.
   thorough, definitive — Valgrind in particular runs the
   binary on a synthetic CPU, and the slowdown is real
   (typically 10-50×). Use for finding bugs in CI on a
-  representative workload, not in production. §11 covers
+  representative workload, not in production. {% include section.html n=11 %} covers
   running them under cgroup memory limits without
-  triggering OOM.
+  triggering OOM. *(macOS aside: Valgrind support has
+  degraded badly there — broken on Apple Silicon since
+  ~2020, and increasingly unmaintained. The native
+  substitutes are Instruments — part of Xcode — for
+  profiling and allocation tracking, the `leaks`
+  command-line tool for memory-leak snapshots,
+  `MallocStackLogging=1` plus `malloc_history` for
+  allocation backtraces, and the sanitizers themselves,
+  which work fine on Apple clang. The discussion here
+  assumes a Linux container; the macOS workflow is
+  different but the conceptual taxonomy stays.)*
 - **Live-system tracers.** `perf` for sampled CPU profiles
   and tracepoints; eBPF tools (`bcc`, `bpftrace`,
   `bpftool`) for kernel-side observability without a
@@ -415,7 +425,7 @@ a different scale. §11 owns the deep dive; §2 introduces them.
   is slow *right now*" — no sidecar, no slowdown, no
   rebuild. They need elevated privileges (`CAP_BPF` or
   full root) and a kernel new enough to have BPF Type
-  Format (BTF). §9 + demo-04.
+  Format (BTF). {% include section.html n=9 %} + demo-04.
 
 The relationship to layers: static analysis is toolchain-
 layer (catches bugs at build); gdb and Valgrind are
@@ -444,8 +454,8 @@ For deeper grounding before you continue:
 
 ## What's next
 
-§3 starts at the image layer — pick a base; everything else
-follows. §4 covers the toolchain-layer optimizations (LTO and
+{% include section.html n=3 %} starts at the image layer — pick a base; everything else
+follows. {% include section.html n=4 %} covers the toolchain-layer optimizations (LTO and
 PGO with real numbers). The threading deep-dive that §2 sketched
-is split across §6 (memory side) and §10 (CPU side); demo-02
+is split across {% include section.html n=6 %} (memory side) and {% include section.html n=10 %} (CPU side); demo-02
 shows the memory side, demo-05 shows the CPU side.

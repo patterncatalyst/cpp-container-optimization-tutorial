@@ -348,39 +348,111 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 2.5rem 0; }
 }
 
 .tutorial__main { min-width: 0; }      /* prevent overflow on long lines */
+
 .tutorial__header {
-    margin: 0 0 2rem;
-    padding-bottom: 1.5rem;
+    margin: 0 0 2.5rem;
+    padding-bottom: 2rem;
     border-bottom: 1px solid var(--rule);
 }
-.tutorial__header h1 {
-    font-size: 2rem; margin: .25rem 0 .5rem;
-    letter-spacing: -.015em;
+
+/* Breadcrumb above the title: small, gray, "/"-separated.
+   Reads "Home / Tutorial / [page title]". */
+.tutorial__breadcrumb {
+    color: var(--fg-faint);
+    font-size: 0.85rem;
+    margin: 0 0 1.5rem;
 }
-.tutorial__meta {
-    display: flex; gap: 1.5rem; flex-wrap: wrap;
-    color: var(--fg-faint); font-size: .92rem;
-}
-.tutorial__lead {
-    color: var(--fg-muted);
-    font-size: 1.05rem;
+.tutorial__breadcrumb ol {
+    list-style: none;
+    padding: 0;
     margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.tutorial__breadcrumb li:not(:last-child)::after {
+    content: '/';
+    margin-left: 0.5rem;
+    color: var(--fg-faint);
+}
+.tutorial__breadcrumb a {
+    color: var(--fg-muted);
+}
+.tutorial__breadcrumb a:hover {
+    color: var(--accent);
 }
 
-/* Inline section headings inside tutorial prose render in the accent
-   red, matching hummingbird-tutorial. h2 is the section heading,
-   h3 the subsection; both pick up the accent. h4+ stay neutral so
-   deeply-nested headings don't compete. */
+/* Title row: big red 2-digit section number on the left, page
+   title (h1) flexes alongside it on the right. The number is
+   monospace so the column edge always lines up between sections. */
+.tutorial__title {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    margin: 0;
+}
+.tutorial__num {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 4rem;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+    flex-shrink: 0;
+}
+.tutorial__title h1 {
+    font-size: 2rem;
+    margin: 0;
+    letter-spacing: -.015em;
+    flex: 1;
+}
+
+.tutorial__lead {
+    color: var(--fg-muted);
+    font-size: 1.1rem;
+    margin: 1rem 0 0;
+}
+
+/* Pill row: rounded chips for duration and section number,
+   sitting just above the bottom rule of the header. */
+.tutorial__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 1.5rem 0 0;
+}
+.tutorial__pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    background: var(--bg-soft);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    font-size: 0.85rem;
+    color: var(--fg-muted);
+}
+
+/* Inline section headings inside tutorial prose stay black; the
+   accent shows up as a small red rule above each h2, matching
+   hummingbird-tutorial. h3 stays plain black bold so the visual
+   hierarchy still reads at a glance. */
 .tutorial__main h2 {
-    margin-top: 2.5rem;
+    margin-top: 3rem;
     font-size: 1.4rem;
     letter-spacing: -.01em;
-    color: var(--accent);
+    color: var(--fg);
+}
+.tutorial__main h2::before {
+    content: '';
+    display: block;
+    width: 2.5rem;
+    height: 3px;
+    background: var(--accent);
+    margin-bottom: 1rem;
 }
 .tutorial__main h3 {
     margin-top: 2rem;
     font-size: 1.15rem;
-    color: var(--accent);
+    color: var(--fg);
 }
 
 .tutorial__main p,

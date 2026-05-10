@@ -17,14 +17,24 @@ layout: default
 <article class="tutorial">
     <div class="container container-prose">
         <header class="tutorial__header">
-            <p class="tutorial__meta">
-                <span>§{{ page.order }}</span>
-                {%- if page.duration -%}<span>⏱ {{ page.duration }}</span>{%- endif -%}
-            </p>
-            <h1>{{ page.title }}</h1>
+            <nav class="tutorial__breadcrumb" aria-label="Breadcrumb">
+                <ol>
+                    <li><a href="{{ '/' | relative_url }}">Home</a></li>
+                    <li><a href="{{ '/' | relative_url }}#sections">Tutorial</a></li>
+                    <li>{{ page.title }}</li>
+                </ol>
+            </nav>
+            <div class="tutorial__title">
+                <span class="tutorial__num">{{ page.order | prepend: '0' | slice: -2, 2 }}</span>
+                <h1>{{ page.title }}</h1>
+            </div>
             {%- if page.description -%}
             <p class="tutorial__lead">{{ page.description }}</p>
             {%- endif -%}
+            <p class="tutorial__meta">
+                {%- if page.duration -%}<span class="tutorial__pill">⏱ {{ page.duration }}</span>{%- endif -%}
+                <span class="tutorial__pill">Section {{ page.order }}</span>
+            </p>
         </header>
 
         <div class="tutorial__main">

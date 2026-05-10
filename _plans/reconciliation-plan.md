@@ -1986,6 +1986,104 @@ agrees with the rendered SVG after this fix.
 No prose changes to §2 or other docs. No demo or shell
 changes. Pure rendering bug fix.
 
+### 2026-05-09 — r26: tutorial page redesign per hummingbird screenshot; §N hyperlinks; macOS Valgrind aside
+
+User shared a screenshot of an actual hummingbird-tutorial
+page during §2 review, which made it clear that r24's
+"red H2/H3 text" interpretation of the style was wrong.
+The hummingbird design is:
+
+- **Page header:** breadcrumb on top → big red two-digit
+  number on the left + page title to the right → lead
+  description → small pill chips ("⏱ 15 minutes",
+  "Section 2") → horizontal rule.
+- **Inline H2:** black bold text with a small red
+  horizontal accent bar above it (≈40px wide, 3px tall),
+  not red text. H3 stays plain black bold so the visual
+  hierarchy still reads.
+
+User also flagged two things:
+
+1. Section references like `§12` should link to the
+   target section page, not just print as plain text.
+2. Asked about the macOS equivalent of Valgrind, since
+   readers on Macs running this tutorial against a remote
+   Linux container will hit the question.
+
+**Changes shipped in r26:**
+
+1. **`_layouts/tutorial.html` rewritten.** New header
+   structure: breadcrumb (`Home / Tutorial / [page]`),
+   title flex container with `.tutorial__num` (the big
+   red two-digit number) and `<h1>`, lead paragraph,
+   pill row with duration and section number. Two-digit
+   pad uses the same `prepend: '0' | slice: -2, 2`
+   pattern the index-card numbering uses, so the visual
+   prefix is consistent across the site.
+
+2. **`assets/css/site.css` updated.**
+
+   r24's `.tutorial__main h2 { color: var(--accent) }`
+   reverted to `color: var(--fg)` (black) plus a
+   `::before` pseudo-element rendering a `2.5rem × 3px`
+   accent bar above the heading. h3 also reverted from
+   red to black with no bar — smaller hierarchy needs
+   less ornament.
+
+   New rules: `.tutorial__breadcrumb` (small gray ol
+   with `/` separators), `.tutorial__title` (flex
+   baseline-aligned), `.tutorial__num` (4rem mono red
+   bold), `.tutorial__pill` (rounded chip with bg-soft
+   and rule border).
+
+3. **`_includes/section.html` added.** A single-line
+   Liquid include that takes `n=N`, looks up the doc by
+   `order` front-matter (resilient to renames), and
+   renders `<a href="...">§N</a>` — or the plain `§N`
+   string if no target doc exists, so prose still
+   reads correctly during stub phases.
+
+   Usage in Markdown:
+
+       {% include section.html n=4 %}
+
+4. **`_docs/02-introduction.md` updated.**
+
+   Twenty-five `§N` references converted to includes via
+   a quick Python pass; three self-references to `§2`
+   inside `§2`'s own prose left as plain text (linking
+   to self is noise). Distinct targets covered: §3, §4,
+   §6, §7, §8, §9, §10, §11, §12 — every section §2
+   forward-references is now clickable.
+
+   Plus a parenthetical aside in the toolkit
+   subsection's "Dynamic analyzers" bullet:
+
+   > *(macOS aside: Valgrind support has degraded badly
+   > there — broken on Apple Silicon since ~2020, and
+   > increasingly unmaintained. The native substitutes
+   > are Instruments — part of Xcode — for profiling
+   > and allocation tracking, the `leaks` command-line
+   > tool for memory-leak snapshots, `MallocStackLogging
+   > =1` plus `malloc_history` for allocation
+   > backtraces, and the sanitizers themselves, which
+   > work fine on Apple clang. The discussion here
+   > assumes a Linux container; the macOS workflow is
+   > different but the conceptual taxonomy stays.)*
+
+   Worth surfacing because Mac developers running
+   demo-XX against a remote Linux container, or running
+   the example C++ binaries locally for quick edits,
+   will hit the Valgrind question almost immediately.
+   Naming the substitutes saves them an evening of
+   trying to get Valgrind to install.
+
+No demo or build-script changes; no other doc changes.
+The Gotchas section, the demo verification matrices, and
+the round log are untouched. Future stub fills can use
+the same `{% include section.html n=N %}` pattern; r26
+defines the convention.
+
 ---
 
 ## Known divergences from the PRD
