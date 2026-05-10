@@ -170,9 +170,13 @@ for tag in "${!IMAGES[@]}"; do
   # especially for ubi-micro coming up cold last.
   if wait_for_http "http://127.0.0.1:${port}/healthz" 30; then
     out=$(hey -n 5000 -c 50 "http://127.0.0.1:${port}/" 2>/dev/null || true)
-    p50=$(awk '/50% in/ {print $3 * 1000}' <<<"$out")
-    p95=$(awk '/95% in/ {print $3 * 1000}' <<<"$out")
-    p99=$(awk '/99% in/ {print $3 * 1000}' <<<"$out")
+    # Match both `50% in` and `50%% in` — different hey builds escape the
+    # percent sign differently in the latency-distribution block. The `%+`
+    # accepts one or more literal % characters between the digit and the
+    # following ` in`.
+    p50=$(awk '/50%+ in/ {print $3 * 1000}' <<<"$out")
+    p95=$(awk '/95%+ in/ {print $3 * 1000}' <<<"$out")
+    p99=$(awk '/99%+ in/ {print $3 * 1000}' <<<"$out")
     if [[ -z "$p50" ]]; then
       PARSE_FAILURES+=("$tag")
       printf '%-22s  %-10s  %-10s  %-10s\n' "$tag" "?" "?" "?"
@@ -180,6 +184,12 @@ for tag in "${!IMAGES[@]}"; do
       printf '%-22s  %-10s  %-10s  %-10s\n' "$tag" "${p50}" "${p95}" "${p99}"
     fi
   else
+    # Capture the failed container's logs before --rm cleanup eats them,
+    # so the next reviewer sees WHY it didn't come up. This was added
+    # because ubi-micro hit NORUN on r15 with no insight into why.
+    echo
+    echo "    -- last 20 log lines from demo01-bench-${tag} --"
+    podman logs "demo01-bench-${tag}" 2>&1 | tail -20 | sed 's/^/    | /' || true
     printf '%-22s  %-10s  %-10s  %-10s\n' "$tag" "NORUN" "NORUN" "NORUN"
   fi
   podman stop -t 5 "demo01-bench-${tag}" >/dev/null 2>&1 || true

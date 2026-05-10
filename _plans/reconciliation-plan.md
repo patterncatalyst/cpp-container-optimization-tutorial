@@ -993,6 +993,77 @@ distribution prints, awk extracts). If the re-run shows real
 p50/p95/p99 numbers for at least three of the four variants,
 §3 and §4 promote to verified in r16.
 
+### 2026-05-09 — r16: awk regex matches both % and %% in hey's percentile lines
+
+User ran demo-01 on r15. Latency table still showed `?` for
+three variants — but the new diagnostic block now captured
+hey's complete output, including the latency distribution that
+r14's `head -25` had been truncating. The smoking gun:
+
+    | Latency distribution:
+    |   10%% in 0.0003 secs
+    |   25%% in 0.0010 secs
+    |   50%% in 0.0409 secs
+    |   75%% in 0.0415 secs
+    |   90%% in 0.0420 secs
+    |   95%% in 0.0422 secs
+    |   99%% in 0.0433 secs
+
+This particular `hey` build emits `%%` (literal double-percent),
+not `%`, in the latency block. The awk regex was `/50% in/`,
+which doesn't match `50%% in`. Result: awk found nothing,
+extraction returned empty, table printed `?`.
+
+The numbers themselves are real:
+- p50 = 40.9 ms
+- p95 = 42.2 ms
+- p99 = 43.3 ms
+
+The bimodal histogram (one batch ≤1ms, one batch ~42ms) is
+cpp-httplib's queue-then-burst pattern: half the requests hit
+an idle worker thread immediately, half wait their turn behind
+in-flight requests releasing workers. That's a meaningful
+signal for the §3/§4 prose later when we have to explain why
+PGO matters for queue dynamics, not just hot-path inlining.
+
+Fix: changed all three percentile-line awk patterns to use `%+`
+(one-or-more percent characters) instead of `%`:
+
+    p50=$(awk '/50%+ in/ {print $3 * 1000}' <<<"$out")
+    p95=$(awk '/95%+ in/ {print $3 * 1000}' <<<"$out")
+    p99=$(awk '/99%+ in/ {print $3 * 1000}' <<<"$out")
+
+Works regardless of whether `hey` emits `50% in` or `50%% in`.
+
+Also fixed: the ubi-micro `NORUN` case now captures the failing
+container's last 20 log lines via `podman logs <name> | tail -20
+| sed 's/^/    | /'` BEFORE the trap-driven `--rm` cleanup eats
+them. r15 had no insight into why ubi-micro didn't come up; r16
+will print the binary's output (or the lack thereof) directly.
+
+User raised again that they don't see containers in Podman
+Desktop. Those benchmark containers are genuinely transient by
+design — `--rm` + ~6s lifetime each. Podman Desktop's UI polling
+interval misses them. The fix is to use a different observation
+tool, not a different demo design:
+
+    watch -n 0.5 'podman ps --format "table {{.Names}}\t{{.Status}}"'
+
+That'll show them flashing by during the benchmark phase. Worth
+mentioning in §3 prose so future readers don't trip over the
+same expectation.
+
+Image audit unchanged: 21 UBI + 1 docker.io exception.
+
+Verification status: with r16's regex fix applied to r15's
+already-working data, demo-01 should now print real
+p50/p95/p99 numbers for the three variants that pass health
+probe. The ubi-micro question remains open until r16's log
+capture tells us why; even with that one missing, §3 and §4
+have enough verified evidence (build pipeline, image sizes,
+PGO captures, latency for 3 variants) to promote in r16's
+follow-up.
+
 
 ---
 
