@@ -1,5 +1,5 @@
 // Demo 1 — a minimal C++23 HTTP service representative enough that the
-// build differences (UBI vs scratch, LTO, PGO) produce measurable deltas
+// build differences (UBI vs UBI-micro, LTO, PGO) produce measurable deltas
 // under `hey` load. Uses cpp-httplib (header-only) for minimal deps.
 
 #include <httplib.h>

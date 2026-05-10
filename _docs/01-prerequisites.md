@@ -37,8 +37,8 @@ importance:
    a manual `systemctl --user` setup.
 3. **`gcc-toolset-14` and `clang` 18 are both available and current.**
    We use both — GCC for the UBI-based demos (matches what Red Hat
-   ships in `gcc-toolset-14`), Clang for the PGO and static-musl
-   builds (better profile-data tooling, cleaner `-stdlib=libc++`).
+   ships in `gcc-toolset-14`), Clang for the PGO build
+   (better profile-data tooling and Sampling-PGO support).
 
 > **No subscription needed.** Every UBI 9 image we use comes from
 > `registry.access.redhat.com/ubi9/...` and is freely pullable and
@@ -81,8 +81,7 @@ right after.
   (UBI-based container builds use `gcc-toolset-14` separately, but
   that's installed *inside* the container Image, not on your host.)
 - **`clang`, `clang-tools-extra`, `lld`, `llvm`** — the gating Clang.
-  Used for PGO instrumentation, the static-musl variant, and
-  `clang-tidy` in demo 6.
+  Used for PGO instrumentation and `clang-tidy` in demo 6.
 - **`cmake`** (≥ 3.25) — needed for CMake presets v6.
 - **`ninja-build`** — the build driver of choice; faster and cleaner
   than `make` for our build sizes.

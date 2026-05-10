@@ -1,0 +1,76 @@
+# Multi-stage build to ubi-micro.
+#
+# Demonstrates how small a UBI-based image gets when the runtime base is
+# the minimum Red Hat ships (ubi-micro: ~30 MB, glibc + a few coreutils,
+# no package manager) and the C++ stdlib is statically linked into the
+# binary. The binary itself stays dynamically linked against glibc, which
+# ubi-micro provides.
+#
+# Build:
+#   podman build -f Containerfile.ubi-micro -t demo-01-ubi-micro .
+#
+# Why this is the right "small image" path:
+#   - ubi-micro is published by Red Hat, requires no subscription, and
+#     receives the same security updates as the rest of UBI 9.
+#   - Static-linking libstdc++ avoids the version-drift trap of bundling
+#     a libstdc++.so from the builder into the runtime image.
+#   - We don't fight glibc by trying to static-link it (that approach is
+#     officially discouraged and full of NSS / getaddrinfo traps).
+#   - No extra package ecosystem (Alpine, musl) — UBI all the way.
+
+ARG UBI_VERSION=9.4
+FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build
+
+# UBI w/o entitlement: silence subscription-manager.
+# Free UBI repos in ubi.repo are unaffected — dnf install works normally.
+RUN rm -f /etc/yum.repos.d/redhat.repo && \
+    sed -i 's/^enabled=1/enabled=0/' \
+        /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
+
+RUN dnf install -y --setopt=install_weak_deps=False \
+        gcc-toolset-14 \
+        cmake \
+        ninja-build \
+        libstdc++-static \
+        glibc-static \
+    && dnf clean all
+
+ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64
+
+WORKDIR /src
+COPY src/ ./src/
+COPY CMakeLists.txt CMakePresets.json ./
+
+# Same release flags as the multi-stage build PLUS -static-libstdc++ /
+# -static-libgcc so the C++ stdlib + libgcc support routines bake into
+# the binary. glibc itself stays dynamic — ubi-micro provides it at
+# runtime.
+RUN cmake --preset release-static-libstdcxx \
+ && cmake --build --preset release-static-libstdcxx -j"$(nproc)" \
+ && strip --strip-all build/release-static-libstdcxx/demo-svc
+
+# ---- runtime stage: ubi-micro (~30 MB, glibc + minimal coreutils) ----
+FROM registry.access.redhat.com/ubi9/ubi-micro:${UBI_VERSION} AS runtime
+
+# Provenance.
+ARG GIT_SHA=unknown
+ARG BUILD_DATE
+LABEL org.opencontainers.image.title="cpp-container-tutorial demo-01 ubi-micro" \
+      org.opencontainers.image.description="UBI-micro runtime, static libstdc++" \
+      org.opencontainers.image.source="https://github.com/patterncatalyst/cpp-container-optimization-tutorial" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      tutorial.demo="01-image-strategy" \
+      tutorial.variant="ubi-micro" \
+      tutorial.toolchain="gcc-toolset-14" \
+      tutorial.lto="thin" \
+      tutorial.libstdcxx="static"
+
+WORKDIR /app
+COPY --from=build /src/build/release-static-libstdcxx/demo-svc /app/demo-svc
+
+# ubi-micro has /etc/passwd with a built-in non-root user.
+USER 1001:1001
+EXPOSE 8080
+ENTRYPOINT ["/app/demo-svc"]

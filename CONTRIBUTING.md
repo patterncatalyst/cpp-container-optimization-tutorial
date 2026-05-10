@@ -109,16 +109,9 @@ gives us:
 
 ### Documented exceptions
 
-Two and only two:
+One and only one:
 
-1. **`examples/demo-01-image-strategy/Containerfile.scratch-static`** uses
-   `docker.io/alpine:3.20` for the *build* stage. The demo's pedagogical
-   point is producing a static binary that runs in `scratch`, which
-   requires musl libc; UBI ships glibc, and static-linked glibc is both
-   officially discouraged and full of runtime traps (NSS, getaddrinfo,
-   locale). The final runtime stage is `scratch` — nothing Alpine
-   reaches the produced image.
-2. **`observability/compose.yml`** pulls
+1. **`observability/compose.yml`** pulls
    `docker.io/grafana/otel-lgtm:0.8.1` — the all-in-one Grafana Labs
    image bundling Grafana, Loki, Tempo, Prometheus, and an OTel
    Collector. Grafana Labs publishes the bundle only to Docker Hub.

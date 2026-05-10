@@ -109,9 +109,9 @@ Why container constraints change C++ performance reasoning. The
 Where each performance lever lives. Why advice that's correct on
 bare metal can be actively wrong inside a container.
 
-### [§3 — Container strategy: UBI, scratch, multi-stage builds](../03-image-strategy/)
+### [§3 — Container strategy: UBI, ubi-micro, multi-stage builds](../03-image-strategy/)
 
-Demo 1 territory. When to use UBI vs scratch vs Alpine, why
+Demo 1 territory. When to use UBI vs UBI-micro, why
 multi-stage builds matter for both image size and supply chain,
 and the **AVX-512 mismatch trap** that bites builds promoted from
 a builder host with newer silicon to a runtime host without it.

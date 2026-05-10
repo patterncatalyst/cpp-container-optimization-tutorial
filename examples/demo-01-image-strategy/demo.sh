@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Demo 1 — image strategy: UBI multi-stage vs scratch vs naive single-stage,
+# Demo 1 — image strategy: UBI multi-stage vs UBI-micro vs naive single-stage,
 # plus a PGO pass against the multi-stage build.
 #
 # Run from this directory:
@@ -52,7 +52,7 @@ case "${1:-}" in
   --clean)
     podman rmi -f \
       "${IMG_PREFIX}:ubi-multistage" \
-      "${IMG_PREFIX}:scratch-static" \
+      "${IMG_PREFIX}:ubi-micro" \
       "${IMG_PREFIX}:single-stage-naive" \
       "${IMG_PREFIX}:pgo" 2>/dev/null || true
     echo "Cleaned."
@@ -67,8 +67,8 @@ DO_PGO=1
 header "Building UBI multi-stage (LTO on, no PGO)"
 podman build -f Containerfile.ubi-multistage -t "${IMG_PREFIX}:ubi-multistage" .
 
-header "Building scratch + static binary"
-podman build -f Containerfile.scratch-static -t "${IMG_PREFIX}:scratch-static" .
+header "Building UBI-micro (small UBI runtime, static libstdc++)"
+podman build -f Containerfile.ubi-micro -t "${IMG_PREFIX}:ubi-micro" .
 
 header "Building naive single-stage (anti-pattern)"
 podman build -f Containerfile.single-stage-naive -t "${IMG_PREFIX}:single-stage-naive" .
@@ -116,7 +116,7 @@ podman images --format '{{.Repository}}:{{.Tag}}\t{{.Size}}' | grep "^${IMG_PREF
 header "Latency comparison ('hey -n 10000 -c 100')"
 declare -A IMAGES=(
   [ubi-multistage]=$((PORT_BASE + 1))
-  [scratch-static]=$((PORT_BASE + 2))
+  [ubi-micro]=$((PORT_BASE + 2))
   [single-stage-naive]=$((PORT_BASE + 3))
 )
 [[ $DO_PGO -eq 1 ]] && IMAGES[pgo]=$((PORT_BASE + 4))

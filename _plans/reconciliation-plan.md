@@ -627,6 +627,68 @@ in r09, where we applied the UBI subscription-manager fix to all
 8 Containerfiles. Demo-01 re-run is the next verification gate;
 when it lands clean we promote §3 and §4.
 
+### 2026-05-09 — r11: drop Alpine; demo-01 third variant becomes ubi-micro
+
+User pushed back on r09's continued use of `docker.io/alpine:3.20`
+in `Containerfile.scratch-static`: "we should be using UBI for
+everything. Alpine and musl and musl-dev should not be part of
+this." The trigger was a real-host build failure (`clang19 (no
+such package)` — Alpine 3.20 ships `clang17`/`clang18`, not
+`clang19`; the `clang19` package landed in Alpine 3.21+).
+
+Resolved the deeper concern, not just the version mismatch:
+
+- **Removed** `examples/demo-01-image-strategy/Containerfile.scratch-static`.
+- **Added** `examples/demo-01-image-strategy/Containerfile.ubi-micro`:
+  builds on `ubi9/ubi` with `gcc-toolset-14` + `libstdc++-static` +
+  `glibc-static` (the latter for `-static-libgcc` even though glibc
+  itself stays dynamic), runtime is `registry.access.redhat.com/
+  ubi9/ubi-micro:9.4` (~30 MB, glibc + minimal coreutils, no
+  package manager). Binary uses `-static-libstdc++ -static-libgcc`
+  so the C++ stdlib bakes in; glibc stays dynamic and is provided
+  by ubi-micro.
+
+  Pedagogical comparison preserved: ubi-multistage (~120 MB
+  ubi-minimal runtime) vs ubi-micro (~30 MB ubi-micro runtime) vs
+  single-stage-naive (~1.2 GB) vs PGO (~120 MB ubi-minimal runtime).
+  We trade "literally scratch + static-musl" for "tiny + glibc-
+  compatible + one fewer docker.io exception."
+
+- **CMakePresets.json**: removed the `static-musl` preset. Added
+  `release-static-libstdcxx` (same as `release` plus
+  `-static-libstdc++ -static-libgcc` linker flags). Build presets
+  list updated.
+
+- **`scripts/pre-pull.sh`**: dropped `docker.io/alpine:3.20`,
+  added `registry.access.redhat.com/ubi9/ubi-micro:9.4`. Total
+  inventory now 4 images (3 UBI + 1 docker.io). Image policy
+  exception list halves: from "two and only two" to "one and
+  only one" — only `grafana/otel-lgtm` remains as a docker.io
+  exception.
+
+- **`CONTRIBUTING.md`** image policy: rewrote the exceptions
+  section. Alpine entry removed; only the lgtm entry remains.
+
+- **demo.sh**: `scratch-static` → `ubi-micro` everywhere (variant
+  name, header text, image tag, port allocation).
+
+- **Doc sweep** for stale "scratch"/"alpine"/"musl" references in
+  user-facing content: §0 outline, §3 image strategy, demo-01
+  README, diagrams.html, examples.html, src/main.cpp comment, PRD
+  section table. Idiomatic English uses ("from scratch in modern
+  C++", "the tutorial only scratched") and the Containerfile
+  comment that explicitly states *why we don't use Alpine* are
+  intentionally preserved.
+
+Net effect on the image audit:
+- Before r11: 19 UBI + 1 scratch + 2 docker.io exceptions
+- After r11:  21 UBI + 1 docker.io exception (lgtm)
+
+Verification status: pending demo-01 re-run on user's host. The
+build path is much simpler now (no apk, no Alpine package version
+hunting); the failure mode that prompted r11 is structurally
+removed, not just patched.
+
 User reported demo-01 build failed with the classic UBI-without-
 entitlement issue: `dnf install` triggers the `subscription-manager`
 plugin to refresh entitlement-only repos, which fails with `Unable

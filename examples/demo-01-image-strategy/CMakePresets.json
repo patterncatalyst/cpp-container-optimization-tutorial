@@ -22,12 +22,12 @@
       }
     },
     {
-      "name": "static-musl",
+      "name": "release-static-libstdcxx",
       "inherits": "_base",
-      "displayName": "Static against musl, lld",
+      "displayName": "Release with thin LTO + static libstdc++/libgcc",
       "cacheVariables": {
         "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
-        "CMAKE_EXE_LINKER_FLAGS": "-static -fuse-ld=lld",
+        "CMAKE_EXE_LINKER_FLAGS": "-static-libstdc++ -static-libgcc",
         "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG -fno-plt"
       }
     },
@@ -52,9 +52,9 @@
     }
   ],
   "buildPresets": [
-    { "name": "release",      "configurePreset": "release" },
-    { "name": "static-musl",  "configurePreset": "static-musl" },
-    { "name": "pgo-generate", "configurePreset": "pgo-generate" },
-    { "name": "pgo-use",      "configurePreset": "pgo-use" }
+    { "name": "release",                   "configurePreset": "release" },
+    { "name": "release-static-libstdcxx",  "configurePreset": "release-static-libstdcxx" },
+    { "name": "pgo-generate",              "configurePreset": "pgo-generate" },
+    { "name": "pgo-use",                   "configurePreset": "pgo-use" }
   ]
 }

@@ -187,7 +187,7 @@ section; every section is self-contained enough to enter cold.
 | 0  | Outline                                                            | Reader's map; what to expect, what's out of scope                                  | 2 min     | —    |
 | 1  | Prerequisites                                                      | Fedora 44, Podman 5.x, the toolchain (GCC 14 / Clang 18, Conan 2, CMake, Ninja)    | 10 min    | —    |
 | 2  | Introduction & Mental Model                                        | Why container constraints change C++ perf reasoning; the four-layer model          | 8 min     | —    |
-| 3  | Container Strategy: UBI, scratch, multi-stage builds               | When to use which base; layer caching; the AVX-512 mismatch trap                   | 12 min    | 1    |
+| 3  | Container Strategy: UBI, ubi-micro, multi-stage builds               | When to use which base; layer caching; the AVX-512 mismatch trap                   | 12 min    | 1    |
 | 4  | Compile-Time Wins: LTO, PGO, constexpr                             | What each does, when each is worth the build-time tax, instrumentation runs        | 12 min    | 1    |
 | 5  | STL, Layout, and C++20/23 Containers                               | `std::vector` vs `std::deque`, C++23 `flat_map`/`flat_set`, silent overhead        | 15 min    | 2    |
 | 6  | Memory Management: Allocators, Huge Pages, cgroups v2, OOM        | PMR, `madvise(MADV_HUGEPAGE)`, mimalloc/jemalloc, `memory.max`, `malloc_trim()`, OOM killer, RSS vs working set, the LinuxMemoryChecker pattern | 15 min    | 2    |
@@ -222,7 +222,7 @@ under `scripts/test-<demo>.sh` for CI verification.
 
 | # | Name                | Topic mapping                                                                                                                  | Runs via                                |
 |---|---------------------|--------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------|
-| 1 | image-strategy      | UBI vs scratch, multi-stage, LTO, PGO, ABI labels — §3, §4, §12                                                                | `podman build` + `podman run`           |
+| 1 | image-strategy      | UBI vs UBI-micro, multi-stage, LTO, PGO, ABI labels — §3, §4, §12                                                                | `podman build` + `podman run`           |
 | 2 | memory-and-stl      | `std::vector` vs C++23 `flat_set`, PMR, mimalloc swap, huge pages, cgroup memory.high — §5, §6                                 | `podman run` with cgroup limits         |
 | 3 | io-uring-grpc       | io_uring TCP echo + async gRPC service with `SO_REUSEPORT`; `hey` for load — §7, §8                                            | `podman compose up` (2 services)        |
 | 4 | observability       | The full stack: Grafana + Prometheus + Tempo + Loki + Mimir; OTel-instrumented C++ service; `perf record` + `bpftrace` probes  | `podman compose up` (full stack)        |
@@ -274,7 +274,7 @@ SVG inline and offers a "Download Excalidraw source" link.
 
 - `02-mental-model-four-layers.svg` — the four-layer model
   (toolchain, image, kernel, runtime)
-- `03-image-strategy-ubi-vs-scratch.svg` — base image trade-off
+- `03-image-strategy-multistage.svg` — base image trade-off
   matrix
 - `04-compile-pgo-flow.svg` — instrumented build → workload →
   optimized build pipeline

@@ -1,14 +1,14 @@
-# Demo 1 — Image Strategy: UBI, scratch, multi-stage, LTO, PGO
+# Demo 1 — Image Strategy: UBI, ubi-micro, multi-stage, LTO, PGO
 
 ## What this demo shows
 
 Builds the same trivial C++23 HTTP service three different ways
 and compares the results:
 
-1. **`ubi-multistage`** — UBI-minimal builder + UBI-micro
+1. **`ubi-multistage`** — UBI builder + UBI-minimal
    runtime, multi-stage, LTO on
-2. **`scratch-static`** — Builder same as above, runtime is
-   `scratch` with a single statically-linked binary
+2. **`ubi-micro`** — UBI builder, runtime is
+   `ubi9/ubi-micro` (~30 MB) with libstdc++ statically linked into the binary
 3. **`single-stage-naive`** — A single-stage build that ships
    the toolchain in the runtime image, no LTO, no
    multi-stage. The "what not to do" baseline.
@@ -30,14 +30,14 @@ time, and a `hey` benchmark for each build.
 
 ## Topics covered
 
-- §3 Container Strategy (UBI vs scratch, multi-stage)
+- §3 Container Strategy (UBI vs ubi-micro, multi-stage)
 - §4 Compile-Time Wins (LTO, PGO)
 - §12 Reproducibility & ABI (image labels)
 
 ## Files
 
 - `Containerfile.ubi-multistage` — preferred default
-- `Containerfile.scratch-static` — minimal-image variant
+- `Containerfile.ubi-micro` — minimal-image variant (UBI-micro runtime, static libstdc++)
 - `Containerfile.single-stage-naive` — anti-pattern baseline
 - `Containerfile.pgo` — instrumented build for PGO step 1
 - `CMakePresets.json` — the three release configurations

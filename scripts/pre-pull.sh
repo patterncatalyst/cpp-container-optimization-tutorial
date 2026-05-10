@@ -32,9 +32,9 @@ IMAGES=(
     # UBI bases — used by every demo's build/runtime stages
     "registry.access.redhat.com/ubi9/ubi:${UBI_VERSION}"
     "registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION}"
+    "registry.access.redhat.com/ubi9/ubi-micro:${UBI_VERSION}"
 
-    # Documented non-UBI exceptions (see CONTRIBUTING.md → Container image policy)
-    "docker.io/alpine:3.20"                  # demo-01 musl-static build stage
+    # Documented non-UBI exception (see CONTRIBUTING.md → Container image policy)
     "docker.io/grafana/otel-lgtm:0.8.1"      # observability/ all-in-one stack
 )
 
