@@ -1,0 +1,95 @@
+# Multi-stage build to ubi-micro — TEACHING REFERENCE.
+#
+# This Containerfile DELIBERATELY builds a binary that fails at runtime
+# on ubi-micro. Its purpose is to demonstrate a real-world production
+# trap that catches teams new to minimal-runtime images: a glibc
+# symbol-version mismatch between the build host and the runtime host.
+#
+# When the demo runs this image, the container will exit immediately
+# with something like:
+#
+#   /app/demo-svc: /lib64/libc.so.6: version `GLIBC_2.35' not found
+#   (required by /app/demo-svc)
+#
+# That error is the lesson. Three things to take away from it:
+#
+# 1. "ubi:9.4" and "ubi-micro:9.4" are NOT the same glibc.
+#    Both carry the 9.4 tag, but Red Hat publishes them on different
+#    cadences. The build container's glibc had patch-level backports
+#    stamped with newer symbol versions (e.g. GLIBC_2.35) that the
+#    runtime container's older glibc didn't yet expose.
+#
+# 2. -static-libstdc++ is NOT enough on minimal images. It bakes the
+#    C++ standard library into the binary, but glibc itself stays
+#    dynamically linked. If the runtime image's glibc is older than
+#    the build image's glibc (in symbol-version terms), the binary
+#    won't even start.
+#
+# 3. The fix used in the production variant (Containerfile.ubi-micro)
+#    is to go FULLY static with `-static -static-libgcc -static-libstdc++`.
+#    Then it doesn't matter what glibc the runtime image ships, or
+#    even whether it ships one at all.
+#
+# This Containerfile is intentionally kept around (and intentionally
+# fails) so the demo can show the failure mode side-by-side with the
+# fix. demo.sh expects this image to NORUN; the captured podman logs
+# are the artifact.
+#
+# Build:
+#   podman build -f Containerfile.ubi-micro-glibc-mismatch \
+#     -t demo-01-ubi-micro-glibc-mismatch .
+
+ARG UBI_VERSION=9.4
+FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build
+
+# UBI w/o entitlement: silence subscription-manager.
+RUN rm -f /etc/yum.repos.d/redhat.repo && \
+    sed -i 's/^enabled=1/enabled=0/' \
+        /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
+
+RUN dnf install -y --setopt=install_weak_deps=False \
+        gcc-toolset-14 \
+        cmake \
+        ninja-build \
+        libstdc++-static \
+    && dnf clean all
+
+ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64
+
+WORKDIR /src
+COPY src/ ./src/
+COPY CMakeLists.txt CMakePresets.json ./
+
+# The trap: -static-libstdc++ -static-libgcc but NO -static.
+# The C++ stdlib + libgcc support routines bake into the binary,
+# but glibc itself stays dynamic. Looks reasonable. Fails on
+# ubi-micro because of the cross-image glibc version drift
+# documented in the header comment above.
+RUN cmake --preset release-static-libstdcxx \
+ && cmake --build --preset release-static-libstdcxx -j"$(nproc)" \
+ && strip --strip-all build/release-static-libstdcxx/demo-svc
+
+# ---- runtime stage: ubi-micro (the trap) ----
+FROM registry.access.redhat.com/ubi9/ubi-micro:${UBI_VERSION} AS runtime
+
+ARG GIT_SHA=unknown
+ARG BUILD_DATE
+LABEL org.opencontainers.image.title="cpp-container-tutorial demo-01 ubi-micro-glibc-mismatch (TEACHING REFERENCE — INTENTIONALLY FAILS)" \
+      org.opencontainers.image.description="Demonstrates glibc symbol-version drift between ubi:9.4 build host and ubi-micro:9.4 runtime; binary fails to start with 'GLIBC_2.X.Y not found'" \
+      org.opencontainers.image.source="https://github.com/patterncatalyst/cpp-container-optimization-tutorial" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      tutorial.demo="01-image-strategy" \
+      tutorial.variant="ubi-micro-glibc-mismatch" \
+      tutorial.purpose="teaching-reference" \
+      tutorial.expected="fails-at-runtime" \
+      tutorial.toolchain="gcc-toolset-14" \
+      tutorial.linkage="static-libstdcxx-only"
+
+WORKDIR /app
+COPY --from=build /src/build/release-static-libstdcxx/demo-svc /app/demo-svc
+
+USER 1001:1001
+EXPOSE 8080
+ENTRYPOINT ["/app/demo-svc"]

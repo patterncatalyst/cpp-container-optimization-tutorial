@@ -1,46 +1,51 @@
-# Multi-stage build to ubi-micro with a fully-static -static-pie binary.
+# Multi-stage build to ubi-micro with a fully-static binary (`-static`).
 #
-# Demonstrates how small a UBI-based image gets when the runtime base is
-# the minimum Red Hat ships (ubi-micro: ~10-15 MB, basically just rootfs
-# scaffolding, no package manager) and the binary is *fully statically*
-# linked. Unlike a typical "static libstdc++ only" build, this one bakes
-# glibc into the binary too, sidestepping a real-world failure mode that
-# bites in production:
+# This is the *production-grade* answer for "I want my C++ service in a
+# minimal container". The binary has no runtime library dependency at
+# all — neither libc.so.6 nor libstdc++.so.6 — so it doesn't matter
+# what (or whether) any libraries exist in the runtime image.
 #
-#   /app/demo-svc: /lib64/libc.so.6: version `GLIBC_2.35' not found
-#   (required by /app/demo-svc)
-#
-# That error happened on r17 with a static-libstdc++-only build. The
-# build container's `ubi:9.4` image had a newer glibc patch level
-# (Oct 2024 build, with backported GLIBC_2.35-stamped symbols) than the
-# runtime container's `ubi-micro:9.4` (Aug 2024 build, no backport).
-# Static-libstdc++ doesn't help — the missing symbol is in libc itself,
-# which was still linked dynamically. With -static-pie there is no
-# dynamic libc dependency at all, so it doesn't matter what version
-# of glibc the runtime image ships.
+# Compare with Containerfile.ubi-micro-glibc-mismatch, which links
+# only libstdc++ statically and demonstrates the real-world failure
+# mode this Containerfile is designed to avoid.
 #
 # Build:
 #   podman build -f Containerfile.ubi-micro -t demo-01-ubi-micro .
 #
-# Trade-offs to be aware of:
-#   - Binary grows from ~7 MB (dynamic libc) to ~25 MB (static glibc
-#     + libstdc++ + libgcc baked in). Image size ends up ~35-40 MB,
-#     which is still a 17-19x reduction vs the naive single-stage
-#     image and more importantly it actually runs.
+# Why -static and not -static-pie:
+#   We tried -static-pie + LTO + strip --strip-all on r18; the binary
+#   built cleanly but segfaulted at startup (exit 139). -static-pie
+#   binaries need their dynamic relocation tables preserved at load
+#   time, and `--strip-all` was too aggressive. -static (non-PIE) is
+#   simpler, older, and well-tested: no runtime relocations needed,
+#   no surprises with strip. The trade-off is no ASLR for the binary
+#   itself, which inside a single-process container is a non-issue.
+#
+# Why this is a real win:
+#   - The binary is fully self-contained: ~25-30 MB after strip,
+#     including a complete glibc + libstdc++ + libgcc.
+#   - The runtime image is ~12 MB (ubi-micro itself); total image
+#     ends up at ~35-40 MB. Compare 689 MB single-stage-naive →
+#     ~17-19x reduction, AND it runs.
+#   - Cross-image glibc version drift (the issue caught on r17 with
+#     `GLIBC_2.35 not found`) is impossible because we don't depend
+#     on the runtime's glibc at all.
+#   - Same security-update story as the rest of UBI: ubi-micro is
+#     published by Red Hat, no subscription needed.
+#
+# Trade-offs to know:
 #   - Some libc features that depend on dlopen() at runtime stop
-#     working: NSS (so getaddrinfo() can't resolve hostnames against
+#     working: NSS lookups (so getaddrinfo() can't read
 #     /etc/nsswitch.conf), iconv() loadable converters, locale
-#     loading, etc. We don't use any of them; the demo binds to
-#     0.0.0.0 directly and never resolves hostnames.
-#   - -static-pie is GCC's modern static option: position-independent
-#     so it's still ASLR-friendly. -static (the older option) works
-#     too but produces a non-PIE binary.
+#     loading, etc. None of these affect this demo because we bind
+#     to 0.0.0.0 directly and don't resolve hostnames.
+#   - GCC will warn at link time about each function affected.
+#     Those warnings are expected and not actionable for our case.
 
 ARG UBI_VERSION=9.4
 FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build
 
 # UBI w/o entitlement: silence subscription-manager.
-# Free UBI repos in ubi.repo are unaffected — dnf install works normally.
 RUN rm -f /etc/yum.repos.d/redhat.repo && \
     sed -i 's/^enabled=1/enabled=0/' \
         /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
@@ -60,38 +65,39 @@ WORKDIR /src
 COPY src/ ./src/
 COPY CMakeLists.txt CMakePresets.json ./
 
-# release-static-pie preset: thin LTO + -static-pie + static libgcc +
-# static libstdc++. The result is a single-file ELF that doesn't need
-# /lib64/ld-linux-x86-64.so.2 or libc.so.6 at runtime.
+# release-static preset:
+#   -static -static-libgcc -static-libstdc++   (everything baked in)
+#   -O3 -DNDEBUG                                (release optimization)
+#   no LTO                                      (LTO + static can be
+#                                                fragile; correctness
+#                                                first)
 #
-# The strip pass after the build cuts ~30% off the binary by stripping
-# both static-linked symbol tables and DWARF debug info.
-RUN cmake --preset release-static-pie \
- && cmake --build --preset release-static-pie -j"$(nproc)" \
- && strip --strip-all build/release-static-pie/demo-svc
+# strip --strip-unneeded is safer than --strip-all for any binary
+# that might use dynamic features at startup; for plain -static it
+# would be equivalent, but the discipline is worth keeping.
+RUN cmake --preset release-static \
+ && cmake --build --preset release-static -j"$(nproc)" \
+ && strip --strip-unneeded build/release-static/demo-svc
 
-# ---- runtime stage: ubi-micro (~10-15 MB, just glibc + rootfs scaffolding) ----
+# ---- runtime stage: ubi-micro (~12 MB, just rootfs scaffolding) ----
 FROM registry.access.redhat.com/ubi9/ubi-micro:${UBI_VERSION} AS runtime
 
-# Provenance.
 ARG GIT_SHA=unknown
 ARG BUILD_DATE
 LABEL org.opencontainers.image.title="cpp-container-tutorial demo-01 ubi-micro" \
-      org.opencontainers.image.description="UBI-micro runtime, fully static -static-pie binary" \
+      org.opencontainers.image.description="UBI-micro runtime, fully-static binary (-static)" \
       org.opencontainers.image.source="https://github.com/patterncatalyst/cpp-container-optimization-tutorial" \
       org.opencontainers.image.revision="${GIT_SHA}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       tutorial.demo="01-image-strategy" \
       tutorial.variant="ubi-micro" \
       tutorial.toolchain="gcc-toolset-14" \
-      tutorial.lto="thin" \
-      tutorial.linkage="static-pie"
+      tutorial.linkage="static"
 
 WORKDIR /app
-COPY --from=build /src/build/release-static-pie/demo-svc /app/demo-svc
+COPY --from=build /src/build/release-static/demo-svc /app/demo-svc
 
-# ubi-micro doesn't ship a populated /etc/passwd, but we run as a numeric
-# UID so passwd lookups aren't needed. ENTRYPOINT runs as UID 1001.
+# Run as numeric UID; ubi-micro doesn't need /etc/passwd lookups.
 USER 1001:1001
 EXPOSE 8080
 ENTRYPOINT ["/app/demo-svc"]

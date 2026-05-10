@@ -1228,6 +1228,79 @@ real Excalidraw diagram (`02-introduction-four-layers`)
 becomes the next active deliverable.** Demo-01 verification
 campaign closes here.
 
+### 2026-05-09 — r19: switch ubi-micro to plain -static; add ubi-micro-glibc-mismatch teaching variant
+
+User ran demo-01 on r18. Two issues unmasked:
+
+1. The image was still 25.3 MB — not the expected ~35-40 MB
+   for a fully-static binary. Suggests `-static-pie` wasn't
+   actually pulling glibc in the way I assumed.
+2. The container exited with status 139 (SIGSEGV) at
+   startup, almost immediately. `-static-pie` + LTO +
+   `strip --strip-all` is a known-fragile combination:
+   `-static-pie` binaries need their dynamic relocation
+   tables preserved at load time, and `--strip-all` was
+   removing them.
+
+Plus a request from the user: keep the dynamic-glibc variant
+around as a teaching reference for the GLIBC_2.35 trap.
+
+**r19 changes:**
+
+(a) Swapped `release-static-pie` for plain `release-static`:
+
+    CMAKE_EXE_LINKER_FLAGS = "-static -static-libgcc -static-libstdc++"
+    CMAKE_CXX_FLAGS_RELEASE = "-O3 -DNDEBUG"
+
+No LTO (LTO + static can be flaky; correctness first).
+No -fno-plt (irrelevant for static linking — there's no PLT).
+No -fPIE / -static-pie (fragile with strip and LTO).
+
+`-static` is older, simpler, well-tested. PIE doesn't matter
+for a single-process container. `--strip-unneeded` instead of
+`--strip-all` for safety, even though for plain `-static` the
+two are effectively equivalent.
+
+(b) Added Containerfile.ubi-micro-glibc-mismatch — a
+deliberately-failing teaching variant. Uses the previous
+static-libstdc++-only approach. Container exits at startup
+with `GLIBC_2.X.Y not found`. Three lessons heavily
+documented in the file header:
+
+  1. ubi:9.4 and ubi-micro:9.4 are NOT the same glibc.
+  2. -static-libstdc++ is NOT enough on minimal images.
+  3. The fix is fully-static linking.
+
+(c) demo.sh changes:
+
+  - Builds both ubi-micro variants
+  - Latency loop processes both
+  - When the failed variant is ubi-micro-glibc-mismatch,
+    framed as "EXPECTED FAILURE — this is the teaching
+    variant. The log line below is the lesson:" rather than
+    a generic NORUN warning. The captured podman inspect
+    output and log lines ARE the teaching artifact.
+  - Status column reads "EXPECTED FAIL (teaching)" for the
+    deliberate-failure variant; "NORUN" remains for any
+    actual unexpected failures.
+  - Column width widened from 22 to 28 chars to fit the
+    longer tag name.
+
+(d) New CMake preset definitions:
+
+  - `release-static` — the production answer
+  - `release-static-libstdcxx` — re-added for the teaching
+    variant; explicit warning in displayName
+
+Image audit updated: 22 UBI references + 1 docker.io exception.
+
+Verification status: §3 and §4 promote to verified in r18
+already; r19 doesn't change that, just makes ubi-micro
+actually work AND turns the failure mode into pedagogy. The
+demo-01 verification campaign was closed at r18; r19 is a
+follow-up requested by the user to keep the teaching value
+of the original failure visible alongside the working fix.
+
 
 ---
 

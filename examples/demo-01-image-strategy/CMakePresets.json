@@ -22,13 +22,22 @@
       }
     },
     {
-      "name": "release-static-pie",
+      "name": "release-static",
       "inherits": "_base",
-      "displayName": "Release with thin LTO + fully static (libc + libstdc++ + libgcc), PIE",
+      "displayName": "Release with full static linking (libc, libstdc++, libgcc) — non-PIE",
+      "cacheVariables": {
+        "CMAKE_EXE_LINKER_FLAGS": "-static -static-libgcc -static-libstdc++",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG"
+      }
+    },
+    {
+      "name": "release-static-libstdcxx",
+      "inherits": "_base",
+      "displayName": "Release + static libstdc++/libgcc ONLY (TEACHING REFERENCE — demonstrates glibc symbol-version trap on minimal runtime images)",
       "cacheVariables": {
         "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
-        "CMAKE_EXE_LINKER_FLAGS": "-static-pie -static-libgcc -static-libstdc++",
-        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG -fno-plt -fPIE"
+        "CMAKE_EXE_LINKER_FLAGS": "-static-libstdc++ -static-libgcc",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG -fno-plt"
       }
     },
     {
@@ -55,7 +64,8 @@
   ],
   "buildPresets": [
     { "name": "release",                   "configurePreset": "release" },
-    { "name": "release-static-pie",        "configurePreset": "release-static-pie" },
+    { "name": "release-static",            "configurePreset": "release-static" },
+    { "name": "release-static-libstdcxx",  "configurePreset": "release-static-libstdcxx" },
     { "name": "pgo-generate",              "configurePreset": "pgo-generate" },
     { "name": "pgo-use",                   "configurePreset": "pgo-use" }
   ]

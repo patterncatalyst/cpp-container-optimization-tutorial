@@ -67,8 +67,11 @@ DO_PGO=1
 header "Building UBI multi-stage (LTO on, no PGO)"
 podman build -f Containerfile.ubi-multistage -t "${IMG_PREFIX}:ubi-multistage" .
 
-header "Building UBI-micro (small UBI runtime, static libstdc++)"
+header "Building UBI-micro (fully-static binary, production answer)"
 podman build -f Containerfile.ubi-micro -t "${IMG_PREFIX}:ubi-micro" .
+
+header "Building UBI-micro-glibc-mismatch (TEACHING REFERENCE — intentionally fails at runtime)"
+podman build -f Containerfile.ubi-micro-glibc-mismatch -t "${IMG_PREFIX}:ubi-micro-glibc-mismatch" .
 
 header "Building naive single-stage (anti-pattern)"
 podman build -f Containerfile.single-stage-naive -t "${IMG_PREFIX}:single-stage-naive" .
@@ -155,11 +158,13 @@ declare -A IMAGES=(
   [ubi-multistage]=$((PORT_BASE + 1))
   [ubi-micro]=$((PORT_BASE + 2))
   [single-stage-naive]=$((PORT_BASE + 3))
+  [ubi-micro-glibc-mismatch]=$((PORT_BASE + 5))
 )
 [[ $DO_PGO -eq 1 ]] && IMAGES[pgo]=$((PORT_BASE + 4))
 
-printf '\n%-22s  %-10s  %-10s  %-10s\n' "image" "p50 (ms)" "p95 (ms)" "p99 (ms)"
-printf -- '-%.0s' {1..62}; echo
+# Column widened from 22 to 28 to fit the new teaching-variant tag.
+printf '\n%-28s  %-10s  %-10s  %-10s\n' "image" "p50 (ms)" "p95 (ms)" "p99 (ms)"
+printf -- '-%.0s' {1..68}; echo
 PARSE_FAILURES=()
 for tag in "${!IMAGES[@]}"; do
   port="${IMAGES[$tag]}"
@@ -181,15 +186,24 @@ for tag in "${!IMAGES[@]}"; do
     p99=$(awk '/99%+ in/ {print $3 * 1000}' <<<"$out")
     if [[ -z "$p50" ]]; then
       PARSE_FAILURES+=("$tag")
-      printf '%-22s  %-10s  %-10s  %-10s\n' "$tag" "?" "?" "?"
+      printf '%-28s  %-10s  %-10s  %-10s\n' "$tag" "?" "?" "?"
     else
-      printf '%-22s  %-10s  %-10s  %-10s\n' "$tag" "${p50}" "${p95}" "${p99}"
+      printf '%-28s  %-10s  %-10s  %-10s\n' "$tag" "${p50}" "${p95}" "${p99}"
     fi
     podman stop -t 5 "demo01-bench-${tag}" >/dev/null 2>&1 || true
   else
     # Container still exists (no --rm); capture both its state and its
     # stdout/stderr before the manual rm cleans up.
+    #
+    # For the deliberately-broken ubi-micro-glibc-mismatch teaching
+    # variant, we frame the failure as expected pedagogical output
+    # rather than a generic "NORUN". The captured log lines ARE the
+    # teaching artifact.
     echo
+    if [[ "${tag}" == "ubi-micro-glibc-mismatch" ]]; then
+      echo "    EXPECTED FAILURE — this is the teaching variant."
+      echo "    The log line below is the lesson:"
+    fi
     echo "    -- container state --"
     podman inspect "demo01-bench-${tag}" \
       --format='    status:   {{.State.Status}}
@@ -200,7 +214,11 @@ for tag in "${!IMAGES[@]}"; do
     finished: {{.State.FinishedAt}}' 2>&1 | sed 's/^/    /' || true
     echo "    -- last 30 log lines --"
     podman logs "demo01-bench-${tag}" 2>&1 | tail -30 | sed 's/^/    | /' || true
-    printf '%-22s  %-10s  %-10s  %-10s\n' "$tag" "NORUN" "NORUN" "NORUN"
+    if [[ "${tag}" == "ubi-micro-glibc-mismatch" ]]; then
+      printf '%-28s  %-10s  %-10s  %-10s\n' "$tag" "EXPECTED" "FAIL" "(teaching)"
+    else
+      printf '%-28s  %-10s  %-10s  %-10s\n' "$tag" "NORUN" "NORUN" "NORUN"
+    fi
   fi
   # Manual cleanup since we didn't use --rm.
   podman rm -f "demo01-bench-${tag}" >/dev/null 2>&1 || true
