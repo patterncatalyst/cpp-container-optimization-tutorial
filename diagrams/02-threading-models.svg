@@ -7,7 +7,7 @@
       .grid     { stroke: #e8e1d3; stroke-width: 0.5; fill: none; }
       .axis     { stroke: #2d2d2d; stroke-width: 1.6; fill: none; }
       .axis-l   { font: italic 600 13px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #2d2d2d; }
-      .quad-l   { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #888; }
+      .quad-l   { font: italic 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #555; }
       .ttl      { font: 700 18px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
       .cap      { font: 13px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
       .pill     { stroke-width: 1.5; rx: 8; ry: 8; }
@@ -49,18 +49,23 @@
   <text x="820" y="525" class="axis-l" text-anchor="end">stackless (state machine, locals only)</text>
   <text x="460" y="545" class="axis-l" text-anchor="middle">stack model →</text>
 
-  <!-- Y axis: kernel-visible (bottom) → invisible (top) -->
+  <!-- Y axis: kernel-visible (bottom) → invisible (top).
+       The axis is communicated by the arrow direction and the
+       quadrant labels below ("kernel-known" at top, "1:1" at
+       bottom). Earlier revisions had rotated full-text labels
+       at x=80 here, but the text-anchor=end + rotate(-90)
+       combination pushed the text off the viewBox (the rotated
+       "start" of the long bottom label landed at y=845, well
+       below the 580-tall viewBox, leaving only "in pids.max)"
+       visible). The quadrant labels carry the meaning without
+       the rotation drama. -->
   <line x1="100" y1="500" x2="100" y2="100" class="axis" marker-end="url(#ah)"/>
-  <text x="80" y="495" class="axis-l" text-anchor="end" transform="rotate(-90 80 495)">
-    kernel-visible (1:1, schedulable, counts in pids.max)
-  </text>
-  <text x="80" y="105" class="axis-l" text-anchor="end" transform="rotate(-90 80 105)">
-    user-space only (M:N, invisible)
-  </text>
 
-  <!-- Quadrant labels (faint) -->
-  <text x="280" y="155" class="quad-l">stackful · kernel-known</text>
-  <text x="640" y="155" class="quad-l">stackless · kernel-invisible</text>
+  <!-- Quadrant labels — these carry the Y-axis dimension now that the
+       rotated axis labels are gone. Top row = M:N (kernel-invisible),
+       bottom row = 1:1 (kernel-visible). -->
+  <text x="280" y="155" class="quad-l">stackful · M:N</text>
+  <text x="640" y="155" class="quad-l">stackless · M:N</text>
   <text x="280" y="475" class="quad-l">stackful · 1:1</text>
   <text x="640" y="475" class="quad-l">stackless · 1:1 (rare)</text>
 

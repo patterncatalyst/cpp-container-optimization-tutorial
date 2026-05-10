@@ -1927,6 +1927,65 @@ grows over time.
 No prose changes to §2; demo-01 unchanged. Pure
 plan/style/markup work. Image audit unchanged.
 
+### 2026-05-09 — r25: §2 review fix — remove broken rotated Y-axis labels in threading-models
+
+User reviewing §2 noticed the bottom-left of the threading
+diagram was cut off, with only "in pids.max)" visible. That's
+the *end* of the bottom rotated Y-axis label — the rest of
+the text was rendering off the bottom of the SVG viewBox.
+
+**Why.** The `text-anchor="end"` + `transform="rotate(-90 80
+495)"` combination interacts pathologically:
+
+1. Before transform, `anchor="end"` puts the text END at
+   `(80, 495)` and the text body extends LEFT (smaller x).
+   For a 350px text, the text spans `x=-270` to `x=80` at
+   `y=495`. The leftmost portion is already outside the
+   viewBox (which starts at x=0), but that's pre-transform.
+2. The transform then rotates around `(80, 495)`. Working
+   the matrix:
+   - (-270, 495) translated to pivot → (-350, 0)
+   - rotate -90° in SVG coords (matrix `[0 1; -1 0]`):
+     `(0·-350 + 1·0, -1·-350 + 0·0) = (0, 350)`
+   - translate back: `(80, 845)`
+3. So the START of "kernel-visible..." lands at `y=845`,
+   265px below the viewBox bottom edge (580). Only the
+   text near the END (around y=495) stays inside the
+   viewBox — roughly the last 24% of the text, which is
+   "in pids.max)".
+
+The same bug applied to the top Y-axis label, which was
+also rendering with parts off the viewBox in the opposite
+direction.
+
+**Fix.** Remove both rotated Y-axis labels. The chart's
+quadrant labels already carry the Y-axis dimension, and the
+arrow on the Y-axis line shows the direction. The rotated
+labels were redundant once the quadrant labels existed.
+
+Two adjacent improvements went in alongside the fix:
+
+1. **Quadrant label terminology made consistent.** The
+   top-left previously said "stackful · kernel-known" while
+   top-right said "stackless · kernel-invisible" —
+   describing the same Y-axis row two different ways.
+   Updated to "stackful · M:N" / "stackless · M:N" at the
+   top, "stackful · 1:1" / "stackless · 1:1 (rare)" at the
+   bottom. Y-axis now reads consistently: M:N at top, 1:1
+   at bottom.
+2. **Quadrant label contrast bumped** from `fill: #888;
+   11px` (faint hint alongside the rotated labels) to
+   `fill: #555; 12px` (readable secondary label) since they
+   now carry the Y-axis communication on their own.
+
+The Excalidraw source (`02-threading-models.excalidraw`)
+never had Y-axis text labels — they only existed in the
+SVG. So no Excalidraw change needed; the source already
+agrees with the rendered SVG after this fix.
+
+No prose changes to §2 or other docs. No demo or shell
+changes. Pure rendering bug fix.
+
 ---
 
 ## Known divergences from the PRD
