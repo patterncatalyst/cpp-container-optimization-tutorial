@@ -2388,6 +2388,160 @@ homework.
 
 ---
 
+### G-29 · `unique_ptr<T>` from a Factory::Create() needs T's complete type for destruction; Factory headers usually only forward-declare T (r50)
+
+**Problem.** r49's abseil pairing fix worked — the
+entire dep chain (gRPC 1.54.3 + abseil/20230125.3 +
+protobuf/3.21.12 + opentelemetry-cpp/1.14.2) built
+from source successfully. Conan's install completed,
+CMake configured cleanly, and the build proceeded to
+compile our `main.cpp` itself for the first time in
+many rounds.
+
+The compile failed in our own code:
+
+    error: invalid application of 'sizeof' to incomplete type
+        'opentelemetry::v1::sdk::trace::SpanProcessor'
+       91 |         static_assert(sizeof(_Tp)>0,
+          |                       ^~~~~~~~~~~
+
+    [...same for opentelemetry::v1::sdk::logs::LogRecordProcessor]
+
+The error is *inside libstdc++'s `unique_ptr.h`*, not
+inside any OTel-cpp header. Reading the trace
+backwards: the static_assert fires because
+`std::default_delete<T>::operator()` is being
+instantiated for a `T` whose definition the compiler
+hasn't seen yet.
+
+The flow is:
+
+1. `auto processor = sdk_t::SimpleSpanProcessorFactory::Create(std::move(exporter));`
+2. `Create()` returns `std::unique_ptr<SpanProcessor>`,
+   so `processor`'s deduced type is
+   `std::unique_ptr<SpanProcessor>`.
+3. When `processor` goes out of scope at the end of
+   the block, `~unique_ptr()` runs.
+4. `~unique_ptr` calls `default_delete<SpanProcessor>::operator()`,
+   which calls `delete` on the held pointer.
+5. `delete` requires `sizeof(SpanProcessor)` to compute
+   the deallocation size and the destructor to run.
+6. **If `SpanProcessor` is only forward-declared at
+   that point, sizeof can't be computed.** Compile
+   fails.
+
+**Why.** Factory headers in OTel-cpp (and most modern
+C++ libraries that use the factory pattern this way)
+typically only **forward-declare** the types they
+return. The factory header's job is to make the
+factory function callable; it doesn't need the full
+processor definition because the factory's
+implementation file (`.cc`) has the full include and
+constructs the object.
+
+But the *consumer* of the factory's return value —
+that's us — does need the complete type whenever a
+`unique_ptr<ReturnType>` goes out of scope or gets
+moved-from-and-then-destroyed. Specifically, the
+destructor of `unique_ptr` requires the complete type
+even when the held pointer is null (because `delete`'s
+ABI is determined by the compiler at instantiation
+time, not at runtime).
+
+This is one of the classic C++ footguns: **forward
+declarations are sufficient at function signature
+declaration but insufficient at unique_ptr destructor
+instantiation.** The Pimpl idiom famously hits this
+exact issue and works around it by defining the dtor
+out-of-line.
+
+**Fix.** Include the headers that fully define the
+types our `auto` variables hold. For OTel-cpp 1.14:
+
+    #include "opentelemetry/sdk/trace/processor.h"
+    #include "opentelemetry/sdk/logs/processor.h"
+
+Added with a comment block explaining the pattern.
+
+The other `unique_ptr<T>` returns in our `init_otel`
+work fine because their full-type headers are
+transitively included by other OTel-cpp headers we
+already pull in (`OtlpGrpcExporterFactory` includes
+the SpanExporter definition, etc.). Only the two
+processor types needed explicit help.
+
+**Discoverability lessons:**
+
+- **An `incomplete type` error inside libstdc++'s
+  `unique_ptr.h` means the consumer is missing an
+  `#include`, not the library is wrong.** The error
+  message points at libstdc++ headers, but the fix
+  is always at the call site.
+- **`auto` propagates types but not visibility.**
+  When `Create()` returns `unique_ptr<T>` and you
+  store it as `auto`, you've inherited the type
+  without forcing a transitive include of `T`'s
+  full definition. Be vigilant about types that
+  factory functions return.
+- **Factory headers expose contracts; processor
+  headers expose mechanics.** Mixing the two is
+  intentional design (allowing factories to be
+  implemented separately from the types they
+  produce), but it costs the consumer a manual
+  include.
+- **The error trace's deepest frame is the
+  diagnosis, not the fix.** `static_assert(sizeof(_Tp)>0,...)`
+  in `unique_ptr.h` line 91 tells you `_Tp` is
+  incomplete; the fix is upstream of that, in your
+  own translation unit's includes.
+
+**Tutorial value.** This is a §3 (RAII discipline)
+lesson for the C++ chapters: **RAII via smart
+pointers is convenient but not free.** The compiler
+does part of the bookkeeping for you, but you still
+have to give it the information it needs to do that
+bookkeeping. unique_ptr requires complete types at
+specific points; declaring an `auto` variable from
+a factory function is one of those points.
+
+It's also a §13 (Reproducibility) lesson: **the
+"correct" set of `#include` directives in a C++
+translation unit is implementation-defined; what
+works under one set of dep versions may fail under
+another.** OTel-cpp's transitive include graph
+shifted between the version main.cpp was originally
+written against (1.16) and the version we ended up
+on (1.14.2 with rebuilt-from-source deps); the
+result is that headers we never explicitly needed
+before are now necessary.
+
+**Anticipated outcomes:**
+
+- **Best case:** main.cpp compiles cleanly with the
+  added includes, link succeeds against the
+  rebuilt OTel-cpp 1.14.2 + grpc/1.54.3 chain
+  (which has Status::OK + GetGlobalCallbackHook()
+  per G-22), demo binary builds. Container starts
+  with the binary. r51 verifies signal flow into
+  the LGTM dashboard.
+- **More incomplete-type errors surface for other
+  OTel-cpp types:** quite possible. Each would need
+  its corresponding `processor.h`/`exporter.h`/
+  `reader.h` include. Easy to add as they appear.
+- **Different OTel-cpp 1.14 API issue (signature
+  mismatch, removed method, etc.):** also possible.
+  We adapted main.cpp generically with
+  `nostd::shared_ptr<api::T>` patterns, but specific
+  factory signatures may differ. Each call site
+  needs spot-checking.
+- **Compile succeeds, link fails on something other
+  than Status::OK:** would mean we picked up a new
+  unresolved symbol from the version-shifted
+  rebuild. Diagnose with the link-error symbol
+  text.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -7083,6 +7237,118 @@ G-12 through G-28 documented. The version-pairing matrix
 in this round entry might be the most concise summary
 yet of why mixed-version Conan chains are fragile. The
 journey is becoming a tutorial on its own merits.
+
+### 2026-05-10 — r50: G-29 — `unique_ptr<SpanProcessor>` needs SpanProcessor's complete type; add explicit `processor.h` includes
+
+User reran with r49's abseil pairing. **Massive progress:**
+
+    -- Generating done (0.0s)
+    -- Build files have been written to: /src/build
+    [1/2] Building CXX object CMakeFiles/demo-04-svc.dir/src/main.cpp.o
+
+The Conan install completed. Every dep in the chain
+(grpc/1.54.3 + abseil/20230125.3 + protobuf/3.21.12 +
+opentelemetry-cpp/1.14.2) built from source successfully.
+CMake configured. We crossed the dep wilderness entirely
+and are now compiling our own main.cpp for the first
+time in many rounds.
+
+The compile failed in our own code:
+
+    error: invalid application of 'sizeof' to incomplete type
+        'opentelemetry::v1::sdk::trace::SpanProcessor'
+
+The error is *inside libstdc++'s unique_ptr.h*. Reading
+the trace backwards: `auto processor =
+SimpleSpanProcessorFactory::Create(std::move(exporter))`
+deduces `processor` as `unique_ptr<SpanProcessor>`. When
+`processor` goes out of scope, `~unique_ptr` calls
+`default_delete<SpanProcessor>::operator()`, which
+needs `sizeof(SpanProcessor)`. The factory header
+forward-declares `SpanProcessor` but doesn't define it,
+so the static_assert fails.
+
+This is the classic "incomplete type with unique_ptr"
+footgun. Same pattern hits the LogRecordProcessor on
+line 124.
+
+**Why the other unique_ptrs in init_otel work fine:**
+their full-type headers are pulled in transitively by
+other OTel-cpp headers we include (e.g.,
+`OtlpGrpcExporterFactory` brings in SpanExporter's
+full definition somewhere in its include chain). Only
+the processor types fall through the gaps.
+
+**Fix.** Two explicit includes:
+
+    #include "opentelemetry/sdk/trace/processor.h"
+    #include "opentelemetry/sdk/logs/processor.h"
+
+Added to main.cpp's include block with a comment block
+explaining the pattern (so a future reader doesn't
+"clean up" by removing them, thinking they're
+duplicates).
+
+**Promoted to G-29** with full Problem/Why/Fix:
+
+- The full chain from `auto processor = Create(...)`
+  through `~unique_ptr` to `static_assert(sizeof(_Tp)>0)`
+- Why factory headers forward-declare instead of
+  including (separation of concerns; factories don't
+  need processor mechanics)
+- The discoverability tip: "incomplete type" errors
+  inside libstdc++ headers always mean missing
+  `#include` upstream
+- `auto` propagates types but not visibility — be
+  vigilant about types factory functions return
+- Tutorial value: §3 (RAII discipline) — RAII via
+  smart pointers is convenient but not free;
+  unique_ptr requires complete types at specific
+  points
+- §13 (Reproducibility) lesson: the "correct" set
+  of `#include` directives is implementation-
+  defined; transitive include graphs shift between
+  dep versions
+
+**What r50 specifically ships:**
+
+1. main.cpp: two added `#include`s for the processor
+   headers; comment block explaining G-29.
+2. G-29 promoted in plan with full discoverability
+   lessons and tutorial value.
+3. r50 round entry.
+
+**What this round does NOT do:**
+
+- Doesn't change Containerfile.
+- Doesn't change conanfile.py.
+- Doesn't change CMakeLists.txt.
+
+**Anticipated outcomes:**
+
+- **Best case:** main.cpp compiles cleanly with the
+  added includes, link succeeds (1.54.3 has the gRPC
+  symbols per G-22), demo binary builds. Container
+  starts. r51 verifies signal flow.
+- **More incomplete-type errors for other OTel-cpp
+  types:** quite possible. Each would need its
+  corresponding processor.h/exporter.h/reader.h.
+  Easy spot-fixes when they surface.
+- **Different OTel-cpp 1.14 API issue (signature
+  mismatch, removed method):** possible. We
+  generalized init_otel for cross-version compat
+  but specific factory signatures may differ.
+- **Link succeeds, container starts, no signals:**
+  the long-anticipated r28 category (metric drift,
+  log label drop, dashboard UID).
+
+**Cumulative round count: r50.** Demo-04 is 22 rounds in
+(r28→r50). The dep wilderness is *behind* us. Every
+remaining issue is in our own code or in the runtime
+flow — the kind of debugging tutorial students will
+actually face. The 23-stage gauntlet of toolchain
+compatibility issues is documented permanently as
+G-12 through G-29.
 
 ---
 

@@ -16,12 +16,25 @@
 #include "opentelemetry/exporters/otlp/otlp_grpc_metric_exporter_factory.h"
 #include "opentelemetry/logs/provider.h"
 #include "opentelemetry/metrics/provider.h"
+// Why these processor.h includes are explicit (G-29): OTel-cpp's
+// SimpleSpanProcessorFactory::Create() and
+// SimpleLogRecordProcessorFactory::Create() return std::unique_ptr<T>
+// where T is forward-declared in the factory header but not fully
+// defined there. When `auto processor = Factory::Create(...)` goes
+// out of scope, the unique_ptr destructor needs T's complete type
+// to compute sizeof(T) and call ~T(). Without these explicit
+// includes, the compile fails with:
+//   error: invalid application of 'sizeof' to incomplete type
+//          opentelemetry::v1::sdk::trace::SpanProcessor
+// This is the standard "incomplete type with unique_ptr" footgun.
 #include "opentelemetry/sdk/logs/logger_provider_factory.h"
+#include "opentelemetry/sdk/logs/processor.h"
 #include "opentelemetry/sdk/logs/simple_log_record_processor_factory.h"
 #include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h"
 #include "opentelemetry/sdk/metrics/meter_provider.h"
 #include "opentelemetry/sdk/metrics/view/view_registry.h"
 #include "opentelemetry/sdk/resource/resource.h"
+#include "opentelemetry/sdk/trace/processor.h"
 #include "opentelemetry/sdk/trace/simple_processor_factory.h"
 #include "opentelemetry/sdk/trace/tracer_provider_factory.h"
 #include "opentelemetry/trace/provider.h"
