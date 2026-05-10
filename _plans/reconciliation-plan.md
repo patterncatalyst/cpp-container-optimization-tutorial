@@ -1176,6 +1176,113 @@ discovered for r39.
 
 ---
 
+### G-20 · Demo source written against pre-1.10 OTel-cpp APIs; rewrite for 1.16 (r40)
+
+**Problem.** With Conan toolchain loaded, find_package
+succeeded, target names corrected (G-19), the demo's own
+src/main.cpp finally compiles. And immediately fails:
+
+    /src/src/main.cpp:22:10: fatal error:
+    opentelemetry/sdk/metrics/periodic_exporting_metric_reader_factory.h:
+    No such file or directory
+
+The first compile error reveals an entire class of issues:
+the demo's main.cpp was written against a pre-1.10 OTel-cpp
+API and **never actually compiled** before now. Every
+previous round of demo-04 verification failed before getting
+to the C++ source compile, so nobody noticed the source had
+multiple drift problems.
+
+A close reading of main.cpp's `init_otel` function against
+OTel-cpp 1.16.1 surfaces several issues:
+
+1. **Header path moved.** `periodic_exporting_metric_reader_factory.h`
+   was at the top of `sdk/metrics/` in pre-1.10 versions. In
+   1.10+ it lives in the `export/` subdirectory:
+   `sdk/metrics/export/periodic_exporting_metric_reader_factory.h`.
+
+2. **`MeterProviderFactory::Create(resource)` doesn't exist.**
+   The factory's public overloads in 1.16 are `Create()`,
+   `Create(views)`, `Create(views, resource)`, and
+   `Create(context)`. There's no single-arg resource-only
+   variant.
+
+3. **Factory returns API base, demo calls SDK method.**
+   `MeterProviderFactory::Create(...)` returns
+   `std::unique_ptr<opentelemetry::metrics::MeterProvider>`
+   (the API base class). `AddMetricReader` is a method on
+   `opentelemetry::sdk::metrics::MeterProvider` (the SDK
+   derived class), not the base. Calling
+   `provider->AddMetricReader(...)` on the factory result
+   doesn't compile.
+
+4. **`SetTracerProvider(std::move(unique_ptr))` doesn't compile.**
+   `Provider::SetTracerProvider(const nostd::shared_ptr<...>&)`
+   takes a `nostd::shared_ptr`. `nostd::shared_ptr` has
+   constructors from `std::shared_ptr`, but not from
+   `std::unique_ptr`. Going from `std::unique_ptr` requires
+   two implicit conversions (unique→std::shared→nostd::shared),
+   which exceeds C++'s one-user-defined-conversion limit.
+   Same issue for SetMeterProvider and SetLoggerProvider.
+
+**Why didn't anyone catch this earlier.** Demo-04 never
+compiled. Every round in the verification sequence
+(r28→r39) failed before reaching the demo's C++ source —
+either at compose configuration (G-12), dnf install (G-13),
+EPEL gaps (G-14), perl module gaps (G-15/G-16/G-17), Conan
+recipe options (G-17), CMake toolchain path (G-18), or
+target name resolution (G-19). Round r40 is the first time
+the source actually got handed to the compiler.
+
+This is a useful debugging lesson on its own: **first-compile
+failures should be expected to surface multiple issues
+together, not one at a time.** Fixing them incrementally
+("retry, see what the next error is, fix that, retry, ...")
+is a multi-round commitment. Auditing all likely issues
+in one round is more efficient when you have a reference
+implementation (the official OTel-cpp examples directory in
+this case).
+
+**Fix.** Three pieces, all in main.cpp:
+
+1. Add `/export/` to the periodic_exporting_metric_reader_factory.h
+   include path.
+
+2. Drop `meter_provider_factory.h` (we're not using the
+   factory anymore for metrics), add `meter_provider.h` and
+   `view/view_registry.h` (for direct SDK construction).
+
+3. Rewrite the three init blocks (Tracing, Metrics, Logs):
+
+   - **Tracing/Logs:** make the unique_ptr → shared_ptr
+     conversion explicit by typing `provider` as
+     `std::shared_ptr<...>`, then pass `provider` (not
+     `std::move(provider)`) to `Set*Provider`.
+   - **Metrics:** construct `sdk::metrics::MeterProvider`
+     directly via `std::make_shared` instead of using the
+     factory. Direct construction gives us a typed
+     `sdk_m::MeterProvider*` that can call AddMetricReader.
+     Then up-cast to `api::MeterProvider` for the global
+     registry.
+
+Comment block in main.cpp explains both conversion chains
+(unique→std::shared→nostd::shared and the
+factory-vs-direct-construction trade-off) so future
+readers understand why the code looks more verbose than
+it would need to be in a less-strict version.
+
+**Why use std::make_shared directly instead of MeterContext.**
+OTel-cpp 1.16 also offers a `MeterContextFactory`-based
+pattern for setting resources on a MeterProvider. That
+pattern is cleaner in some ways but adds two more types
+to think about (`MeterContext`, `MeterContextFactory`).
+Direct `std::make_shared<sdk::metrics::MeterProvider>`
+construction with `(views, resource)` is more transparent
+about what's happening — visible inheritance, visible
+shared_ptr, no opaque "context" concept. Tutorial bias.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -4572,6 +4679,136 @@ follows the same diagnostic pattern.
 This is the closest we've been to a binary actually
 running. r40 either flips §10 to verified or addresses
 the next demo-source-level issue.
+
+### 2026-05-10 — r40: G-20 — rewrite demo source for OTel-cpp 1.16 APIs (multiple drift issues at once)
+
+User reran after r39. **Fast failure (1.7 s)** — exactly
+the right shape for "compile error in source code." The
+build got past every dep-tree issue from the past 12
+rounds and finally handed src/main.cpp to the compiler.
+And immediately failed:
+
+    /src/src/main.cpp:22:10: fatal error:
+    opentelemetry/sdk/metrics/periodic_exporting_metric_reader_factory.h:
+    No such file or directory
+
+Reading main.cpp against OTel-cpp 1.16.1's actual API
+surface revealed **four** distinct issues, not one:
+
+1. `periodic_exporting_metric_reader_factory.h` moved to
+   `export/` subdir in 1.10+.
+2. `MeterProviderFactory::Create(resource)` doesn't exist
+   in 1.16; only `Create()`, `Create(views)`,
+   `Create(views, resource)`, `Create(context)`.
+3. Factory returns `unique_ptr<api::MeterProvider>`, but
+   `AddMetricReader` is on `sdk::MeterProvider` only.
+   `provider->AddMetricReader(...)` doesn't compile on
+   the factory result.
+4. `Set*Provider(std::move(unique_ptr))` doesn't compile
+   because `nostd::shared_ptr` has no constructor from
+   `std::unique_ptr`. The two-step path (unique →
+   std::shared → nostd::shared) exceeds C++'s
+   one-user-defined-conversion limit.
+
+The demo's main.cpp was clearly written against a
+pre-1.10 OTel-cpp API and **never actually compiled**
+before — every round in the demo-04 verification
+sequence failed before reaching the C++ source compile.
+r40 is the first time anyone (the compiler) tried to
+read the source against the deps it nominally targets.
+
+**Lesson on first-compile failures.** When source code
+has never compiled, expect multiple issues to surface
+together. Fixing them incrementally ("retry, see what
+the next error is, fix that, retry, ...") is a
+multi-round commitment. Auditing all likely issues
+once with a reference implementation in hand is more
+efficient. r40 takes the audit-once approach: r39's
+first compile failure prompted reading main.cpp's
+init_otel against the OTel-cpp 1.16 examples
+directory, which surfaced all four issues together.
+
+**Fix shipped in r40:**
+
+1. **Include path** — added `/export/` to the
+   periodic_exporting_metric_reader_factory.h include.
+2. **Imports trimmed and added** — dropped
+   `meter_provider_factory.h` (no longer using factory
+   for metrics), added `meter_provider.h` and
+   `view/view_registry.h` for direct SDK construction.
+3. **Tracing init** — explicitly typed `provider` as
+   `std::shared_ptr<api::TracerProvider>` so the
+   unique→shared conversion happens at variable
+   binding (one user-defined conversion). Pass
+   `provider` (not `std::move(provider)`) to
+   `SetTracerProvider` so the std::shared→nostd::shared
+   conversion happens at function-arg binding (the
+   second user-defined conversion, allowed because
+   it's the only one at that point).
+4. **Logs init** — same conversion treatment as
+   Tracing.
+5. **Metrics init** — significantly different from
+   the original. Direct `std::make_shared<sdk::MeterProvider>`
+   construction with `(views, resource)` so we have a
+   typed `sdk_m::MeterProvider*` for AddMetricReader.
+   Up-cast to `api::MeterProvider` via assignment to
+   a typed `std::shared_ptr<api::MeterProvider>`,
+   then register that with the global Provider.
+
+Comment blocks inline explain both conversion chains
+(why the code looks more verbose than expected) and
+the factory-vs-direct-construction trade-off for
+metrics.
+
+**Promoted to G-20** in Gotchas. Full problem/why/fix
+shape with the four-issue breakdown, the "why didn't
+anyone catch this earlier" explanation (no previous
+round got past the dep tree), and the
+"first-compile-failures-surface-multiple-issues"
+lesson as a reusable debugging insight.
+
+**What this round does NOT do:**
+
+- Doesn't change CMakeLists, Containerfile, conanfile,
+  or compose. Only main.cpp.
+- Doesn't actually run the build. User's next attempt.
+- Doesn't add OTel-cpp version pinning beyond what's in
+  conanfile.txt (1.16.1) — the source is now aligned
+  with that version.
+
+**What might fire next:**
+
+- **More API drift I missed.** The audit was thorough
+  but main.cpp uses other OTel APIs in the request
+  handler (StartSpan, EmitLogRecord, CreateUInt64Counter,
+  CreateDoubleHistogram, Record). These are mostly
+  stable but minor signature changes have happened
+  across versions. If something breaks, fix at the
+  call site.
+- **Linker errors.** If a member function is declared
+  in a header but its implementation lives in a
+  component target we don't link. Fix: add the
+  component to target_link_libraries in CMakeLists.
+  Most likely candidate: `opentelemetry-cpp::opentelemetry_common`
+  or `opentelemetry-cpp::opentelemetry_resources` (we
+  link trace/metrics/logs/exporters but not the
+  shared lower-level libs explicitly).
+- **Runtime startup failure.** Binary builds; container
+  starts; healthz never responds. Possible causes
+  range from OTel SDK init throwing (collector
+  unreachable; happens in time even though container
+  network exists, because lgtm:4317 might not be ready
+  when our container starts) to httplib server thread
+  not actually binding 8080.
+- **Original post-build candidates.** r28's anticipated
+  metric drift, log label drop, dashboard UID
+  mismatch — finally come into play if everything
+  upstream succeeds.
+
+This is the moment to actually compile demo-04 for the
+first time ever. Whatever happens next is a step into
+new territory — either we get the binary, or we hit
+the next demo-source-or-runtime-shaped issue.
 
 ---
 

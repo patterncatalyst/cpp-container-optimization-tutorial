@@ -18,8 +18,9 @@
 #include "opentelemetry/metrics/provider.h"
 #include "opentelemetry/sdk/logs/logger_provider_factory.h"
 #include "opentelemetry/sdk/logs/simple_log_record_processor_factory.h"
-#include "opentelemetry/sdk/metrics/meter_provider_factory.h"
-#include "opentelemetry/sdk/metrics/periodic_exporting_metric_reader_factory.h"
+#include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h"
+#include "opentelemetry/sdk/metrics/meter_provider.h"
+#include "opentelemetry/sdk/metrics/view/view_registry.h"
 #include "opentelemetry/sdk/resource/resource.h"
 #include "opentelemetry/sdk/trace/simple_processor_factory.h"
 #include "opentelemetry/sdk/trace/tracer_provider_factory.h"
@@ -52,34 +53,56 @@ void init_otel(const std::string& service_name) {
     });
 
     // ---- Tracing ----
+    // Conversion chain for SetTracerProvider:
+    //   factory returns std::unique_ptr<api::TracerProvider>
+    //     → std::shared_ptr<api::TracerProvider>     (std::shared_ptr's unique_ptr ctor)
+    //       → nostd::shared_ptr<api::TracerProvider> (nostd::shared_ptr's std::shared_ptr ctor)
+    // Going through std::shared_ptr explicitly because C++ allows only one
+    // user-defined conversion per argument; passing std::move(unique) directly
+    // to a nostd::shared_ptr-taking function won't compile.
     {
         otlp::OtlpGrpcExporterOptions opts;
-        auto exporter = otlp::OtlpGrpcExporterFactory::Create(opts);
+        auto exporter  = otlp::OtlpGrpcExporterFactory::Create(opts);
         auto processor = sdk_t::SimpleSpanProcessorFactory::Create(std::move(exporter));
-        auto provider = sdk_t::TracerProviderFactory::Create(std::move(processor), resource);
-        otel::trace::Provider::SetTracerProvider(std::move(provider));
+        std::shared_ptr<otel::trace::TracerProvider> provider =
+            sdk_t::TracerProviderFactory::Create(std::move(processor), resource);
+        otel::trace::Provider::SetTracerProvider(provider);
     }
 
     // ---- Metrics ----
+    // OTel-cpp 1.16's MeterProviderFactory has no Create(resource) overload,
+    // and Create(views, resource) returns the API base class which doesn't
+    // expose AddMetricReader. Construct the SDK MeterProvider directly so
+    // we have a typed sdk::MeterProvider* that can call AddMetricReader,
+    // then up-cast to the API base class for the global Provider registry.
     {
         otlp::OtlpGrpcMetricExporterOptions opts;
         auto exporter = otlp::OtlpGrpcMetricExporterFactory::Create(opts);
+
         sdk_m::PeriodicExportingMetricReaderOptions reader_opts;
         reader_opts.export_interval_millis = std::chrono::milliseconds(5000);
         auto reader = sdk_m::PeriodicExportingMetricReaderFactory::Create(
             std::move(exporter), reader_opts);
-        auto provider = sdk_m::MeterProviderFactory::Create(resource);
-        provider->AddMetricReader(std::move(reader));
-        otel::metrics::Provider::SetMeterProvider(std::move(provider));
+
+        auto views = std::unique_ptr<sdk_m::ViewRegistry>(new sdk_m::ViewRegistry());
+        auto sdk_provider = std::make_shared<sdk_m::MeterProvider>(
+            std::move(views), resource);
+        sdk_provider->AddMetricReader(
+            std::shared_ptr<sdk_m::MetricReader>(std::move(reader)));
+
+        std::shared_ptr<otel::metrics::MeterProvider> api_provider = sdk_provider;
+        otel::metrics::Provider::SetMeterProvider(api_provider);
     }
 
     // ---- Logs ----
+    // Same conversion chain as Tracing.
     {
         otlp::OtlpGrpcLogRecordExporterOptions opts;
-        auto exporter = otlp::OtlpGrpcLogRecordExporterFactory::Create(opts);
+        auto exporter  = otlp::OtlpGrpcLogRecordExporterFactory::Create(opts);
         auto processor = sdk_l::SimpleLogRecordProcessorFactory::Create(std::move(exporter));
-        auto provider = sdk_l::LoggerProviderFactory::Create(std::move(processor), resource);
-        otel::logs::Provider::SetLoggerProvider(std::move(provider));
+        std::shared_ptr<otel::logs::LoggerProvider> provider =
+            sdk_l::LoggerProviderFactory::Create(std::move(processor), resource);
+        otel::logs::Provider::SetLoggerProvider(provider);
     }
 }
 
