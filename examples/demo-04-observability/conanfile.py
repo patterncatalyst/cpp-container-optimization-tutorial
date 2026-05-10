@@ -79,11 +79,23 @@ class Demo04Conan(ConanFile):
         # deprecation warning is informational; the package still
         # builds and links correctly.
         #
-        # Why abseil/20240116.2: Same as in r45's reasoning. Newer
-        # abseil works with older gRPC; abseil's API has been stable.
+        # Why abseil/20230125.3 (G-28): r48's gnu17 fix unmasked the
+        # next layer of incompatibility. gRPC 1.54.3 source calls
+        # `absl::StrCat`, but the abseil/20240116.2 (Jan 2024 LTS)
+        # didn't expose StrCat at the call site gRPC expected:
+        #     error: 'StrCat' is not a member of 'absl'
+        #         absl::StrCat("tcp-client:", addr_uri.value()))
+        # Cause: abseil restructures namespace internals across LTS
+        # versions, and gRPC 1.54.3 was tested against the
+        # abseil/20230125 LTS line. Pairing 1.54.3 with the wrong
+        # abseil LTS produces source-level API mismatches that no
+        # override flag can fix. Use the abseil version paired with
+        # this gRPC in its release era — confirmed by Conan Center
+        # issues showing `abseil/20230125.3` + `grpc/1.54.3` as a
+        # clean pair.
         self.requires("grpc/1.54.3",         override=True)
         self.requires("protobuf/3.21.12",    override=True)
-        self.requires("abseil/20240116.2",   override=True)
+        self.requires("abseil/20230125.3",   override=True)
 
     def layout(self):
         # No cmake_layout: keep the flat default so

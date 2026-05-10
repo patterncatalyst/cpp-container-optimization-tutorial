@@ -2239,6 +2239,155 @@ pattern.
 
 ---
 
+### G-28 · gRPC 1.54.3 + abseil/20240116.2 → `'StrCat' is not a member of 'absl'`; pair gRPC with the abseil LTS from its release era (r49)
+
+**Problem.** r48's gnu17 fix did its job — gRPC 1.54.3
+got past the gcc 14 + cppstd 23 incompatibility. But
+the build then crashed at 65% with a different,
+specific error:
+
+    /root/.conan2/.../tcp_client.cc:74:23: error:
+        'StrCat' is not a member of 'absl'
+       74 |  absl::StrCat("tcp-client:", addr_uri.value()))
+          |        ^~~~~~
+
+`absl::StrCat` is one of abseil's most fundamental
+functions — it's been a stable public API for years.
+For the compiler to claim it's "not a member of `absl`"
+means **the abseil version we forced via override
+doesn't expose StrCat at the call site gRPC 1.54.3's
+source expects to find it.**
+
+**Why.** Abseil ships **LTS (Long-Term Support)
+versions** identified by date strings (`20230125`,
+`20240116`, etc.). Internally, abseil uses **versioned
+inline namespaces** like `absl::lts_2023_01_25` to
+isolate ABI between LTS lines. The public `absl::`
+namespace is supposed to be a stable alias to the
+current LTS, but **the namespace structure itself, the
+header layout, and which functions live in which
+sub-headers can shift between LTS releases.**
+
+If gRPC 1.54.3's source includes `<absl/strings/str_cat.h>`
+expecting it to define `absl::StrCat` directly, but
+abseil/20240116.2 moved that definition into a
+sub-namespace or split it across headers differently,
+gRPC's compile-time lookup fails. The error is
+surfaced as `'StrCat' is not a member of 'absl'` even
+though the function technically exists somewhere in
+the library.
+
+The version pairing matters because **gRPC's CI tests
+against specific abseil LTS versions, not against
+"abseil generally."** When gRPC 1.54.3 was released
+(May 2023), the active abseil LTS was `20230125` (Jan
+2023). gRPC 1.54.3's source was written and tested
+against that specific layout. Newer abseil LTS
+versions have legitimately restructured things, and
+that's a problem only when paired with old gRPC source.
+
+The fix isn't a code patch in gRPC source; it's
+choosing the abseil version that gRPC was tested
+against.
+
+**Fix.** Switch the abseil override from
+`abseil/20240116.2` (Jan 2024 LTS) to
+`abseil/20230125.3` (Jan 2023 LTS). This pairs
+correctly with gRPC 1.54.3.
+
+    -   self.requires("abseil/20240116.2", override=True)
+    +   self.requires("abseil/20230125.3", override=True)
+
+Verified hosted: search of conan-center-index issues
+shows `abseil/20230125.3` cleanly resolving alongside
+`grpc/1.54.3` in multiple build logs.
+
+**Why is `abseil/20230125.3` still hosted when
+`grpc/1.62.0` was yanked?** Conan Center's pruning
+heuristic isn't strict-time-window. Some versions
+become "anchors" that newer recipes still depend on,
+or they pair with multiple recipes simultaneously.
+abseil/20230125.3 is one of those — it pairs with
+multiple still-hosted gRPC versions (1.54.3, 1.50.x)
+and several other transitive consumers, so it
+wouldn't be pruned without breaking those.
+
+**The pairing matrix** for our overrides now:
+
+| Component   | Version       | Paired against                          |
+|-------------|---------------|-----------------------------------------|
+| gRPC        | 1.54.3        | abseil/20230125, protobuf/3.21.x        |
+| protobuf    | 3.21.12       | gRPC 1.54.x's release era               |
+| abseil      | 20230125.3    | gRPC 1.54.3's CI-tested LTS             |
+| OTel-cpp    | 1.14.2        | nominally newer chain; rebuilt vs above |
+
+OTel-cpp 1.14.2 is the wild card — it was originally
+released paired with newer abseil/protobuf, and we're
+forcing it to rebuild from source against the older
+gRPC chain. Whether OTel-cpp's source is *also*
+sensitive to the abseil LTS version it's compiled
+against is the next thing we'll find out.
+
+**Discoverability lessons:**
+
+- **`'X' is not a member of 'Y'` with a
+  well-established X means version-pair mismatch.**
+  abseil's `StrCat`, `absl::Mutex`, `absl::Status`
+  have been stable for years. The error message lies
+  about what's wrong; the compiler can't see X at the
+  expected location, but X may exist in a different
+  header or sub-namespace in this LTS version.
+- **For Linux dep chains, version-pair the way the
+  upstream tested.** gRPC's CI matrix is documented;
+  matching it is faster than guessing.
+- **abseil LTS dates matter.** When the documentation
+  says "abseil 20240116," that's a specific snapshot.
+  Newer-isn't-better for gRPC < 1.65 — the changes
+  abseil made between LTS versions are themselves
+  the breaking changes.
+- **"Layer N's fix unmasks layer N+1's issue."**
+  We've now seen this pattern across G-22 → G-27 →
+  G-28: each layer of compat patching exposes the
+  next layer underneath. Real-world C++ dep work
+  often goes like this; it's not a sign you're doing
+  something wrong, just a sign that compatibility is
+  multidimensional.
+
+**Tutorial value.** Pairs naturally with G-22 (ABI
+drift across deps) and G-25 (recipe revision drift).
+G-28 is the source-level analog of those binary-level
+issues: even when binaries are happy, source-level
+API differences across LTS versions can break
+mixed-version chains. The §13 (Reproducibility)
+chapter has a clear lesson here: **shipping a working
+build means pinning the *full transitive chain* in a
+known-tested combination.** Conan's `conan.lock` is
+the mechanism; finding the combination is the
+homework.
+
+**Anticipated outcomes:**
+
+- **Best case:** gRPC 1.54.3 compiles cleanly under
+  abseil/20230125.3, OTel-cpp rebuilds against the
+  whole chain, link succeeds. Demo runs. r50
+  verifies signal flow.
+- **OTel-cpp 1.14.2 source has a similar StrCat-style
+  mismatch against abseil/20230125.3:** unlikely
+  (OTel-cpp 1.14.2 was released in the same era), but
+  possible. We'd see another `'X' is not a member of
+  'absl'` error from inside OTel-cpp's compile and
+  diagnose specifically.
+- **protobuf/3.21.12 doesn't pair with
+  abseil/20230125.3 either:** very unlikely (they
+  were the contemporaneous LTS pair). Would
+  manifest as a similar member-not-found error from
+  protobuf source.
+- **Some completely different error in gRPC 1.54.3
+  build:** possible. Would have a visible message
+  to act on.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -6836,6 +6985,104 @@ CMakeLists.txt unchanged — already has
 **Cumulative round count: r48.** Demo-04 is 20 rounds in.
 G-12 through G-27 are documented; the gotcha catalog is
 becoming the most teaching-dense part of the tutorial.
+
+### 2026-05-10 — r49: G-28 — `'StrCat' is not a member of 'absl'`; pair gRPC with the abseil LTS from its release era
+
+User reran with r48's gnu17 fix. The gnu17 change worked
+— gRPC 1.54.3 got past the gcc 14 + cppstd 23
+incompatibility — but the build crashed at 65% with a
+specific source-level error this time:
+
+    /root/.conan2/.../tcp_client.cc:74:23: error:
+        'StrCat' is not a member of 'absl'
+       74 |  absl::StrCat("tcp-client:", addr_uri.value()))
+          |        ^~~~~~
+
+`absl::StrCat` has been a stable abseil API for years.
+For the compiler to claim it's "not a member of absl"
+means the abseil version we forced
+(`abseil/20240116.2`, Jan 2024 LTS) doesn't expose
+StrCat at the call site gRPC 1.54.3 expects.
+
+**Cause.** Abseil restructures namespace internals
+across LTS versions. gRPC 1.54.3 (May 2023 release)
+was tested against the abseil/20230125 LTS line. The
+public `absl::` namespace is supposed to alias the
+current LTS, but **header layouts and where specific
+functions live can shift** between LTS versions.
+Pairing 1.54.3 with the wrong abseil LTS produces
+source-level API mismatches that no override flag can
+fix — only matching the abseil LTS the upstream
+tested against fixes it.
+
+**Fix.** Switch abseil override:
+
+    -   self.requires("abseil/20240116.2", override=True)
+    +   self.requires("abseil/20230125.3", override=True)
+
+Verified hosted via search — `abseil/20230125.3` shows
+up cleanly resolving alongside `grpc/1.54.3` in
+multiple Conan Center build logs. The pair is what
+gRPC 1.54.3's CI tested against in May 2023.
+
+**The pairing matrix** for our overrides now:
+
+| Component   | Version       | Paired against                   |
+|-------------|---------------|----------------------------------|
+| gRPC        | 1.54.3        | abseil/20230125, protobuf/3.21.x |
+| protobuf    | 3.21.12       | gRPC 1.54.x's release era        |
+| abseil      | **20230125.3**| gRPC 1.54.3's CI-tested LTS      |
+| OTel-cpp    | 1.14.2        | rebuilt vs above chain           |
+
+**Promoted to G-28** with full Problem/Why/Fix:
+
+- abseil's LTS-versioned namespace mechanics
+- Why `'X' is not a member of 'Y'` for established X
+  means version-pair mismatch, not absent function
+- The "layer N's fix unmasks layer N+1's issue"
+  pattern (G-22 → G-27 → G-28)
+- Pairing strategy: match what upstream's CI tested
+- §13 Reproducibility lesson: pin the *full
+  transitive chain*, not just the top-level package
+
+**What r49 specifically ships:**
+
+1. conanfile.py: abseil 20240116.2 → 20230125.3 in
+   override line; comment block rewritten with G-28
+   diagnosis and fix.
+2. G-28 promoted in plan with the pairing-matrix and
+   the layer-by-layer fix-unmasks-next pattern.
+3. r49 round entry.
+
+**What this round does NOT do:**
+
+- Doesn't change Containerfile (gnu17 already correct).
+- Doesn't change CMakeLists.txt.
+- Doesn't change main.cpp.
+
+**Anticipated outcomes:**
+
+- **Best case:** gRPC 1.54.3 compiles cleanly under
+  abseil/20230125.3, OTel-cpp rebuilds against the
+  whole chain, link succeeds (Status::OK is in
+  1.54.3's libgrpc++.a). Demo runs. r50 verifies.
+- **OTel-cpp 1.14.2 source has a similar StrCat-style
+  mismatch against abseil/20230125.3:** unlikely
+  (1.14.2 was released in the same era), but
+  possible. Would surface as another
+  `'X' is not a member of 'absl'` error from inside
+  OTel-cpp's compile.
+- **protobuf/3.21.12 doesn't pair either:** very
+  unlikely; they were the contemporaneous LTS pair.
+- **Some completely different error in gRPC 1.54.3
+  build:** possible. Would have a visible message
+  to act on.
+
+**Cumulative round count: r49.** Demo-04 is 21 rounds in.
+G-12 through G-28 documented. The version-pairing matrix
+in this round entry might be the most concise summary
+yet of why mixed-version Conan chains are fragile. The
+journey is becoming a tutorial on its own merits.
 
 ---
 
