@@ -873,6 +873,13 @@ the static library. No reason to pick one.
 
 ### G-17 · Conan-bundled automake's `aclocal` needs perl `threads` module on UBI 9 (r35)
 
+> **Tutorial site has a permanent reference for this.** The
+> operational survival guide — full fifteen-module list, alternatives,
+> libcurl worked example — lives at `_docs/16-appendix-a-conan-ubi9-perl.md`
+> (rendered as Appendix A on the site). G-15/G-16/G-17 here track
+> the discovery process and per-round rationale; the appendix is
+> the polished post-discovery reference for tutorial readers.
+
 **Problem.** A Conan dep that uses autotools at build
 time (libcurl/8.19.0 in our case, but any autotools
 package would fire this) runs `autoreconf --force
@@ -4060,6 +4067,90 @@ The r36 changes pivot strategy decisively away from
 shed several from-source deps. If it doesn't, we
 have a fast fail and a one-line revert. Either way
 we know more after the next attempt.
+
+### 2026-05-10 — r37: capture the libcurl + Conan + UBI 9 lesson as a permanent tutorial reference
+
+After r36 shipped (skipping Zipkin to dodge libcurl
+in demo-04), the user asked: "i'd like to figure out
+libcurl for future reference as this is a popular
+package for C++ to use." Right call. libcurl is
+ubiquitous in C++ projects (HTTP clients, OAuth flows,
+gRPC's REST gateway, etc.) and the lesson generalizes
+well beyond it — c-ares, openssl, nghttp2, brotli, and
+many other staples use autotools too.
+
+The information was scattered across G-15, G-16, G-17
+in the (private) reconciliation plan and across half
+a dozen commit messages. Useful for the build agent,
+opaque for tutorial readers. r37 promotes it to a
+permanent first-class part of the tutorial site.
+
+**Changes in r37:**
+
+1. **`_docs/16-appendix-a-conan-ubi9-perl.md`** —
+   new file. ~11 KB, eight-minute read. Structured as:
+   - Why this exists (the user-facing problem
+     statement; UBI 9's minimal perl trips Conan's
+     bundled tools).
+   - The pattern (three things conspire: from-source
+     builds, perl invocations, minimal distro perl).
+   - The complete shopping list, broken down by
+     consumer:
+       * OpenSSL Configure — 10 modules (G-15 lineage)
+       * OpenSSL FIPS post-build — Digest::SHA, or
+         skip via no_fips=True (G-16 lineage)
+       * Autotools — 4 modules including the three
+         threading ones not in perl-core (G-17
+         lineage)
+   - Total fifteen-module Containerfile snippet
+     ready to drop into a project.
+   - Worked example: full conanfile.txt + Containerfile
+     for libcurl/8.19.0 from source on UBI 9.
+   - Three simplifying alternatives (skip the dep,
+     use system package via [platform_requires], drop
+     cppstd to hit pre-builts).
+   - Decision matrix (which alternative for which
+     situation).
+   - Cross-references to G-13/G-14/G-15/G-16/G-17.
+
+2. **`_docs/13-reproducibility-abi.md`** — new
+   subsection "When Conan from-source meets a
+   minimal distro" linking to Appendix A. §13 is
+   where the tutorial teaches Conan; the appendix
+   is the operational complement.
+
+3. **`_docs/00-outline.md`** — new "Appendices"
+   section at the bottom mentioning Appendix A.
+   Tells readers to look at it before doing their
+   own Conan + UBI 9 build.
+
+4. **G-17 in the plan** gets a forward-reference
+   blockquote at the top: "Tutorial site has a
+   permanent reference for this." G-15/G-16/G-17
+   stay as-is for tracking the discovery process
+   per-round; the appendix is the polished
+   post-discovery reference for readers.
+
+**What this round does NOT do:**
+
+- Doesn't change demo-04 itself. Demo-04 keeps
+  `with_zipkin=False` (libcurl skipped). The
+  appendix's libcurl recipe is theoretical/reference;
+  any reader who wants to validate it can re-enable
+  Zipkin in a fork and exercise the recipe themself.
+- Doesn't actually re-run the demo-04 build. r36's
+  build is still the latest in-flight verification.
+- Doesn't add a separate demo for libcurl. Could
+  be a future demo if the curriculum wants one
+  (potential placement: §8 I/O Latency, where HTTP
+  clients are relevant), but not in r37.
+
+**Pedagogical bet.** A reader six months from now,
+trying to use libcurl in a C++ project on RHEL/UBI 9
++ Conan, finds Appendix A via the site's TOC, runs
+the recipe, and avoids the six-round discovery
+journey demo-04 went through. That's the value
+Appendix A is meant to capture.
 
 ---
 

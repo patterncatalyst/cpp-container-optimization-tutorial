@@ -43,6 +43,21 @@ By the end of this section you can:
   changes it flags (added symbols, removed symbols, vtable
   reorderings, function-signature changes).
 
+## When Conan from-source meets a minimal distro
+
+A practical hazard worth knowing about before §13's worked
+examples: if your build host is UBI 9 / RHEL 9 / Rocky 9 / Alma 9
+and you're using Conan to manage C++ deps, autotools-based
+packages (libcurl, openssl, c-ares, nghttp2, …) will fall over
+during their from-source build because UBI's minimal perl
+doesn't ship the modules `aclocal` and `automake` need.
+**[Appendix A — Conan, autotools, and UBI 9's minimal
+perl](appendix-a-conan-ubi9-perl.html)** has the full perl-module
+shopping list and the alternatives (skip the dep, use the system
+package, drop cppstd to hit pre-builts) so you can pick the right
+trade-off instead of chasing missing modules one round at a time
+the way demo-04 did.
+
 ## Demo
 
 [`examples/demo-06-quality-pipeline/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-06-quality-pipeline)

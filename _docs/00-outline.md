@@ -265,3 +265,16 @@ Total reading + running time: **roughly 7–10 hours**, spread over
 however many sittings you want. The first three rows are the
 recommended first pass; the rest can wait until you have a real
 reason to reach for them.
+
+## Appendices
+
+- **Appendix A — Conan, autotools, and UBI 9's minimal perl.** The
+  operational survival guide for a hazard that bit demo-04 hard
+  during development: when Conan from-source-builds a dep that
+  uses autotools (libcurl, c-ares, openssl, nghttp2, …) on UBI 9,
+  the build fails on missing perl modules. The appendix has the
+  complete fifteen-module shopping list, three simplifying
+  alternatives, and a worked libcurl example. Read this one before
+  attempting your own Conan + UBI 9 + autotools-using-dep build;
+  save yourself the rounds.
+
