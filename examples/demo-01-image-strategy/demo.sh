@@ -162,11 +162,20 @@ declare -A IMAGES=(
 )
 [[ $DO_PGO -eq 1 ]] && IMAGES[pgo]=$((PORT_BASE + 4))
 
+# Explicit iteration order: real, working variants first (so readers
+# see real numbers); the deliberately-failing teaching variant last
+# (so its captured error message is the punchline). Bash associative-
+# array iteration order is non-deterministic; without this we'd get
+# whatever hash bucket order bash happens to pick today.
+ORDER=("ubi-multistage" "ubi-micro" "single-stage-naive")
+[[ $DO_PGO -eq 1 ]] && ORDER+=("pgo")
+ORDER+=("ubi-micro-glibc-mismatch")  # teaching variant always last
+
 # Column widened from 22 to 28 to fit the new teaching-variant tag.
 printf '\n%-28s  %-10s  %-10s  %-10s\n' "image" "p50 (ms)" "p95 (ms)" "p99 (ms)"
 printf -- '-%.0s' {1..68}; echo
 PARSE_FAILURES=()
-for tag in "${!IMAGES[@]}"; do
+for tag in "${ORDER[@]}"; do
   port="${IMAGES[$tag]}"
   # Note: NOT using --rm here. If the container exits immediately
   # (binary segfaults, missing dep, etc.), --rm reaps it before we
@@ -175,7 +184,16 @@ for tag in "${!IMAGES[@]}"; do
   # for ubi-micro: container exited fast, --rm cleaned up, log
   # capture got "no such container".
   podman run -d --name "demo01-bench-${tag}" -p "${port}:8080" "${IMG_PREFIX}:${tag}" >/dev/null
-  if wait_for_http "http://127.0.0.1:${port}/healthz" 30; then
+  # The teaching variant is EXPECTED to fail wait_for_http; suppress
+  # wait_for_http's "[fail] timed out..." stderr line for that one
+  # variant so it doesn't read as an unexpected error in the output.
+  # Other variants keep the normal error path so real failures show.
+  if [[ "${tag}" == "ubi-micro-glibc-mismatch" ]]; then
+    wait_for_http "http://127.0.0.1:${port}/healthz" 30 2>/dev/null
+  else
+    wait_for_http "http://127.0.0.1:${port}/healthz" 30
+  fi
+  if [[ $? -eq 0 ]]; then
     out=$(hey -n 5000 -c 50 "http://127.0.0.1:${port}/" 2>/dev/null || true)
     # Match both `50% in` and `50%% in` — different hey builds escape the
     # percent sign differently in the latency-distribution block. The `%+`

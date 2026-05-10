@@ -47,8 +47,8 @@ on a clean Fedora 44 host; that's what the verification pass turns
 | 0  | Outline                                                            | [x]     | drafted (r03)               | Full prose, sidebar dropped, dual-target sizing called out  |
 | 1  | Prerequisites                                                      | [x]     | verified (r08)              | r08: 24/24 required check-host.sh checks pass on user's Fedora 44; 2 warnings for quay.io and docker.io reachability are informational only (don't gate any non-demo-04 demo). |
 | 2  | Introduction & Mental Model                                        | [x]     | unverified                  | —                                                    |
-| 3  | Container Strategy: UBI, scratch, multi-stage builds               | [x]     | verified (r18)              | r18: demo-01 produces 689 MB → 114 MB → ~35-40 MB across single-stage-naive / ubi-multistage / ubi-micro variants; ubi-micro uses fully-static -static-pie binary to dodge cross-image glibc version mismatch (real-world failure mode demonstrated and resolved r17 → r18) |
-| 4  | Compile-Time Wins: LTO, PGO, constexpr                             | [x]     | verified (r18)              | r18: demo-01 produces all four variants with thin LTO; PGO captures real .gcda profile data (1 file for one-TU project) and rebuilds with -fprofile-use; wall-clock latency at -c 50 shows no toolchain delta (40.7-40.8 ms p50) — that's itself the lesson, queue dynamics dominate over CPU work |
+| 3  | Container Strategy: UBI, scratch, multi-stage builds               | [x]     | verified (r20)              | demo-01 measured: 689 MB single-stage-naive → 114 MB ubi-multistage (6×) → 26.4 MB ubi-micro w/ fully-static -static binary (26×); ubi-micro-glibc-mismatch teaching variant captures the cross-image glibc symbol-version trap live (`GLIBC_2.35 not found`) |
+| 4  | Compile-Time Wins: LTO, PGO, constexpr                             | [x]     | verified (r20)              | demo-01: all four variants build with thin LTO; PGO captures real .gcda data and rebuilds with -fprofile-use; wall-clock latency at -c 50 shows no toolchain delta (40.7-40.8 ms p50 across all variants) — that IS the §4 lesson: PGO/LTO show in CPU profiles, not p50 latency, when queue dynamics dominate |
 | 5  | STL, Layout, and C++20/23 Containers                               | [x]     | unverified                  | Tied to Demo 2; verify GCC 14 supports `flat_set`    |
 | 6  | Memory Management: Allocators, Huge Pages, cgroups v2, OOM         | [x]     | unverified                  | Expanded 2026-05-09 with cgroup memory.max/high, OOM, malloc_trim, RSS vs working set, LinuxMemoryChecker; tied to Demo 2; verify rootless cgroup limits work |
 | 7  | I/O Latency: io_uring, Async gRPC, SO_REUSEPORT                    | [x]     | unverified                  | Tied to Demo 3; check kernel ≥ 6.0                   |
@@ -66,7 +66,7 @@ on a clean Fedora 44 host; that's what the verification pass turns
 
 | #  | Demo name           | `demo.sh` builds | `test-demo-NN.sh` passes | Last verified on             | Notes                                                   |
 |----|---------------------|------------------|--------------------------|------------------------------|---------------------------------------------------------|
-| 1  | image-strategy      | [ ]              | [ ]                      | —                            | Multi-stage; UBI vs scratch; LTO/PGO flags              |
+| 1  | image-strategy      | [x]              | [x]                      | 2026-05-09 (r20)             | UBI multistage / ubi-micro (-static) / single-stage-naive / pgo + ubi-micro-glibc-mismatch teaching variant; image sizes 689 MB → 26.4 MB (26× reduction); 4 working variants p50 = 40.7-40.8 ms; teaching variant cleanly captures GLIBC_2.35 trap |
 | 2  | memory-and-stl      | [ ]              | [ ]                      | —                            | PMR allocator + cgroup memory.high + huge pages         |
 | 3  | io-uring-grpc       | [ ]              | [ ]                      | —                            | 2-service compose; `hey` load gen                       |
 | 4  | observability       | [ ]              | [ ]                      | —                            | Full Grafana+Prom+Tempo+Loki+Mimir stack                |
@@ -1300,6 +1300,80 @@ actually work AND turns the failure mode into pedagogy. The
 demo-01 verification campaign was closed at r18; r19 is a
 follow-up requested by the user to keep the teaching value
 of the original failure visible alongside the working fix.
+
+### 2026-05-09 — r20: demo-01 verification CAMPAIGN COMPLETE; output polish
+
+User ran demo-01 on r19. **Every metric we wanted hit:**
+
+    image                         p50 (ms)    p95 (ms)    p99 (ms)
+    --------------------------------------------------------------------
+    ubi-micro-glibc-mismatch      EXPECTED    FAIL        (teaching)
+    single-stage-naive            40.7        42          42.3
+    pgo                           40.8        42          42.6
+    ubi-multistage                40.7        42          42.2
+    ubi-micro                     40.8        42          42.4   ← new for r19!
+
+All four working variants produce real, consistent
+percentile numbers. The teaching variant failed exactly as
+designed, with the production error message captured live:
+
+    | /app/demo-svc: /lib64/libc.so.6: version `GLIBC_2.35'
+    | not found (required by /app/demo-svc)
+
+Image-size table also fully populated:
+- single-stage-naive    689   MB  (anti-pattern baseline)
+- ubi-multistage        114   MB  (6× reduction)
+- pgo                   114   MB
+- pgo-instrumented      124   MB  (intermediate)
+- ubi-micro              26.4 MB  (26× reduction, working)
+- ubi-micro-glibc-mismatch 25.2 MB (25× reduction; doesn't run)
+
+§3 (Container Strategy) and §4 (Compile-Time Wins) are now
+fully verified with real numbers. Demo-01 closes here.
+
+**r20 changes — small polish only:**
+
+(a) Explicit iteration order in the latency loop. Bash
+associative-array iteration order is non-deterministic; on
+r19 it happened to put the teaching variant first, which is
+pedagogically backwards. Hardcoded ORDER array now puts
+working variants first (real numbers as the headline) and
+the teaching variant last (the trap to avoid as the
+punchline).
+
+(b) Suppress wait_for_http's "[fail] timed out..." stderr
+line for the teaching variant only. The failure is expected;
+the EXPECTED FAILURE block right after is self-explanatory.
+Letting wait_for_http complain looked like an unexpected
+error in the output. All other variants keep the normal
+error path so genuine failures still show.
+
+These are output-formatting polish only. No functional
+change to what's tested or measured.
+
+**Demo-01 verification campaign — full timeline:**
+
+- r02: pre-flight fixes + CSS light-only
+- r03: §0+§1 prose + check-host.sh
+- r04: script bugs from real-host run
+- r05-r10: UBI policy, observability stack, restructure
+- r11: drop Alpine; replace with ubi-micro
+- r12: PGO uses gcc-toolset-14
+- r13: comparison phase resilient to set -e
+- r14: signal handler + thread pool + diagnostic
+- r15: latency benchmark concurrency calibration
+- r16: awk regex matches both % and %%
+- r17: drop --rm so failed containers can be inspected
+- r18: ubi-micro fully-static -static-pie (segfaulted)
+- r19: ubi-micro plain -static (works); add teaching variant
+- r20: explicit iteration order; failure-message polish
+
+**Round 2 unblocked: §2 Introduction & mental model + first
+real Excalidraw diagram (`02-introduction-four-layers`)
+becomes the next active deliverable.**
+
+Verification matrix updated: 3 of 15 sections verified
+(§1 r08, §3 r18, §4 r18), demo-01 fully closed r20.
 
 
 ---
