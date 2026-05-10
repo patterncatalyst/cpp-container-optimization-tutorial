@@ -824,6 +824,97 @@ r13 the script should print the size table, the latency table,
 and the label block to completion. If it does, §3 and §4 promote
 to verified.
 
+### 2026-05-09 — r14: main.cpp signal handler + larger thread pool; PGO 0-files diagnostic
+
+User ran demo-01 on r13. Three concrete signals from the run:
+
+1. **Image size comparison printed correctly** — five rows, accurate
+   sizes:
+       cpp-tut/demo-01:single-stage-naive  689   MB
+       cpp-tut/demo-01:pgo-instrumented    124   MB
+       cpp-tut/demo-01:pgo                 114   MB
+       cpp-tut/demo-01:ubi-multistage      114   MB
+       cpp-tut/demo-01:ubi-micro            25.2 MB
+   r13's `--filter` fix worked. ubi-micro at 25.2 MB confirms the
+   r11 architecture choice was sound (vs the previous design's
+   ~120 MB ubi-minimal runtime).
+
+2. **PGO training captured 0 .gcda files**:
+       StopSignal SIGTERM failed to stop container demo01-pgo-train
+       in 10 seconds, resorting to SIGKILL
+       Captured 0 .gcda file(s)
+   Root cause: cpp-httplib's `Server::listen()` is a blocking call
+   with no signal handling. SIGTERM is ignored, podman waits 10s,
+   sends SIGKILL. SIGKILL bypasses `atexit()` handlers — and
+   libgcov writes `.gcda` files via atexit. Result: empty profile
+   directory, the optimized "pgo" build was effectively a release
+   build with no profile data behind it. Same image size as
+   ubi-multistage (114 MB) confirms this — true PGO would have
+   produced a binary even more aggressively inlined.
+
+3. **Latency table showed `?` for the three variants that did run**
+   (and `NORUN` for ubi-micro because its health probe timed out
+   in 20s — first cold start is slow on ubi-micro). The `?`
+   means hey ran but its output didn't contain the "Latency
+   distribution:" block. Root cause: cpp-httplib's default thread
+   pool is `std::thread::hardware_concurrency()`. With `hey -c 100`
+   most connections queue past hey's per-request timeout, no
+   successful latencies recorded, no distribution block printed,
+   nothing for awk to extract.
+
+Plus a related issue spotted in main.cpp: the PGO training POSTs
+to `/echo`, but no `/echo` route was defined. The `|| true` in
+demo.sh swallowed it; even when PGO did capture profiles, half
+the training workload was hitting 404 instead of exercising real
+code paths.
+
+Fixes (r14):
+
+- **`src/main.cpp`** rewritten:
+  - `#include <csignal>`; file-scope `g_srv` pointer plus
+    `handle_signal(int)` that calls `srv.stop()`. `std::signal(SIGTERM, ...)`
+    and `std::signal(SIGINT, ...)` registered at start of main.
+    `srv.listen()` returns when stop() is called, main returns 0,
+    atexit handlers run, libgcov flushes .gcda files cleanly.
+  - `srv.new_task_queue = []() { return new httplib::ThreadPool(64); };`
+    overrides the default-of-hardware_concurrency thread pool.
+    Sized for the hey -c 100 workload with headroom.
+  - Real `srv.Post("/echo", ...)` handler that reads `req.body`,
+    runs the FNV-1a checksum on it, returns the size + hash.
+    Gives PGO training body-handling code paths to profile through
+    instead of generating 404s.
+  - Trailing `std::println("demo-01 stopped cleanly")` so the
+    log shows the binary exited via the signal path, not via
+    crash or SIGKILL.
+
+- **`demo.sh`** — PGO training:
+  - `podman stop -t 20` (was default 10s) for headroom around the
+    signal handler. With the handler in place it should exit in
+    well under 1s; 20s is just safety margin.
+  - After the .gcda count, explicit error block if count is 0
+    that explains the likely causes (signal handling vs path
+    mismatch) and aborts step 2 instead of building an empty PGO.
+
+- **`demo.sh`** — latency loop:
+  - When awk extraction yields empty (the `?` case), append the
+    failing tag to `PARSE_FAILURES` array and after the loop
+    re-run hey against ONE failing variant with full output to
+    `head -25` + sed-prefix. Future runs that hit this can
+    immediately see why hey didn't emit the latency block.
+  - `podman stop -t 5` on benchmark cleanup for faster teardown
+    between variants.
+
+Image audit unchanged: 21 UBI references + 1 Docker Hub exception.
+
+Verification status: pending demo-01 re-run with r14. With r14
+fixes the binary exits cleanly on SIGTERM (so PGO captures real
+.gcda files), the thread pool keeps up with hey -c 100 (so the
+latency table shows real numbers), and the diagnostic surface
+shows enough on failure to debug without another round trip.
+If all four variants build, the PGO profile shows non-zero
+.gcda files captured, and the latency table emits real
+numbers, §3 and §4 promote to verified in r15.
+
 
 ---
 

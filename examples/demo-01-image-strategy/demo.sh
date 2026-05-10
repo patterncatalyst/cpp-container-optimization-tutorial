@@ -92,14 +92,35 @@ if [[ $DO_PGO -eq 1 ]]; then
   hey -n 5000 -c 50 "http://127.0.0.1:${PORT_BASE}/" >/dev/null
   hey -n 2500 -c 25 -m POST -d "$(printf 'x%.0s' {1..512})" \
     "http://127.0.0.1:${PORT_BASE}/echo" >/dev/null || true
-  podman stop demo01-pgo-train >/dev/null
-  note "Captured $(find pgo-profiles -name '*.gcda' | wc -l) .gcda file(s)"
+  # Bump grace to 20s. The binary's signal handler calls srv.stop() and
+  # main() returns cleanly; libgcov's atexit handler then flushes .gcda
+  # files. 20s is plenty for that — without the signal handler the
+  # default 10s SIGTERM grace would fall through to SIGKILL and skip
+  # atexit entirely, which is what r13's run hit.
+  podman stop -t 20 demo01-pgo-train >/dev/null 2>&1 || true
+
+  GCDA_COUNT=$(find pgo-profiles -name '*.gcda' | wc -l)
+  note "Captured ${GCDA_COUNT} .gcda file(s)"
+  if [[ "${GCDA_COUNT}" -eq 0 ]]; then
+    echo
+    echo "$(color '1;31' "ERROR")  Zero .gcda files captured. The optimized PGO build"
+    echo "       would be a release build with no actual profile data."
+    echo "       Likely causes:"
+    echo "       - Binary didn't shut down cleanly (SIGTERM ignored, SIGKILL"
+    echo "         used; libgcov's atexit handler never ran)"
+    echo "       - The bind-mount path doesn't match the build path baked"
+    echo "         into the instrumented binary"
+    echo "       Skipping PGO step 2; ./demo.sh --clean and try again."
+    DO_PGO=0
+  fi
 
   # No separate merge step needed for GCC PGO — .gcda files go straight
   # into the optimized build context via the optimized stage's COPY.
 
-  header "Building PGO step 2 (optimized using gathered profile)"
-  podman build -f Containerfile.pgo --target optimized -t "${IMG_PREFIX}:pgo" .
+  if [[ $DO_PGO -eq 1 ]]; then
+    header "Building PGO step 2 (optimized using gathered profile)"
+    podman build -f Containerfile.pgo --target optimized -t "${IMG_PREFIX}:pgo" .
+  fi
 fi
 
 # ---------------------------------------------------------------------
@@ -127,6 +148,7 @@ declare -A IMAGES=(
 
 printf '\n%-22s  %-10s  %-10s  %-10s\n' "image" "p50 (ms)" "p95 (ms)" "p99 (ms)"
 printf -- '-%.0s' {1..62}; echo
+PARSE_FAILURES=()
 for tag in "${!IMAGES[@]}"; do
   port="${IMAGES[$tag]}"
   podman run --rm -d --name "demo01-bench-${tag}" -p "${port}:8080" "${IMG_PREFIX}:${tag}" >/dev/null
@@ -135,12 +157,35 @@ for tag in "${!IMAGES[@]}"; do
     p50=$(awk '/50% in/ {print $3 * 1000}' <<<"$out")
     p95=$(awk '/95% in/ {print $3 * 1000}' <<<"$out")
     p99=$(awk '/99% in/ {print $3 * 1000}' <<<"$out")
-    printf '%-22s  %-10s  %-10s  %-10s\n' "$tag" "${p50:-?}" "${p95:-?}" "${p99:-?}"
+    if [[ -z "$p50" ]]; then
+      # Capture the first 30 lines of hey's output for diagnosis;
+      # most often this means hey saw all-failure responses and
+      # didn't emit the "Latency distribution:" block.
+      PARSE_FAILURES+=("$tag")
+      printf '%-22s  %-10s  %-10s  %-10s\n' "$tag" "?" "?" "?"
+    else
+      printf '%-22s  %-10s  %-10s  %-10s\n' "$tag" "${p50}" "${p95}" "${p99}"
+    fi
   else
     printf '%-22s  %-10s  %-10s  %-10s\n' "$tag" "NORUN" "NORUN" "NORUN"
   fi
-  podman stop "demo01-bench-${tag}" >/dev/null 2>&1 || true
+  podman stop -t 5 "demo01-bench-${tag}" >/dev/null 2>&1 || true
 done
+
+# Diagnostic: if any variant didn't parse, re-run one of them with full
+# output captured so the user (or the next reviewer) can see why.
+if (( ${#PARSE_FAILURES[@]} > 0 )); then
+  failtag="${PARSE_FAILURES[0]}"
+  failport=$((PORT_BASE + 10))
+  echo
+  note "Re-running '${failtag}' to capture hey's full output for diagnosis:"
+  podman run --rm -d --name "demo01-bench-diag" -p "${failport}:8080" \
+    "${IMG_PREFIX}:${failtag}" >/dev/null 2>&1 || true
+  if wait_for_http "http://127.0.0.1:${failport}/healthz" 20; then
+    hey -n 1000 -c 50 "http://127.0.0.1:${failport}/" 2>&1 | head -25 | sed 's/^/    | /'
+  fi
+  podman stop -t 5 "demo01-bench-diag" >/dev/null 2>&1 || true
+fi
 
 # ---------------------------------------------------------------------
 header "Image labels (provenance for each build)"
