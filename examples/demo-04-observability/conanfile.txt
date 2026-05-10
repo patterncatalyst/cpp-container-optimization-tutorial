@@ -21,9 +21,21 @@
 # 1.18.0+ regenerated its proto stubs against the post-1.65 gRPC
 # ABI (Status() default-ctor instead of Status::OK), so the link
 # resolves cleanly. See G-22 in the reconciliation plan.
+#
+# Why grpc/1.62.0 pinned (G-23): r42 bumped OTel-cpp but the
+# linker still couldn't find grpc::Status::OK or
+# grpc::GetGlobalCallbackHook(). Turned out OTel-cpp 1.18.0's
+# pre-built libopentelemetry_proto_grpc.a still references those
+# symbols (the ABI assumption was wrong, or the recipe pinned a
+# gRPC version where the symbols existed at build time but Conan
+# resolved a different gRPC for our profile at link time).
+# Pinning grpc/1.62.0 ensures we link against a known version
+# where both symbols exist as linkable members, matching what
+# OTel-cpp's pre-built archives expect.
 
 [requires]
 opentelemetry-cpp/1.18.0
+grpc/1.62.0
 
 [generators]
 CMakeDeps

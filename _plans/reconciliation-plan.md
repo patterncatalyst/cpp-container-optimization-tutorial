@@ -1529,6 +1529,146 @@ that helped here:
 
 ---
 
+### G-23 · `target_link_libraries`-injected `--start-group` produces an empty group; CMake reorders flags away from libraries (r44)
+
+**Problem.** r41 added `-Wl,--start-group` and
+`-Wl,--end-group` as items inside `target_link_libraries`
+to wrap the umbrella's expanded archives in a linker
+group, intending to make `ld` iterate over the static
+archives until cross-archive symbols (specifically
+`grpc::Status::OK` and `grpc::GetGlobalCallbackHook()`
+referenced by `libopentelemetry_proto_grpc.a`) resolved.
+After r42's OTel-cpp bump failed to escape the symbols,
+careful re-reading of the actual link command revealed
+the grouping had been a no-op all along:
+
+    ... -Wl,-rpath,...:  -Wl,--start-group  -Wl,--end-group  /root/.conan2/.../libopentelemetry_exporter_otlp_grpc_log.a  ...
+
+Both linker flags adjacent. Nothing between. The actual
+library list follows after `--end-group`, completely
+unwrapped. The linker proceeded with standard left-to-
+right archive resolution, and `libopentelemetry_proto_grpc.a`
+ended up after `libgrpc++.a` in the link order, exactly
+the order issue G-21 thought it was fixing.
+
+**Why.** CMake's `target_link_libraries` reorders its
+items when assembling the link command. Library targets
+(imported or built) get expanded into file paths and
+placed at the library position in the link command
+template. Items that look like linker flags
+(`-Wl,--start-group` etc.) get categorized as
+LINK_OPTIONS and placed at the LINK_FLAGS position —
+which in the default
+`CMAKE_CXX_LINK_EXECUTABLE` template is **before**
+`<LINK_LIBRARIES>`. So both flags ended up adjacent at
+the LINK_FLAGS position, with the actual libraries
+following after both. Empty group.
+
+This is documented CMake behavior, not a bug:
+`target_link_libraries` is for libraries; linker flag
+positioning relative to libraries needs different
+machinery.
+
+**Failure modes considered:**
+
+1. Use `$<LINK_GROUP:RESCAN,...>` (CMake 3.24+) — the
+   canonical way to wrap libraries in `--start-group`/
+   `--end-group`. Doesn't work for our case because
+   the umbrella `opentelemetry-cpp::opentelemetry-cpp`
+   is an INTERFACE imported target, and
+   `LINK_GROUP` explicitly doesn't accept INTERFACE
+   targets. Would need to enumerate the per-component
+   targets, which defeats the umbrella's purpose.
+2. `target_link_options(... BEFORE PRIVATE "LINKER:--start-group")`
+   followed by libraries and a closing
+   `target_link_options(... PRIVATE "LINKER:--end-group")`.
+   Same reordering problem: both linker options end
+   up at the LINK_FLAGS position regardless of
+   `BEFORE`/`AFTER` keyword on the libraries.
+3. Inline `-Wl,--start-group,libA.a,libB.a,-Wl,--end-group`
+   as a single comma-separated linker flag string.
+   Brittle: would have to manually enumerate every
+   .a file by absolute path.
+
+**Fix.** Override `CMAKE_CXX_LINK_EXECUTABLE` to inject
+`-Wl,--start-group` and `-Wl,--end-group` directly into
+the link command template, surrounding `<LINK_LIBRARIES>`:
+
+    set(CMAKE_CXX_LINK_EXECUTABLE
+        "<CMAKE_CXX_COMPILER> <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> -Wl,--start-group <LINK_LIBRARIES> -Wl,--end-group")
+
+This bypasses CMake's flag-vs-library categorization
+because the flags are now part of the template itself,
+positioned by string concatenation rather than
+reordered by CMake's link rule logic. The group
+actually wraps `<LINK_LIBRARIES>`, which is the
+expanded library list. `ld` iterates, and any
+cross-archive symbol it can find anywhere in the
+group resolves.
+
+Caveat: this template override is **global to all C++
+executables** in the project. For demo-04 that's fine
+(one executable). For a larger project, scoping via
+`set_property(TARGET ... PROPERTY ...)` or a conditional
+generator expression would be preferred — but
+`CMAKE_CXX_LINK_EXECUTABLE` is not a target property,
+so there's no target-scoped equivalent. Global override
+with a comment explaining why is the standard workaround.
+
+**Paired with G-23 fix: pin grpc/1.62.0.** Even if the
+grouping fixes the order, we still don't know whether
+the OTel-cpp 1.18.0 pre-built archives reference
+`Status::OK` and `GetGlobalCallbackHook()` against a
+gRPC version that has them. r42 assumed 1.18.0 was
+regenerated against newer gRPC ABI; the persistent
+undefined refs disproved that assumption. Belt-and-
+suspenders: also pin `grpc/1.62.0` (older, known to
+have both symbols as linkable members) so that the
+link gets a consistent gRPC regardless. If the link
+succeeds, we won't know which fix was load-bearing,
+but the build works either way.
+
+**Discoverability lessons:**
+
+- **Read the actual link command from a failing build.**
+  CMake-emitted link lines are long and full of paths,
+  but the position of `-Wl,--start-group` /
+  `-Wl,--end-group` relative to the library list is
+  trivially checkable by eye. The bug in r41's fix
+  would have been visible in r41's terminal output if
+  inspected; it took until r42's identical-output
+  failure to look closely. Habit: when a static-link
+  fix appears not to work, **diff the link line
+  before-and-after the fix** to confirm the fix
+  actually changed anything.
+- **`target_link_libraries` items aren't just labels —
+  they have types.** Anything starting with `-` becomes
+  a LINK_OPTION. Anything that looks like a target name
+  or path becomes a library. The two are placed at
+  **different positions** in the link command. Trying
+  to interleave them through ordering in the function
+  call doesn't work; CMake re-sorts.
+- **`CMAKE_CXX_LINK_EXECUTABLE` is the escape hatch
+  for any case where CMake's link-command machinery
+  produces the wrong shape.** Heavyweight, but
+  surgical. The standard pattern for problems that
+  the higher-level abstractions can't reach.
+
+**Tutorial value.** This pairs naturally with the
+G-22 transitive-ABI lesson. G-22 is "two of your deps
+disagree about an ABI version" — a problem with the
+ecosystem outside your control. G-23 is "your tool's
+abstractions can hide the wire format of what they
+emit" — a problem with the tool whose behavior you
+need to understand. Both are forms of the same
+general skill: **when something doesn't work, drop
+one layer of abstraction and inspect the actual
+mechanism**. The link command, the linker error,
+the changelog. Don't trust that the high-level
+APIs are doing what they say.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -5425,6 +5565,174 @@ check.
   was hand-drawn directly. Authoring an .excalidraw
   that round-trips to the same SVG is a follow-up;
   download links work today by serving the placeholder.
+
+### 2026-05-10 — r44: G-23 — fix the link grouping for real (`CMAKE_CXX_LINK_EXECUTABLE` override) + pin grpc/1.62.0 as ABI backstop
+
+User reran after r42's bump. Same undefined references,
+this time at the *same line in trace_service.grpc.pb.cc.o*
+of the same archive `libopentelemetry_proto_grpc.a`. The
+r42 OTel-cpp bump to 1.18.0 did not change which symbols
+the proto_grpc archive references. So either the
+recipe's gRPC version constraint resolves to a different
+gRPC than the one our profile got, or the bump simply
+wasn't the right hypothesis.
+
+Reading the user's full link command from this round
+carefully exposed a second, much more embarrassing bug:
+
+    ... -Wl,-rpath,...:  -Wl,--start-group  -Wl,--end-group  /root/.conan2/.../libopentelemetry_exporter_otlp_grpc_log.a  ...
+
+`-Wl,--start-group` and `-Wl,--end-group` are
+**adjacent**, with **nothing wrapped between them**. The
+group is empty. The actual library list follows after
+`--end-group`, completely unwrapped. r41's grouping fix
+was a no-op the whole time; r42's OTel-cpp bump was the
+only real change in flight, and it didn't escape the
+symbol references either.
+
+**Why r41 was a no-op.** `target_link_libraries` items
+that look like linker flags (`-Wl,...`) become
+LINK_OPTIONS; items that look like targets or paths
+become libraries. CMake assembles the link command from
+a template like `<FLAGS> <LINK_FLAGS> <OBJECTS> -o
+<TARGET> <LINK_LIBRARIES>` — flags go at the LINK_FLAGS
+position, libraries at the LINK_LIBRARIES position.
+Order *between* the two positions is fixed by the
+template. So both `-Wl,--start-group` and
+`-Wl,--end-group` ended up at LINK_FLAGS together,
+adjacent, with the libraries following after both. Empty
+group. The grouping never wrapped anything.
+
+This is documented CMake behavior. It's been a footgun
+since the cross-archive-deps problem became common.
+
+**Two-pronged r44 fix:**
+
+1. **Real grouping via `CMAKE_CXX_LINK_EXECUTABLE`
+   override.** Overrode the link command template
+   directly to inject `-Wl,--start-group` and
+   `-Wl,--end-group` around `<LINK_LIBRARIES>`:
+
+       set(CMAKE_CXX_LINK_EXECUTABLE
+           "<CMAKE_CXX_COMPILER> <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> -Wl,--start-group <LINK_LIBRARIES> -Wl,--end-group")
+
+   Bypasses CMake's flag-vs-library categorization
+   because the group flags are now part of the
+   *template itself*, positioned by string
+   concatenation rather than reordered by CMake's
+   link-rule logic. The group actually wraps
+   `<LINK_LIBRARIES>` this time. ld iterates the
+   wrapped archives until no more cross-archive
+   symbols resolve.
+
+   Caveat: this template override is global to all
+   C++ executables in the project. demo-04 has one
+   binary so that's fine. For a multi-binary project,
+   scoping would matter — but
+   `CMAKE_CXX_LINK_EXECUTABLE` is not a target
+   property; there's no clean target-scoped
+   equivalent. Globally-scoped override with a
+   prominent comment is the documented workaround.
+
+2. **Pin grpc/1.62.0 as ABI backstop.** Even if the
+   grouping fix is sufficient, we still don't know
+   whether OTel-cpp 1.18.0's pre-built archives
+   reference `Status::OK` and
+   `GetGlobalCallbackHook()` against a gRPC version
+   that has them as linkable symbols. r42 *assumed*
+   1.18.0 was regenerated against the post-1.65
+   gRPC ABI; the persistent undefined refs disproved
+   that assumption. Pinning `grpc/1.62.0` in our
+   conanfile (a version old enough to still have
+   both symbols as linkable members, new enough to
+   have Conan Center binaries) ensures the link
+   gets a consistent gRPC regardless of how
+   OTel-cpp's recipe resolves its transitive
+   constraints.
+
+   If the grouping was load-bearing and the version
+   pin was unnecessary overkill: link succeeds, no
+   harm. If the version pin was load-bearing and the
+   grouping was unnecessary overkill: link succeeds,
+   no harm. If both were needed: link succeeds. If
+   neither helps: we learn something new and r45
+   picks a different angle (probably bump OTel-cpp
+   further or pin grpc/1.54.3).
+
+**Promoted to G-23** in Gotchas. Full Problem/Why/Fix
+with:
+
+- The link-command-inspection diagnostic move
+  (`-Wl,--start-group  -Wl,--end-group` adjacent =
+  empty group = the fix isn't applied).
+- The CMake `target_link_libraries` categorization
+  rule (flags vs libraries go to different positions
+  by template, not by call-site order).
+- The three failure-modes considered
+  (`$<LINK_GROUP:RESCAN>`, `target_link_options
+  BEFORE`, inline comma-separated `-Wl,--start-group,...`)
+  and why each doesn't fit our case.
+- The `CMAKE_CXX_LINK_EXECUTABLE` override as the
+  escape hatch when CMake's link-command machinery
+  produces the wrong shape.
+- Pair with G-22: G-22 is "two deps disagree about
+  an ABI version"; G-23 is "your tool's
+  abstractions can hide the wire format of what
+  they emit." Both teach: **when something doesn't
+  work, drop one layer and inspect the actual
+  mechanism** (link command, linker error,
+  changelog).
+
+**What this round does NOT do:**
+
+- Doesn't touch main.cpp (compile already worked in
+  r40).
+- Doesn't change the umbrella-target choice (still
+  `opentelemetry-cpp::opentelemetry-cpp`).
+- Doesn't actually run the build. User's next
+  attempt.
+
+**Anticipated outcomes:**
+
+- **Best case — both fixes work, link succeeds, demo
+  builds:** r45 verifies the container starts,
+  emits signals, dashboard renders. §10 flips to
+  verified.
+- **Grouping works, version pin is harmless overkill:**
+  same as best case; we won't know which fix was
+  load-bearing.
+- **Version pin works, grouping is harmless overkill:**
+  same as best case.
+- **Both needed:** rare but possible — when
+  cross-archive symbols are *present* in the
+  provider archive but the consumer archive
+  references a slightly different mangling, both
+  fixes can help simultaneously.
+- **Neither helps:** something deeper. r45 picks a
+  different angle — bump OTel-cpp to 1.19/1.20 if
+  Conan Center has those, or pin grpc to a different
+  version (1.54.3 is very conservative).
+
+**Build-time cost.** Pinning grpc/1.62.0 will trigger
+Conan to rebuild gRPC from source (different package
+id from the one cached). Probably ~10-15 min for
+gRPC + dependent rebuilds. Then OTel-cpp 1.18.0 may
+need a rebuild too if its package_id changes due to
+the gRPC change. Worst case ~25 min, best case
+~12 min.
+
+**Cumulative round count: r44.** Demo-04 is now 16
+rounds in (r28→r44). The shape of the remaining
+work is getting clearer: we're past every conceivable
+container/distro/repo issue, past every Conan
+recipe/component-naming/options issue, past every API
+drift issue in our own source, and now in the home
+stretch on a static-linker-meets-version-mismatch
+issue that's well-documented in the C++ ecosystem.
+Each gotcha from G-12 through G-23 is the kind of
+thing a senior engineer learns once and remembers
+forever; the appendix and Gotchas section turn
+that learning into shareable knowledge.
 
 ---
 
