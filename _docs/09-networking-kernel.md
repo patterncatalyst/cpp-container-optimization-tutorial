@@ -23,7 +23,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="08-networking-veth-vs-host" caption="Packet path under default veth+bridge versus `--network=host`" %}
+{% include excalidraw.html name="09-networking-veth-vs-host" caption="Packet path under default veth+bridge versus `--network=host`" %}
 
 ## Planned content
 

@@ -32,7 +32,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="11-debug-sidecar-pattern" caption="Ephemeral gdb sidecar attaching to a running container's PID namespace; ASan-instrumented variant alongside" %}
+{% include excalidraw.html name="12-debug-sidecar-pattern" caption="Ephemeral gdb sidecar attaching to a running container's PID namespace; ASan-instrumented variant alongside" %}
 
 ## Planned content
 

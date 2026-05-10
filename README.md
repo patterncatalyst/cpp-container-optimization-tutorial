@@ -1,4 +1,4 @@
-# Optimizing C++20/23 with Containers
+# Optimizing Modern C++ with Containers
 
 A 1.5-3 hour technical presentation, paired Jekyll site, and six
 runnable Podman demos that teach modern-C++ performance work under

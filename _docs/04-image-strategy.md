@@ -20,7 +20,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="03-image-strategy-multistage" caption="UBI runtime tiers (ubi, ubi-minimal, ubi-micro) trade-off matrix" %}
+{% include excalidraw.html name="04-image-strategy-multistage" caption="UBI runtime tiers (ubi, ubi-minimal, ubi-micro) trade-off matrix" %}
 
 ## Planned content
 

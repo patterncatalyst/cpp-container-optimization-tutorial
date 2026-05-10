@@ -1,4 +1,4 @@
-# Product Requirements Document — Optimizing C++20/23 with Containers
+# Product Requirements Document — Optimizing Modern C++ with Containers
 
 > Source brief: a 1.5-3 hour technical presentation + companion
 > tutorial site teaching modern-C++ performance work inside

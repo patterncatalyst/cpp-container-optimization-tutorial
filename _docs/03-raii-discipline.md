@@ -20,6 +20,8 @@ in the function. Constructor acquires; destructor releases;
 the language runs both for you on every exit path, including
 the exit paths you forgot existed.
 
+{% include excalidraw.html name="03-raii-discipline" caption="RAII vs manual cleanup: parallel function flows showing how RAII destructors fire on every exit path while manual close() loses the resource on early returns and exceptions" %}
+
 On a development workstation with 64 cores, 64 GB of RAM, and
 nothing else competing, leaking a few hundred file descriptors
 or a hundred MB of memory is cosmetic. The kernel reclaims it

@@ -5326,6 +5326,106 @@ permanently in the plan and the appendix. The user's
 patience here is making demo-04's foundation rock-solid
 for everyone who comes after.
 
+### 2026-05-10 — r43: site-shaping pass — title rename, §15 count fix, RAII diagram embed, post-renumber diagram-reference repair
+
+User asked for three site changes while r42's build runs.
+While in there, fixed an eleven-section bug in the
+diagram-reference layer that r27's renumber introduced
+and didn't catch.
+
+**Three explicit asks:**
+
+1. **Title rename.** Drop "C++20/23" from the project
+   title; use "Optimizing Modern C++ with Containers"
+   instead. The "C++20/23" wording was over-specifying;
+   the tutorial's relevance extends to modern C++
+   broadly. Updated in:
+   - `README.md`
+   - `_config.yml`
+   - `index.html` (front-matter)
+   - `PRD.md` (kept consistent with public title)
+
+   Body text inside README and index.html that mentions
+   "C++20/23 data structures" or "C++20/23 performance
+   work" wasn't changed — those describe specific
+   content accurately and aren't titles.
+
+2. **§15 count fix.** "Where to Go Next" said "The three
+   reference books" but listed four (Andrist & Sehr,
+   Enberg, Ghosh, Iglberger). The Ghosh book was added
+   in an earlier round without updating the heading.
+   "three" → "four".
+
+3. **RAII diagram embed.** §3 (RAII & Container Resource
+   Discipline) had a hand-authored
+   `diagrams/03-raii-discipline.svg` from r27 but the
+   doc page didn't `{% include excalidraw.html %}` it,
+   so it didn't render. Added the embed right after the
+   opening framing paragraph, with a caption that
+   matches the SVG's aria-label.
+
+**One bonus repair shipped in the same round:**
+
+4. **Eleven off-by-one diagram references.** When r27
+   inserted §3 RAII and renumbered the original §3-§14
+   to §4-§15, the .svg/.excalidraw filenames got
+   `git mv`'d to match the new section numbers (e.g.,
+   `03-image-strategy-multistage.svg` →
+   `04-image-strategy-multistage.svg`). But the
+   `{% include excalidraw.html name="..." %}` calls
+   inside the doc pages still referenced the OLD
+   filenames. So §4 through §14 each rendered the
+   include's "diagram hasn't been drawn yet"
+   placeholder instead of the actual SVG, on every
+   page of the site. The bug was invisible until
+   someone noticed missing diagrams.
+
+   Eleven `sed -i` calls updated each doc's `name=`
+   parameter to match the renumbered file:
+
+       §4  03-image-strategy-multistage  → 04-image-strategy-multistage
+       §5  04-compile-time-pgo-flow      → 05-compile-time-pgo-flow
+       §6  05-stl-layout-flat-vs-node    → 06-stl-layout-flat-vs-node
+       §7  06-allocator-stack            → 07-allocator-stack
+       §8  07-io-uring-rings             → 08-io-uring-rings
+       §9  08-networking-veth-vs-host    → 09-networking-veth-vs-host
+       §10 09-observability-otel-stack   → 10-observability-otel-stack
+       §11 10-isolation-cgroup-tree      → 11-isolation-cgroup-tree
+       §12 11-debug-sidecar-pattern      → 12-debug-sidecar-pattern
+       §13 12-reproducibility-conan-flow → 13-reproducibility-conan-flow
+       §14 13-pitfalls-avx512-mismatch   → 14-pitfalls-avx512-mismatch
+
+   §1 (prerequisites) and §2 (introduction) were
+   unaffected because they kept their numbers across
+   the renumber.
+
+   Verification: a small shell loop walks every doc's
+   include, looks up the .svg by name, and prints `✓`
+   if found. All 15 references now resolve. Run the
+   loop again before any future renumber to catch
+   this immediately.
+
+**Lesson for §13's renumber-discipline checklist.**
+When a renumber `git mv`'s diagram files, also
+search-and-replace every `name=` parameter in the
+doc pages. The include resolves names to filenames
+through string concatenation; there's no compile-time
+check.
+
+**What this round does NOT do:**
+
+- Doesn't change demo-04 (still chasing G-22's r42 fix
+  in parallel; user's build is running).
+- Doesn't change presentation-format files (PPTX,
+  reveal.js if any) — those weren't in the user's
+  asks. Could be done as follow-up if the title also
+  lives there.
+- Doesn't author a real .excalidraw for §3 RAII. The
+  current .excalidraw is a placeholder stub; the SVG
+  was hand-drawn directly. Authoring an .excalidraw
+  that round-trips to the same SVG is a follow-up;
+  download links work today by serving the placeholder.
+
 ---
 
 ## Known divergences from the PRD

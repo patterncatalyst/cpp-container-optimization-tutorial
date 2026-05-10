@@ -23,7 +23,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="05-stl-layout-flat-vs-node" caption="Cache-line footprint: `vector<T>` vs `flat_set<T>` vs `unordered_map<K,V>`" %}
+{% include excalidraw.html name="06-stl-layout-flat-vs-node" caption="Cache-line footprint: `vector<T>` vs `flat_set<T>` vs `unordered_map<K,V>`" %}
 
 ## Planned content
 

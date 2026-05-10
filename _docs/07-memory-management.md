@@ -26,7 +26,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="06-allocator-stack" caption="The allocator stack: app → PMR resource → glibc malloc / jemalloc / mimalloc → page cache → cgroup memory.high → cgroup memory.max → host" %}
+{% include excalidraw.html name="07-allocator-stack" caption="The allocator stack: app → PMR resource → glibc malloc / jemalloc / mimalloc → page cache → cgroup memory.high → cgroup memory.max → host" %}
 
 ## Planned content
 

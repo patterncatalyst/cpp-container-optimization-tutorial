@@ -11,7 +11,7 @@ You can build, ship, observe, and tune a C++23 service in a
 rootless Podman container, on a Linux host, and reason about the
 levers from compile time to runtime cgroup. That's a lot.
 
-## The three reference books
+## The four reference books
 
 If you want one to read next, in order of how directly each
 extends what we did:
