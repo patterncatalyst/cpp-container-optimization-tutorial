@@ -358,7 +358,7 @@ The repo lays out as:
 │   └── ...
 ├── observability/             # Grafana/Prom/Mimir/Tempo/Loki stack
 ├── scripts/                   # helpers + per-demo test scripts
-└── assets/diagrams/           # paired SVG + .excalidraw files
+└── diagrams/                  # paired SVG + .excalidraw files
 ```
 
 ## Run the host-check script

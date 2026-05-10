@@ -2,14 +2,14 @@
 Diagram gallery card. Used by /diagrams/. Required parameters:
 
   file     — basename without extension; resolves to
-             /assets/diagrams/<file>.svg + /assets/diagrams/<file>.excalidraw
+             /diagrams/<file>.svg + /diagrams/<file>.excalidraw
   section  — short label like "§3"
   title    — short title for card and modal heading
   caption  — one-line description shown under the card and in the modal
 {%- endcomment -%}
 
-{%- assign svg_url = include.file | prepend: '/assets/diagrams/' | append: '.svg' | relative_url -%}
-{%- assign src_url = include.file | prepend: '/assets/diagrams/' | append: '.excalidraw' | relative_url -%}
+{%- assign svg_url = include.file | prepend: '/diagrams/' | append: '.svg' | relative_url -%}
+{%- assign src_url = include.file | prepend: '/diagrams/' | append: '.excalidraw' | relative_url -%}
 
 <article class="gallery-card"
          data-svg="{{ svg_url }}"

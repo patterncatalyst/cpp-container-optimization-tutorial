@@ -266,7 +266,7 @@ Yes — paired SVG + Excalidraw JSON, embedded in both the Jekyll
 site and the PPTX deck.
 
 Naming convention: `<section-number>-<topic>-<thing>.svg` and the
-matching `.excalidraw`. Both files live under `assets/diagrams/`.
+matching `.excalidraw`. Both files live under `diagrams/`.
 The Jekyll `excalidraw.html` include from the skeleton renders the
 SVG inline and offers a "Download Excalidraw source" link.
 
@@ -311,7 +311,7 @@ title slide via the `pptx` skill flow.
   on Fedora 44 Silverblue (toolbox)
 - The PPTX export builds cleanly from the Jekyll site content
   without manual edits to slide layout
-- Every section has a paired diagram in `assets/diagrams/`
+- Every section has a paired diagram in `diagrams/`
 
 ### Adoption metrics (slow signals)
 

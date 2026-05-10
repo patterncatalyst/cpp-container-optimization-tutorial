@@ -84,3 +84,13 @@ exclude:
     # examples.html page that lists the cards, causing /examples/ on the
     # live site to 404. Keep the slash.
     - examples/
+    # presentation/ holds the PPTX deliverable. Linked to from the site
+    # via the homepage and §0; the .pptx itself ships in releases, not
+    # in the rendered HTML.
+    - presentation/
+    # diagrams/ as a folder IS served (.svg and .excalidraw both end up
+    # at /diagrams/<name>.{svg,excalidraw}) — but the README inside is
+    # for editors of the diagrams, not site readers.
+    - diagrams/README.md
+    - pre-pull.sh
+    - verify-stacks.sh

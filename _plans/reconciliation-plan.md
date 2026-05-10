@@ -435,7 +435,56 @@ reports clean.
 
 ---
 
-## Known divergences from the PRD
+### 2026-05-09 — r07: diagrams promoted to top-level; presentation/ folder added
+
+User asked to put the PPTX in a `presentation/` folder and the
+Excalidraw `.svg`+`.excalidraw` pairs in a `diagrams/` folder, with
+the question "or are they already in _assets?" — they were under
+`assets/diagrams/`, which works for Jekyll but buries them two
+folders deep relative to the reference repos
+(`patterncatalyst/otel-observability-demos`,
+`patterncatalyst/hummingbird-tutorial`).
+
+Moved to top-level layout:
+
+- **`diagrams/`** at the repo root — 13 paired `.svg` + `.excalidraw`
+  files, plus the README documenting the format. `git mv` from
+  `assets/diagrams/` so blame and history follow.
+- **`presentation/`** at the repo root — placeholder README only
+  (round 11 produces the actual PPTX). README documents the planned
+  build pipeline: `tools/build-pptx.py` reads `_docs/`, embeds the
+  SVGs from `diagrams/`, and writes the .pptx. Borrows the
+  "single-source-of-truth → multiple deliverables" pattern from
+  `otel-observability-demos`.
+- **Jekyll plumbing**: updated `_includes/excalidraw.html` and
+  `_includes/diagram-card.html` to resolve `/diagrams/<name>.svg`
+  instead of `/assets/diagrams/<name>.svg`. Jekyll auto-serves any
+  non-underscore folder, so no extra config needed.
+- **`_config.yml` exclude list**: added `presentation/` (PPTX is a
+  release artifact, not site content), `diagrams/README.md` (editor
+  doc, not reader content), `pre-pull.sh`, `verify-stacks.sh`. The
+  `diagrams/` folder itself stays *included* so its contents serve
+  at `/diagrams/<name>.svg`.
+- **`assets/` is now `assets/css/site.css` only** — kept for future
+  CSS additions and the Jekyll convention.
+
+Doc sweep: replaced `assets/diagrams/` with `diagrams/` in §1's
+repo layout diagram, in PRD.md, and in the inline comment of
+`excalidraw.html`. Historical reconciliation log entries (r02, r03)
+that described seeding `assets/diagrams/` are left as-is — they're
+the historical record.
+
+URL collision check: `diagrams.html` has explicit
+`permalink: /diagrams/`, generating `_site/diagrams/index.html`.
+The static folder copies SVGs to `_site/diagrams/<name>.svg`. They
+coexist — `/diagrams/` serves the gallery page, `/diagrams/foo.svg`
+serves the file. Same pattern hummingbird uses.
+
+Verification status: §1 still drafted. The path change is
+mechanical and shouldn't affect check-host.sh outcomes; user
+confirms with another clean run.
+
+
 
 A running list of things the shipped tutorial does differently from
 what the PRD says. Update as you discover them; the gap between
