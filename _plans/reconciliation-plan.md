@@ -403,6 +403,135 @@ prefixes:
 
 ---
 
+## Option B execution checklist
+
+**Goal:** flip §10 (Observability & Profiling) in the section
+verification matrix from `[x] drafted` to `[x] drafted [x]
+verified`. End state: the LGTM stack proven to receive a real
+C++-emitted trace, metric, and log, plus one Grafana panel
+rendering the metric.
+
+**Time:** ~30 min if smooth; up to 2 hr if the OTel-cpp build
+or pipeline plumbing needs unsticking. The Containerfile
+builds opentelemetry-cpp from source, which is the long pole
+on a clean cache (10-20 min). Subsequent runs are 2-3 min.
+
+**Phase 0 — sanity** (~2 min)
+
+```
+./scripts/verify-stacks.sh
+```
+
+Confirms the obs stack itself comes up clean and Grafana
+answers `/api/health`. If this is red, **stop here** —
+nothing else in option B will work until Phase 0 is green.
+Most likely culprit: rootless podman + port 3000 binding.
+Fall through to G-NN entries and fix before continuing.
+
+**Phase 1 — bring up by hand** (~5 min, faster on warm cache)
+
+```
+cd observability && podman compose up -d
+podman ps                          # one container running
+curl -sf 127.0.0.1:3000/api/health # {"database": "ok", ...}
+curl -sf 127.0.0.1:3200/ready      # tempo
+curl -sf 127.0.0.1:9090/-/ready    # mimir prom-compat
+curl -sf 127.0.0.1:3100/ready      # loki
+cd ..
+```
+
+If any of those four don't return ready within ~60 s, that's
+a new G-NN gotcha entry and the rest of the day pivots to
+fixing it. Note the failure mode (which port, which response)
+before tearing down.
+
+**Phase 2 — full end-to-end test, scripted** (~3-20 min)
+
+```
+./scripts/test-demo-04-observability.sh
+```
+
+This is the one script that does the whole thing: brings up
+stack + service, runs 30 s of hey workload, sleeps 15 s for
+the export pipeline to drain, probes Tempo / Mimir / Loki
+APIs with retry, prints PASS or FAIL with a per-signal
+breakdown.
+
+First run is slow (Containerfile builds opentelemetry-cpp
+from source). Subsequent runs hit podman's layer cache. If
+the build fails, that's likely the OTel-cpp v1.16.1 source
+not agreeing with UBI 9.4's gRPC/protobuf/abseil — note
+which CMake step failed and either bump `OTEL_TAG` in
+`examples/demo-04-observability/Containerfile` or drop
+`-DWITH_OTLP_GRPC` for `-DWITH_OTLP_HTTP` and switch the
+exporter calls in `src/main.cpp`.
+
+**Phase 3 — Grafana panel** (~5 min)
+
+Stack should still be up after Phase 2 if you used
+`--keep`. Otherwise re-up and skip the workload step:
+
+```
+./scripts/test-demo-04-observability.sh --keep
+# (after PASS, stack stays up)
+
+# OR re-bring-up just to look at the dashboard:
+cd examples/demo-04-observability
+podman compose -f compose.yml -f ../../observability/compose.yml up -d
+```
+
+Then:
+
+1. Open `http://127.0.0.1:3000` (anonymous viewer).
+2. Navigate to Dashboards → Tutorial → "Demo overview".
+3. Confirm panels render: Request rate (stat), Latency
+   p50/p95/p99 (timeseries), Service logs (logs panel),
+   Recent traces (table).
+4. If a panel reads "No data" but the test script said the
+   signal landed, the dashboard datasource UID likely
+   doesn't match the lgtm image's defaults. Fix: open the
+   panel JSON, replace the `datasource.uid` with the
+   actual UID from Grafana's datasources page, save, export
+   the dashboard JSON, commit it back.
+5. Screenshot the working dashboard to attach to the r29
+   verification entry.
+
+**Phase 4 — close out** (~5 min)
+
+When the test script reads `PASS` and the dashboard
+renders, §10 is verified end-to-end. To record that:
+
+1. Flip §10 row in the section verification matrix above:
+   `unverified` → `verified (r29)`.
+2. Update the verifier-notes column with what hardware
+   the test ran on (Fedora 44, kernel, CPU, memory) and
+   what specific timing was observed (build time, signal
+   ingest delay).
+3. Add a new round entry to the Verification log
+   describing the run.
+4. Add any newly-encountered gotchas to the Gotchas
+   section (G-12, G-13, ...).
+5. Update G.4 in the at-a-glance: `0 / 6 → 1 / 6` for
+   demos passing test scripts.
+
+**What the upgraded script DOES NOT do:**
+
+- Doesn't run `verify-stacks.sh` for you (Phase 0 is on
+  you — keep them separate so you can debug stack-only
+  vs full-roundtrip issues independently).
+- Doesn't auto-import the dashboard. The compose mount
+  drops `demo-overview.json` into the lgtm image's
+  provisioning directory, but the lgtm image's exact
+  provisioning path varies between minor versions; if
+  the dashboard doesn't appear, import it manually
+  from the Grafana UI and call out the path that
+  worked in the next round entry.
+- Doesn't build the unique\_fd-leak demo for §3 RAII.
+  That's separate work, not on the option B critical
+  path.
+
+---
+
 ## Verification log
 
 Append-only entries documenting verification runs. Each entry
@@ -2263,6 +2392,176 @@ authoring deferred.
 Renumbering is fundamentally tedious work; the goal of
 this entry is that nobody has to re-derive the mapping
 six months from now.
+
+### 2026-05-10 — r28: option B kickoff — upgrade test-demo-04 to full signal-arrival roundtrip
+
+User asked to begin option B (observability stack
+end-to-end verification). The shape laid out yesterday:
+flip §10 in the matrix from `[x] drafted` to verified
+by proving the LGTM stack receives a real C++-emitted
+trace, metric, and log with one Grafana panel rendering.
+
+On scoping this round, I found the demo is much further
+along than yesterday's plan assumed:
+
+- `examples/demo-04-observability/` is fully scaffolded:
+  HTTP service, OTel SDK init for traces/metrics/logs
+  via OTLP/gRPC pointing at `lgtm:4317`, a `compose.yml`
+  cross-referencing the obs stack via the `tutorial-obs`
+  network, a multi-stage `Containerfile` that builds
+  opentelemetry-cpp v1.16.1 from source on UBI 9.4.
+- `observability/compose.yml` is settled (single-image
+  `grafana/otel-lgtm:0.8.1`, all 6 ports mapped to
+  127.0.0.1).
+- `observability/grafana/dashboards/demo-overview.json`
+  is well-shaped: 4 panels (Request rate, latency
+  p50/95/99, service logs, recent traces) with the
+  correct metric name (`demo_requests_total`), the
+  correct OTLP→Prom unit suffix
+  (`demo_request_duration_milliseconds_bucket`), the
+  correct Loki label (`service_name=demo-04-svc`), and
+  the correct TraceQL form
+  (`{ resource.service.name = "demo-04-svc" }`).
+
+So option B's actual gap is **signal-arrival
+verification**, not building anything new. The previous
+`scripts/test-demo-04-observability.sh` was a smoke test:
+brought the stack up, probed Grafana `/api/health`, probed
+the service `/healthz`, called it good. That misses the
+actual question — *do signals make it through?* The
+stack can be "up" while signals silently disappear
+(misrouted exporter, Mimir name-translation drift, Loki
+label drop).
+
+**Changes shipped in r28:**
+
+1. **`scripts/test-demo-04-observability.sh` rewritten**
+   from a 30-line smoke test to a five-phase end-to-end
+   verifier:
+
+   - **Phase 1**: bring up stack + service via
+     `podman compose -f compose.yml -f
+     ../../observability/compose.yml up -d --build`.
+     Wait for Grafana `/api/health` (120 s timeout —
+     accommodates first-time OTel-cpp build) and the
+     service's `/healthz` (60 s).
+   - **Phase 2**: probe each LGTM backend's readiness
+     endpoint — Tempo `/ready`, Loki `/ready`, Mimir
+     `/-/ready`. Abort if any are down before generating
+     workload that has nowhere to land.
+   - **Phase 3**: 30 s of `hey -c 10 -q 50` workload, or
+     a 200-iteration curl loop if `hey` isn't installed.
+     15 s sleep after to let the export pipeline drain.
+     Justification on the wait: the demo uses
+     `SimpleSpanProcessor` (sync per-span), but
+     `PeriodicExportingMetricReader` runs every 5 s; 15
+     s comfortably covers the worst-case batch window.
+   - **Phase 4**: signal-arrival probes with retry. Each
+     probe polls up to 10 times over ~30 s, asks `jq`
+     whether the response has at least one matching
+     entry, succeeds on first non-empty match. Three
+     probes:
+
+     | signal  | endpoint                                      | matcher                       |
+     |---------|-----------------------------------------------|-------------------------------|
+     | trace   | `tempo:3200/api/search?tags=service.name%3D…` | `.traces \| length > 0`       |
+     | metric  | `mimir:9090/api/v1/query?query=demo_requests_total` | `.data.result \| length > 0` |
+     | log     | `loki:3100/loki/api/v1/query_range?query={…}` | `.data.result \| length > 0`  |
+   - **Phase 5**: PASS/FAIL with a per-signal breakdown
+     and pointers to the most likely diagnosis under the
+     three failure modes.
+
+2. **Two flag additions to the script**:
+
+   - `--keep`: don't tear the stack down on exit. Useful
+     when you want to inspect the Grafana dashboard
+     after a successful verification.
+   - `--probe-only`: skip Phase 1 and Phase 3, just run
+     the readiness checks and signal probes against an
+     already-running stack. Useful when iterating on
+     the probes themselves or when the pipeline is
+     still draining and you want to retry.
+
+3. **Required dependencies bumped**: script now
+   `require`s `jq` in addition to `podman` and `curl`.
+   `jq` is the cleanest way to parse the per-signal
+   probe responses without fragile regex; readers
+   running the test on a fresh Fedora 44 should
+   `dnf install jq` if they don't have it.
+
+4. **New top-level "Option B execution checklist"**
+   added to the plan, between the Gotchas section and
+   the Verification log. Five phases mapping directly
+   to the script's internal phases plus the two
+   manual book-end steps (Phase 0 = `verify-stacks.sh`
+   first; Phase 4 = flip the matrix and add round entry
+   after green). Walks the reader through the actual
+   workflow tomorrow morning, with what-to-do-if
+   branches for each likely failure mode.
+
+**What this round does NOT do:**
+
+- Doesn't actually flip §10 to verified yet — that
+  happens after the user runs the upgraded script on
+  their Fedora 44 host and confirms PASS. r29 will
+  handle the matrix flip + verifier notes once the
+  three signals come in green.
+- Doesn't change the demo-04 source code, compose
+  files, Containerfile, or dashboard JSON. The shape
+  was already correct; the gap was verification, not
+  emission.
+- Doesn't change demo-01 or any other demo.
+- Doesn't address the OTel-cpp build risk (gRPC /
+  protobuf / abseil version drift on UBI 9.4); if the
+  Containerfile build fails, the script reports the
+  podman build output and the user can decide whether
+  to bump `OTEL_TAG`, switch from gRPC to HTTP
+  exporters, or pin Conan-managed deps instead.
+
+**Anticipated gotchas (added if they actually fire on
+the user's run):**
+
+- **G-12 candidate**: OTel-cpp v1.16.1 + UBI 9.4 system
+  gRPC version mismatch. UBI 9.4 ships gRPC 1.46
+  through 1.x range; if OTel-cpp hardcodes a newer API
+  the build fails at link time.
+- **G-13 candidate**: metric-name translation drift.
+  OTel `demo.requests` Counter → Mimir
+  `demo_requests_total` is the documented expectation,
+  but OTLP-to-Prom converters have varied historically;
+  the probe uses `_total` and the script's failure
+  message points the user at the alternative.
+- **G-14 candidate**: Loki label drop. Resource
+  attribute `service.name` should land as the Loki
+  label `service_name`, but Loki receivers vary in
+  what they promote to labels (some keep everything as
+  log fields, some only promote a configured allowlist).
+  If the log probe fails but the metric and trace pass,
+  this is the suspect.
+- **G-15 candidate**: dashboard datasource UID mismatch.
+  Pre-built dashboard JSON references datasource by
+  UID; the lgtm image picks UIDs at provisioning time
+  that may not match what the JSON expects. Symptom is
+  "No data" in panels even though the test script said
+  signals landed. Fix is to open the dashboard, swap
+  in the actual UID, and re-export.
+
+The script's failure message references each of these
+diagnosis paths inline, so the user shouldn't need to
+re-derive them mid-debug.
+
+**At-a-glance updates:**
+
+- G.6 PPTX export validated: still no.
+- G.4 demos passing test scripts: still 0/6 (will move
+  to 1/6 when the user runs the upgraded test green
+  in r29).
+- §10 verifier notes line in matrix updated to point
+  at "option B target" vs the previous bare description.
+
+Ready to run on your machine. Phase 0 first; then the
+script does Phase 1-4 in one go; Phase 4 (matrix flip)
+is what r29 will record.
 
 ---
 
