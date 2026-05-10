@@ -1516,6 +1516,49 @@ client and exercised through to a Grafana dashboard. That
 verification gate clears §9 (Observability & Profiling) for
 prose work in a later round.
 
+### 2026-05-09 — r23: §2 review fix — relocate I/O / CPU labels in threading-models diagram
+
+User reviewing §2 caught a placement bug in the
+`02-threading-models` diagram (correctly described as
+otherwise good). Two text labels were overlapping pills:
+
+- "↑ better fit for I/O-bound, high fan-out" was rendering
+  in the lower-center area below the std::thread pill,
+  arrow pointing up at the std::thread pill — semantically
+  wrong (I/O-bound work fits the *upper* half of the chart,
+  not the lower).
+- "↓ better fit for CPU-bound work" was overlapping the top
+  edge of the std::thread pill at y=385.
+
+Both annotations had been positioned with `text-anchor="end"`
+and short x coordinates, which placed the rendered text in
+the wrong horizontal regions and inside pill bounding boxes.
+
+**Fix:** relocated both labels to clear empty horizontal
+strips of the chart and reversed arrow direction so each
+arrow points *into* the region it labels:
+
+- I/O label: from (650, 470, anchor=end) → (460, 145, anchor=middle).
+  Now sits above the top pill row, in clear space between
+  subtitle (y=70) and pill row 1 (y=170). New text:
+  "↓ I/O-bound · high fan-out region". The ↓ now correctly
+  points down to the M:N / kernel-invisible top pills
+  (Boost.Fibers, Boost.Context, coroutines).
+- CPU label: from (350, 385, anchor=end) → (460, 478, anchor=middle).
+  Now sits below the std::thread pill row, in clear space
+  between bottom pill (y=460) and X-axis line (y=500). New
+  text: "↑ CPU-bound region". The ↑ now correctly points
+  up to the 1:1 / kernel-visible bottom pills.
+
+Both files updated in lockstep:
+- `02-threading-models.svg`: text positions and content.
+- `02-threading-models.excalidraw`: matching x/y/width/
+  textAlign updates so the editable source agrees with
+  the rendered SVG.
+
+No prose changes; §2 is unchanged. The §2 review is still
+open for the rest of the prose and the four-layers diagram.
+
 
 ---
 

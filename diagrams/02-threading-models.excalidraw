@@ -185,16 +185,16 @@
     },
 
     {
-      "type": "text", "id": "annot-io", "x": 450, "y": 250, "width": 350, "height": 20,
-      "text": "↑ better fit for I/O-bound, high fan-out",
-      "fontSize": 12, "fontFamily": 1, "textAlign": "right",
+      "type": "text", "id": "annot-io", "x": 160, "y": 140, "width": 600, "height": 20,
+      "text": "↓ I/O-bound · high fan-out region",
+      "fontSize": 13, "fontFamily": 1, "textAlign": "center",
       "strokeColor": "#5a8870", "backgroundColor": "transparent",
       "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
     },
     {
-      "type": "text", "id": "annot-cpu", "x": 100, "y": 360, "width": 250, "height": 20,
-      "text": "↓ better fit for CPU-bound work",
-      "fontSize": 12, "fontFamily": 1, "textAlign": "right",
+      "type": "text", "id": "annot-cpu", "x": 160, "y": 470, "width": 600, "height": 20,
+      "text": "↑ CPU-bound region",
+      "fontSize": 13, "fontFamily": 1, "textAlign": "center",
       "strokeColor": "#c0392b", "backgroundColor": "transparent",
       "fillStyle": "solid", "strokeWidth": 1, "roughness": 1, "opacity": 100
     }

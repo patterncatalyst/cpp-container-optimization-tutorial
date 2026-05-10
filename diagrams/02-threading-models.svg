@@ -101,12 +101,21 @@
   <text x="700" y="230" text-anchor="middle" class="pill-n">cppcoro / libfork / hand-rolled</text>
   <text x="700" y="245" text-anchor="middle" class="pill-n">cheap suspension; no built-in sched.</text>
 
-  <!-- I/O bound vs CPU bound diagonal annotation -->
-  <text x="650" y="470" class="annot annot-io" text-anchor="end">
-    ↑ better fit for I/O-bound, high fan-out
+  <!-- I/O bound vs CPU bound annotations placed in empty horizontal strips
+       above the top pill row and below the bottom pill row, so they don't
+       overlap any pill. Arrow direction points INTO the region the label
+       describes:
+         I/O label sits above the top pills, ↓ points to the top half
+                  (M:N / kernel-invisible — models that fit I/O-bound,
+                   high-fan-out workloads).
+         CPU label sits below the bottom pill, ↑ points to the bottom half
+                  (1:1 / kernel-visible — models that fit CPU-bound work,
+                   pools sized to the cgroup CPU quota). -->
+  <text x="460" y="145" class="annot annot-io" text-anchor="middle">
+    ↓ I/O-bound · high fan-out region
   </text>
-  <text x="350" y="385" class="annot annot-cpu" text-anchor="end">
-    ↓ better fit for CPU-bound work
+  <text x="460" y="478" class="annot annot-cpu" text-anchor="middle">
+    ↑ CPU-bound region
   </text>
 
   <!-- Footer -->
