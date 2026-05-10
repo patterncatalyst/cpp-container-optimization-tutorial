@@ -47,10 +47,6 @@ abseil/20240116.2
 CMakeDeps
 CMakeToolchain
 
-[generators]
-CMakeDeps
-CMakeToolchain
-
 # No [layout] section: we use Conan 2.x's default flat layout because
 # this is a single-build-type containerized one-shot compile. The
 # `cmake_layout` pattern adds `build/<build_type>/generators/` path
