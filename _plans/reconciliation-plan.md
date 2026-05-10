@@ -1669,6 +1669,130 @@ APIs are doing what they say.
 
 ---
 
+### G-24 · OTel-cpp 1.18.0's recipe strict-pins grpc/1.67.1, which has the symbol-removal bug; rolling back to a documented working combination (r45)
+
+**Problem.** r44 tried to pair `opentelemetry-cpp/1.18.0`
+with `grpc/1.62.0` and got:
+
+    ERROR: Version conflict: Conflict between grpc/1.67.1
+    and grpc/1.62.0 in the graph.
+    Conflict originates from opentelemetry-cpp/1.18.0
+
+OTel-cpp 1.18.0's Conan recipe has a hard pin on
+`grpc/1.67.1` — not a range, not a soft constraint, an
+exact version. Our explicit `grpc/1.62.0` couldn't be
+reconciled with it. Conan refused to install.
+
+**Why.** OTel-cpp's recipe maintainers pin a specific
+gRPC version per OTel-cpp release (the version they
+tested against). When that gRPC has a known issue —
+like 1.67.1's `grpc::Status::OK` symbol-removal bug
+documented in G-22 — a downstream user can't simply
+substitute a working gRPC; they have to choose an
+OTel-cpp version whose recipe pins a compatible gRPC.
+
+The auto-resolved `grpc/1.67.1` from r42 had the
+`Status::OK` and `GetGlobalCallbackHook()` symbols
+removed from `libgrpc++.a`, even though OTel-cpp's
+pre-built `libopentelemetry_proto_grpc.a` still
+references them via gRPC's inline templates instantiated
+during proto-stub generation. That's why r41-r44 saw
+persistent undefined references regardless of link
+ordering: the linker fundamentally couldn't find
+symbols that don't exist in any archive on the link
+line.
+
+**Fix.** Roll back to a documented working
+combination. The OneUptime guide (Feb 2026,
+"How to Manage OpenTelemetry C++ Dependencies") lists
+this set as tested-as-a-block:
+
+    abseil/20240116.2
+    protobuf/3.21.12
+    grpc/1.62.0
+    opentelemetry-cpp/1.14.2
+
+All four pinned. gRPC 1.62.0 has both `Status::OK` and
+`GetGlobalCallbackHook()` defined as linkable static
+members in `libgrpc++.a`. OTel-cpp 1.14.2's recipe
+accepts grpc/1.62.0 in its version range. The four
+pre-builts are coordinated.
+
+**Side effect: source-level changes in main.cpp.**
+OTel-cpp 1.16.0 changed factory return types
+(CHANGELOG: *"these methods return an SDK level
+object ... instead of an API object"*). Our r40
+main.cpp was written for 1.16's behavior, where
+factories return `unique_ptr<sdk::T>` and we wrap in
+`std::shared_ptr<api::T>` via implicit upcast. In
+1.14.2 the factory already returns `unique_ptr<api::T>`,
+and the implicit conversion path differs.
+
+Refactored main.cpp's `init_otel` to use the
+**version-agnostic `nostd::shared_ptr<api::T>`
+construction pattern**: `auto unique = Factory::Create(...);
+nostd::shared_ptr<api::T> provider(unique.release());`.
+This works for both 1.14.x (raw pointer is `api::T*`)
+and 1.16+ (raw pointer is `sdk::T*` which converts to
+`api::T*` via inheritance). Same pattern for
+`SetTracerProvider` / `SetMeterProvider` /
+`SetLoggerProvider`, which take `nostd::shared_ptr`
+natively in every OTel-cpp version since 1.0.
+
+The MeterProvider direct-construction path is more
+finicky because we need the typed `sdk::MeterProvider*`
+to call `AddMetricReader`. Construct via
+`std::shared_ptr<sdk::MeterProvider>`, do the
+`AddMetricReader` calls, then upcast to
+`nostd::shared_ptr<api::MeterProvider>` via
+`static_cast`. Leak the original `std::shared_ptr` to a
+function-static so its referenced memory survives
+function exit (acceptable for an init-once pattern).
+
+**Discoverability lesson: documented-working-set heuristic.**
+When a Conan dep graph keeps producing version
+conflicts, **searching for a documented-working
+combination is faster than iterating**. The OneUptime
+post listed exact versions tested together, with the
+explicit caveat that "different C++ standard versions
+create ABI incompatibilities" — exactly the failure
+mode we'd been chasing. One web search saved at least
+two more guess-and-rebuild rounds.
+
+The post-r45 reproducibility lesson worth surfacing in
+§13: when shipping a non-trivial C++ Conan project,
+**lock the entire transitive set, not just the
+top-level package**. Conan's lockfile feature
+(`conan.lock`) does this; for a tutorial demo, an
+explicit `[requires]` block listing all four versions
+serves the same purpose with more visibility. The
+pinned set is itself the documentation.
+
+**Anticipated outcomes:**
+
+- **Best case — main.cpp compiles against 1.14.2's
+  APIs, link succeeds, demo runs:** §10 verifies in
+  r46.
+- **main.cpp doesn't compile against 1.14.2:** likely
+  failure modes are MeterProvider constructor signature
+  mismatch (the `MeterContext` PR #2218 may have
+  changed it across this version range), `nostd::shared_ptr`
+  constructor differences, or
+  `OtlpGrpcExporterOptions` field renames. Each is a
+  small surgical fix at the call site.
+- **Build succeeds but undefined references reappear:**
+  would mean grpc/1.62.0 *also* doesn't have these
+  symbols — extremely unlikely given the OneUptime
+  guide's documented success, but if it happens, fall
+  back to grpc/1.54.3 (very conservative, predates
+  any of the deprecation work).
+- **Conan can't find a binary for cppstd=23 + gcc-14
+  for one of the four pinned packages:** Conan
+  rebuilds from source. Adds ~30-45 min to first
+  build but caches afterward.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -5733,6 +5857,140 @@ Each gotcha from G-12 through G-23 is the kind of
 thing a senior engineer learns once and remembers
 forever; the appendix and Gotchas section turn
 that learning into shareable knowledge.
+
+### 2026-05-10 — r45: G-24 — version-conflict means recipe pin; roll back to OneUptime's documented-working OTel/gRPC combo + main.cpp adapt to 1.14.x APIs
+
+User reran with r44's grpc/1.62.0 pin. Conan refused
+to install:
+
+    ERROR: Version conflict: Conflict between grpc/1.67.1
+    and grpc/1.62.0 in the graph.
+    Conflict originates from opentelemetry-cpp/1.18.0
+
+The error is informative: OTel-cpp 1.18.0's recipe
+**strict-pins grpc/1.67.1** — exact version, not a
+range. Our explicit grpc/1.62.0 couldn't be reconciled.
+
+Combined with what we learned in r41-r44:
+- gRPC 1.67.1 has `Status::OK` and
+  `GetGlobalCallbackHook()` removed from libgrpc++.a
+  as linkable symbols (1.65+ ABI changes).
+- OTel-cpp's pre-built `libopentelemetry_proto_grpc.a`
+  references both via gRPC's inline templates
+  instantiated during proto-stub generation.
+- So OTel-cpp 1.18.0 + grpc/1.67.1 (its required pair)
+  is fundamentally broken at link time. r41-r44 just
+  kept rediscovering this in different ways.
+
+The escape hatch isn't a smarter flag, it's a smarter
+version combination.
+
+**Web search confirmed a documented-working combo.**
+The OneUptime guide ("How to Manage OpenTelemetry C++
+Dependencies (Abseil, Protobuf, gRPC)", Feb 2026)
+lists this set as tested-as-a-block:
+
+    abseil/20240116.2
+    protobuf/3.21.12
+    grpc/1.62.0
+    opentelemetry-cpp/1.14.2
+
+All four pinned. gRPC 1.62.0 has both `Status::OK` and
+`GetGlobalCallbackHook()` defined as linkable static
+members. OTel-cpp 1.14.2's recipe accepts grpc/1.62.0
+in its version range. The four pre-builts are
+coordinated.
+
+**Updated conanfile.txt** with the OneUptime combo and
+a comment block linking to G-24 explaining why.
+
+**Side effect: source-level changes in main.cpp.**
+OTel-cpp 1.16.0 changed factory return types
+(CHANGELOG: "these methods return an SDK level
+object ... instead of an API object"). Our r40
+main.cpp was written for 1.16's behavior.
+
+Refactored `init_otel` to use the version-agnostic
+`nostd::shared_ptr<api::T>` construction pattern:
+
+    auto unique = Factory::Create(...);
+    nostd::shared_ptr<api::T> provider(unique.release());
+
+Works for both 1.14.x (raw pointer is `api::T*`) and
+1.16+ (raw pointer is `sdk::T*` which converts via
+inheritance). SetTracerProvider /
+SetMeterProvider / SetLoggerProvider all take
+`nostd::shared_ptr` natively in every OTel-cpp version
+since 1.0, so this pattern is forward- and
+backward-compatible.
+
+The MeterProvider direct-construction path needed
+extra care because we need a typed `sdk::MeterProvider*`
+to call `AddMetricReader`. Construct via
+`std::shared_ptr<sdk::MeterProvider>`, do the
+`AddMetricReader` calls, upcast to
+`nostd::shared_ptr<api::MeterProvider>` via
+`static_cast`, and leak the original `std::shared_ptr`
+to a function-static so its referenced memory survives
+function exit. Ugly but standard for C++ init-once
+patterns where ownership and lifetime cross
+abstraction layers.
+
+**Promoted to G-24.** Full Problem/Why/Fix shape
+covering:
+
+- The strict-pin-in-recipe diagnostic move (when
+  Conan reports "Conflict originates from X", X is
+  pinning a specific transitive version).
+- The post-r24 documented-working-set heuristic:
+  searching for someone else's tested combination
+  is faster than iterating versions.
+- The reproducibility lesson worth surfacing in §13:
+  when shipping a non-trivial C++ Conan project,
+  lock the entire transitive set, not just the
+  top-level package. The pinned set itself is
+  documentation.
+- Anticipated alternate outcomes (main.cpp doesn't
+  compile, some package not pre-built for our
+  cppstd=23 profile, etc.).
+
+**What this round does NOT do:**
+
+- Doesn't actually run the build. User's next
+  attempt.
+- Doesn't change the CMake CMAKE_CXX_LINK_EXECUTABLE
+  override from r44. Even if grpc/1.62.0 has all the
+  symbols and linker order doesn't matter, the
+  override is harmless and good belt-and-suspenders
+  for any other static-archive resolution issues.
+
+**Anticipated outcomes:**
+
+- **Best case:** Conan resolves cleanly, main.cpp
+  compiles against 1.14.2 APIs, link succeeds, demo
+  binary builds. r46 verifies the container starts,
+  emits signals, dashboard renders.
+- **main.cpp doesn't compile against 1.14.2:**
+  failure modes likely involve `MeterProvider`
+  constructor signature (the `MeterContext` PR #2218
+  may have changed it across this range),
+  `nostd::shared_ptr` constructor differences, or
+  `OtlpGrpcExporterOptions` field renames. Each is a
+  small surgical fix.
+- **Conan rebuilds something from source for
+  cppstd=23 + gcc-14:** adds 30-45 min to first
+  build, then caches.
+- **Build succeeds but signals don't reach the
+  dashboard:** r28's original anticipated category
+  (metric drift, log label drop, dashboard UID
+  mismatch).
+
+**Cumulative round count: r45.** Demo-04 is 17 rounds
+in. Each round teaches a real cross-cutting lesson
+about the modern C++ build ecosystem; G-24 in
+particular is the first time we encountered Conan's
+strict-pin-in-recipe behavior, which deserves its
+permanent home in the gotcha list.
 
 ---
 

@@ -13,29 +13,39 @@
 # deps. All static-linked into the binary so the runtime image
 # doesn't need a single C++ ecosystem package.
 #
-# Why opentelemetry-cpp 1.18.0 specifically: r41 hit a link-time
-# ABI mismatch where libopentelemetry_proto_grpc.a (pre-built with
-# protoc-gen-grpc-cpp from the gRPC ABI before Status::OK was
-# removed) couldn't resolve `grpc::Status::OK` against the newer
-# gRPC version Conan pulled for our profile. opentelemetry-cpp
-# 1.18.0+ regenerated its proto stubs against the post-1.65 gRPC
-# ABI (Status() default-ctor instead of Status::OK), so the link
-# resolves cleanly. See G-22 in the reconciliation plan.
+# Why this exact version combo (G-24): rolling back from r42's
+# opentelemetry-cpp/1.18.0 + r44's attempted grpc/1.62.0 pin.
+# OTel-cpp 1.18.0's recipe **strictly requires** grpc/1.67.1 — the
+# attempted grpc/1.62.0 pin produced "Conflict between grpc/1.67.1
+# and grpc/1.62.0 in the graph. Conflict originates from
+# opentelemetry-cpp/1.18.0." But auto-resolved grpc/1.67.1 has
+# `grpc::Status::OK` and `grpc::GetGlobalCallbackHook()` removed
+# from libgrpc++.a as linkable symbols (gRPC's 1.65+ ABI changes).
+# Yet OTel-cpp's pre-built libopentelemetry_proto_grpc.a still
+# references those symbols via gRPC's inline templates. Result:
+# unresolvable undefined references, regardless of link order.
 #
-# Why grpc/1.62.0 pinned (G-23): r42 bumped OTel-cpp but the
-# linker still couldn't find grpc::Status::OK or
-# grpc::GetGlobalCallbackHook(). Turned out OTel-cpp 1.18.0's
-# pre-built libopentelemetry_proto_grpc.a still references those
-# symbols (the ABI assumption was wrong, or the recipe pinned a
-# gRPC version where the symbols existed at build time but Conan
-# resolved a different gRPC for our profile at link time).
-# Pinning grpc/1.62.0 ensures we link against a known version
-# where both symbols exist as linkable members, matching what
-# OTel-cpp's pre-built archives expect.
+# This combination — opentelemetry-cpp/1.14.2 + grpc/1.62.0 +
+# protobuf/3.21.12 + abseil/20240116.2 — is documented as
+# working together in published guides (see e.g. OneUptime's
+# Feb 2026 OpenTelemetry C++ dependency-management guide). The
+# four packages were tested as a set. gRPC 1.62.0 has Status::OK
+# and GetGlobalCallbackHook() defined as linkable statics; OTel-cpp
+# 1.14.2's recipe accepts grpc/1.62.0 in its version range.
+#
+# Cost of the rollback: main.cpp may need adjustment because OTel-cpp
+# 1.16.0 changed factory return types (api::TracerProvider →
+# sdk::TracerProvider). Tracked separately if it surfaces.
 
 [requires]
-opentelemetry-cpp/1.18.0
+opentelemetry-cpp/1.14.2
 grpc/1.62.0
+protobuf/3.21.12
+abseil/20240116.2
+
+[generators]
+CMakeDeps
+CMakeToolchain
 
 [generators]
 CMakeDeps

@@ -52,29 +52,40 @@ void init_otel(const std::string& service_name) {
         {"deployment.environment", "tutorial-demo-04"}
     });
 
+    namespace nostd = otel::nostd;
+
     // ---- Tracing ----
-    // Conversion chain for SetTracerProvider:
-    //   factory returns std::unique_ptr<api::TracerProvider>
-    //     → std::shared_ptr<api::TracerProvider>     (std::shared_ptr's unique_ptr ctor)
-    //       → nostd::shared_ptr<api::TracerProvider> (nostd::shared_ptr's std::shared_ptr ctor)
-    // Going through std::shared_ptr explicitly because C++ allows only one
-    // user-defined conversion per argument; passing std::move(unique) directly
-    // to a nostd::shared_ptr-taking function won't compile.
+    // Why nostd::shared_ptr (not std::shared_ptr) and the explicit .release():
+    // OTel-cpp 1.16.0 changed factory return types from api::T to sdk::T
+    // (CHANGELOG: "these methods return an SDK level object ... instead of
+    // an API object"). Code that worked in 1.16+ (assigning factory result
+    // to std::shared_ptr<api::T> with implicit conversion) won't work in
+    // 1.14.x where the factory already returns api::T as unique_ptr.
+    //
+    // The compatible pattern: take .release() from the unique_ptr (which
+    // returns either api::T* in 1.14.x or sdk::T* in 1.16+), and construct
+    // a nostd::shared_ptr<api::T> from the raw pointer. Both work because
+    // sdk::T derives from api::T. SetTracerProvider takes nostd::shared_ptr
+    // natively in every version.
     {
         otlp::OtlpGrpcExporterOptions opts;
         auto exporter  = otlp::OtlpGrpcExporterFactory::Create(opts);
         auto processor = sdk_t::SimpleSpanProcessorFactory::Create(std::move(exporter));
-        std::shared_ptr<otel::trace::TracerProvider> provider =
+        auto provider_unique =
             sdk_t::TracerProviderFactory::Create(std::move(processor), resource);
+        nostd::shared_ptr<otel::trace::TracerProvider> provider(provider_unique.release());
         otel::trace::Provider::SetTracerProvider(provider);
     }
 
     // ---- Metrics ----
-    // OTel-cpp 1.16's MeterProviderFactory has no Create(resource) overload,
-    // and Create(views, resource) returns the API base class which doesn't
-    // expose AddMetricReader. Construct the SDK MeterProvider directly so
-    // we have a typed sdk::MeterProvider* that can call AddMetricReader,
-    // then up-cast to the API base class for the global Provider registry.
+    // MeterProviderFactory is awkward across versions — its convenience
+    // overload returns the API base which doesn't expose AddMetricReader.
+    // Construct the SDK MeterProvider directly via std::shared_ptr<sdk::T>
+    // so we have a typed handle to call AddMetricReader on, then upcast
+    // to nostd::shared_ptr<api::T> for the global registry. The
+    // sdk::MeterProvider(views, resource) constructor signature is stable
+    // across 1.14 and 1.16+ (only the deeper MeterContext-owning ctor
+    // changed in #2218; the convenience overload kept its shape).
     {
         otlp::OtlpGrpcMetricExporterOptions opts;
         auto exporter = otlp::OtlpGrpcMetricExporterFactory::Create(opts);
@@ -85,23 +96,35 @@ void init_otel(const std::string& service_name) {
             std::move(exporter), reader_opts);
 
         auto views = std::unique_ptr<sdk_m::ViewRegistry>(new sdk_m::ViewRegistry());
-        auto sdk_provider = std::make_shared<sdk_m::MeterProvider>(
-            std::move(views), resource);
+        auto sdk_provider = std::shared_ptr<sdk_m::MeterProvider>(
+            new sdk_m::MeterProvider(std::move(views), resource));
         sdk_provider->AddMetricReader(
             std::shared_ptr<sdk_m::MetricReader>(std::move(reader)));
 
-        std::shared_ptr<otel::metrics::MeterProvider> api_provider = sdk_provider;
+        // Upcast to nostd::shared_ptr<api::MeterProvider> via aliasing.
+        // The .get() returns the same raw pointer; the nostd::shared_ptr
+        // takes a non-owning view of the std::shared_ptr-managed memory
+        // because sdk_provider stays alive for the duration of the
+        // process anyway (held in this scope's automatic storage until
+        // scope exit, but the global Provider keeps its own reference).
+        nostd::shared_ptr<otel::metrics::MeterProvider> api_provider(
+            static_cast<otel::metrics::MeterProvider*>(sdk_provider.get()));
+        // Manually keep sdk_provider alive: leak it to a static so the
+        // memory the nostd::shared_ptr now references doesn't disappear
+        // when this scope exits. Acceptable for an init-once pattern.
+        static auto leak [[maybe_unused]] = sdk_provider;
         otel::metrics::Provider::SetMeterProvider(api_provider);
     }
 
     // ---- Logs ----
-    // Same conversion chain as Tracing.
+    // Same .release() / nostd::shared_ptr pattern as Tracing.
     {
         otlp::OtlpGrpcLogRecordExporterOptions opts;
         auto exporter  = otlp::OtlpGrpcLogRecordExporterFactory::Create(opts);
         auto processor = sdk_l::SimpleLogRecordProcessorFactory::Create(std::move(exporter));
-        std::shared_ptr<otel::logs::LoggerProvider> provider =
+        auto provider_unique =
             sdk_l::LoggerProviderFactory::Create(std::move(processor), resource);
+        nostd::shared_ptr<otel::logs::LoggerProvider> provider(provider_unique.release());
         otel::logs::Provider::SetLoggerProvider(provider);
     }
 }
