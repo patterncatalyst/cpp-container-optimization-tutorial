@@ -13,22 +13,17 @@
 # deps. All static-linked into the binary so the runtime image
 # doesn't need a single C++ ecosystem package.
 #
-# Build flow inside the container:
-#   conan install . --output-folder=build/conan \
-#                   -s build_type=Release \
-#                   --build=missing
-#   cmake -S . -B build -G Ninja \
-#         -DCMAKE_TOOLCHAIN_FILE=build/conan/conan_toolchain.cmake
-#   cmake --build build -j$(nproc)
-#
-# First-run time on a clean cache: 5-15 minutes. Conan pulls
-# pre-built binaries for popular profiles (gcc/libstdc++); if our
-# gcc-toolset-14 + C++23 profile isn't pre-built, --build=missing
-# triggers from-source compiles. Subsequent runs use the Conan
-# cache and are 1-2 minutes total.
+# Why opentelemetry-cpp 1.18.0 specifically: r41 hit a link-time
+# ABI mismatch where libopentelemetry_proto_grpc.a (pre-built with
+# protoc-gen-grpc-cpp from the gRPC ABI before Status::OK was
+# removed) couldn't resolve `grpc::Status::OK` against the newer
+# gRPC version Conan pulled for our profile. opentelemetry-cpp
+# 1.18.0+ regenerated its proto stubs against the post-1.65 gRPC
+# ABI (Status() default-ctor instead of Status::OK), so the link
+# resolves cleanly. See G-22 in the reconciliation plan.
 
 [requires]
-opentelemetry-cpp/1.16.1
+opentelemetry-cpp/1.18.0
 
 [generators]
 CMakeDeps
