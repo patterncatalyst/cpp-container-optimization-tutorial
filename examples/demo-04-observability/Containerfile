@@ -67,9 +67,14 @@ RUN mkdir -p src/third_party && \
         "https://raw.githubusercontent.com/yhirose/cpp-httplib/${HTTPLIB_VERSION}/httplib.h"
 
 # Conan install: opentelemetry-cpp pulls gRPC, protobuf, abseil, etc.
-# from Conan Center as transitive deps. --build=missing falls back to
-# from-source for any dep that isn't pre-built for our profile.
-COPY conanfile.txt ./
+# from Conan Center as transitive deps. We use conanfile.py (not .txt)
+# to override transitive versions when the recipe revision drifts away
+# from a documented working combination — see G-25 in the plan.
+# --build=missing falls back to from-source for any dep that isn't
+# pre-built matching our overridden transitive set (which is most of
+# them, since our overrides are unusual). First build is slow, then
+# everything caches.
+COPY conanfile.py ./
 RUN conan install . --output-folder=build/conan \
                     -s build_type=Release \
                     --build=missing

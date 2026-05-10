@@ -1793,6 +1793,176 @@ pinned set is itself the documentation.
 
 ---
 
+### G-25 · Conan recipe revision drift makes pinned conanfile.txt combinations unstable; conanfile.py + override=True is the escape hatch (r46)
+
+**Problem.** r45a applied G-24's recommended OneUptime
+working combination as a literal `[requires]` block in
+conanfile.txt:
+
+    [requires]
+    opentelemetry-cpp/1.14.2
+    grpc/1.62.0
+    protobuf/3.21.12
+    abseil/20240116.2
+
+Conan immediately rejected it:
+
+    ERROR: Version conflict: Conflict between protobuf/5.27.0
+    and protobuf/3.21.12 in the graph.
+    Conflict originates from opentelemetry-cpp/1.14.2
+
+The package version `opentelemetry-cpp/1.14.2` is the same
+one OneUptime documented as working with `protobuf/3.21.12`,
+but the **recipe revision** of that package on Conan Center
+has been updated since. The current revision of
+`opentelemetry-cpp/1.14.2` (`#e89f9b81aa64baa0dec47763775ad56f`)
+requires `protobuf/5.27.0`. Same package, same version —
+different transitive constraints because the recipe was
+edited.
+
+**Why.** Conan 2.x packages are addressed by name, version,
+**and revision**. The version is what the recipe author
+publishes; the revision is a hash of the recipe contents.
+When recipe maintainers update a published version's
+recipe (to bump a dep, fix a bug, regenerate the recipe
+from a template), the revision changes but the version
+doesn't. Pre-built binaries for the new revision get
+uploaded; the old revision's binaries may remain or be
+garbage-collected.
+
+This means a `conanfile.txt` pin like
+`opentelemetry-cpp/1.14.2` resolves to "whatever the
+latest revision is right now," which can have different
+transitive requirements than it did six months ago when
+someone published a working combination.
+
+The OneUptime guide was published Feb 2026. Their pinned
+combination presumably worked against the recipe
+revision that was current then. Three months later
+(May 2026, when our build runs), the recipe has been
+updated to require newer protobuf — so the same explicit
+pins no longer compose.
+
+**Why conanfile.txt can't fix this.** The `[requires]`
+section in conanfile.txt is purely additive: it pins
+your top-level requirements but it can't tell Conan to
+*ignore* a transitive recipe's version constraint. There's
+no `[overrides]` section. The only knobs in conanfile.txt
+are `[requires]`, `[generators]`, `[options]`, `[layout]`,
+`[imports]`, `[tool_requires]`, `[test_requires]`. None of
+them can say "protobuf/5.27.0 is what OTel-cpp's recipe
+asks for, but build with protobuf/3.21.12 instead."
+
+**Fix.** Convert from `conanfile.txt` to `conanfile.py`
+and use `self.requires(..., override=True)` to force the
+working combination. Conan accepts the override and
+proceeds with the resolution we want, regardless of the
+recipe revision drift.
+
+    from conan import ConanFile
+
+    class Demo04Conan(ConanFile):
+        settings = "os", "compiler", "build_type", "arch"
+        generators = "CMakeDeps", "CMakeToolchain"
+
+        def requirements(self):
+            self.requires("opentelemetry-cpp/1.14.2")
+            self.requires("grpc/1.62.0",      override=True)
+            self.requires("protobuf/3.21.12", override=True)
+            self.requires("abseil/20240116.2", override=True)
+
+The `default_options` class attribute carries over the
+options that were in the conanfile.txt `[options]` section
+(`opentelemetry-cpp:with_otlp_grpc=True`, etc.) using the
+`"package/*:option": value` dict syntax.
+
+The `Containerfile` was updated to `COPY conanfile.py`
+instead of `COPY conanfile.txt`. Conan auto-detects which
+file is present and prefers `.py` if both exist, but
+removing `.txt` avoids confusion.
+
+**Cost: from-source rebuild of OTel-cpp.** Conan's
+pre-built binary cache for `opentelemetry-cpp/1.14.2` was
+populated against whatever transitive deps were current at
+build time (probably `protobuf/5.27.0`). Our overrides
+force a different transitive set, so no pre-built matches.
+With `--build=missing`, Conan rebuilds OTel-cpp from
+source against `grpc/1.62.0` + `protobuf/3.21.12` +
+`abseil/20240116.2`. ~30-60 min on first build; cached
+afterward.
+
+This is acceptable for a tutorial demo where reproducibility
+matters more than build speed. In a CI environment, the
+cache would be hot from the first run; in a laptop dev
+loop, the long first build only happens when the override
+combination changes.
+
+**Discoverability lesson: recipe revisions are silent.**
+There's nothing in the resolution failure that points at
+"your pin is stale because the recipe was updated." The
+error reports a version conflict between protobuf/5.27.0
+and protobuf/3.21.12 as if both were equally explicit
+choices. The fact that one came from your conanfile and
+the other came from a transitive recipe revision is
+information the user has to deduce from
+`Conflict originates from opentelemetry-cpp/1.14.2`.
+The connection from "originates from X" to "X's recipe
+revision was updated" is one Conan-internals search away
+once you know what to look for.
+
+For documenting the lesson in §13 (Reproducibility):
+**a published version pin is not actually reproducible
+unless paired with a revision pin.** Conan's `conan.lock`
+captures both name+version+revision and is the only
+mechanism that gives bit-for-bit reproducible installs.
+For a non-locked recipe, "the same version" can mean
+different transitive deps over time.
+
+**Tutorial value.** This pairs naturally with G-22 (ABI
+drift in transitive deps), G-24 (strict-pin in upstream
+recipes), and G-23 (CMake's link command shape). All four
+are forms of the same general skill: **the abstraction
+layer above where the bug is happening doesn't tell you
+which layer is broken; you have to drop down a level and
+inspect.** For G-25, the dropdown is from "version pin"
+to "version+revision pin"; the inspection tool is
+`conan.lock`.
+
+**What r46 specifically does:**
+
+1. Replaces conanfile.txt with conanfile.py.
+2. Pins opentelemetry-cpp/1.14.2 normally; overrides
+   grpc, protobuf, abseil to OneUptime values.
+3. Carries over the option set via `default_options`.
+4. Updates Containerfile's COPY line.
+5. Removes conanfile.txt entirely.
+
+**Anticipated outcomes:**
+
+- **Best case:** Conan accepts overrides, rebuilds
+  OTel-cpp from source against pinned transitives, the
+  binary links cleanly because grpc/1.62.0 has Status::OK
+  + GetGlobalCallbackHook(). Demo runs. r47 verifies
+  signal flow. ~30-60 min wait time.
+- **OTel-cpp 1.14.2 source doesn't compile against
+  protobuf/3.21.12:** the recipe was updated for a reason
+  (probably a real protobuf API change OTel-cpp source
+  now uses). We'd see a compilation error from inside
+  OTel-cpp. Fall back: try a newer OTel-cpp version
+  whose source still works with protobuf/3.21.12, or
+  upgrade the override to protobuf/4.x.
+- **gRPC 1.62.0 source doesn't compile against
+  protobuf/3.21.12:** unlikely given they were paired
+  originally. If it happens, narrow the protobuf pin
+  range.
+- **All compiles, link still fails on Status::OK:**
+  would mean grpc/1.62.0's Conan recipe doesn't
+  actually expose Status::OK as a linkable symbol
+  despite the source defining one. Diagnostic: `nm`
+  on the built libgrpc++.a inside the container.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -5991,6 +6161,172 @@ about the modern C++ build ecosystem; G-24 in
 particular is the first time we encountered Conan's
 strict-pin-in-recipe behavior, which deserves its
 permanent home in the gotcha list.
+
+### 2026-05-10 — r45a: trivial syntax fix — duplicate `[generators]` section in conanfile.txt
+
+User reran with r45's rolled-back conanfile. Conan
+parser failed:
+
+    ERROR: /src:
+    ConfigParser: Duplicated section: [generators]
+
+r45's str_replace on the conanfile.txt comment block
+included a new `[requires]+[generators]` block above
+the existing `[layout]`-comment + `[options]` section
+but failed to remove the original `[generators]` block
+underneath. Two `[generators]` sections, ConfigParser
+strict mode, immediate fail.
+
+Removed the duplicate. Conanfile now has exactly one of
+each: `[requires]`, `[generators]`, `[options]`. Package
+set unchanged from r45.
+
+Process lesson: when doing large `str_replace` on a
+sectioned config file, grep for duplicate section
+headers before shipping. ConfigParser doesn't tolerate
+duplicates the way some other format parsers do.
+
+### 2026-05-10 — r46: G-25 — Conan recipe revision drift broke the OneUptime combo; convert to conanfile.py with override=True
+
+User reran with r45a. Conan got further this time —
+abseil/20240116.2 and opentelemetry-cpp/1.14.2 both
+downloaded successfully — but then conflicted:
+
+    ERROR: Version conflict: Conflict between protobuf/5.27.0
+    and protobuf/3.21.12 in the graph.
+    Conflict originates from opentelemetry-cpp/1.14.2
+
+The error informs: OTel-cpp 1.14.2's *current* recipe
+revision (`#e89f9b81aa64baa0dec47763775ad56f`) requires
+`protobuf/5.27.0`, not the `protobuf/3.21.12` from
+OneUptime's documented combo. The package version is the
+same, but the recipe was updated post-publication.
+
+**Conanfile.txt has no override mechanism.** Only [requires],
+[generators], [options], [layout], [imports],
+[tool_requires], [test_requires]. None of these can say
+"OTel-cpp's recipe wants protobuf/5.27.0; build with
+3.21.12 anyway." The fix requires conanfile.py.
+
+**Converted conanfile.txt → conanfile.py:**
+
+    from conan import ConanFile
+
+    class Demo04Conan(ConanFile):
+        settings = "os", "compiler", "build_type", "arch"
+        generators = "CMakeDeps", "CMakeToolchain"
+
+        default_options = {
+            "opentelemetry-cpp/*:with_otlp_grpc": True,
+            "opentelemetry-cpp/*:with_otlp_http": False,
+            "opentelemetry-cpp/*:with_zipkin":   False,
+            "opentelemetry-cpp/*:shared":        False,
+            "openssl/*:no_fips":                 True,
+            "*/*:shared":                        False,
+        }
+
+        def requirements(self):
+            self.requires("opentelemetry-cpp/1.14.2")
+            self.requires("grpc/1.62.0",      override=True)
+            self.requires("protobuf/3.21.12", override=True)
+            self.requires("abseil/20240116.2", override=True)
+
+The `override=True` flag tells Conan: "I know the recipe
+wants something different; use my version instead." This
+forces the OneUptime-documented working combination
+regardless of recipe revision drift.
+
+**Cost: from-source rebuild of OTel-cpp.** Conan's
+pre-built binary cache for `opentelemetry-cpp/1.14.2`
+was populated against the recipe-current transitive deps
+(probably `protobuf/5.27.0`). Our overrides force a
+different transitive set, so no pre-built matches. With
+`--build=missing`, Conan rebuilds OTel-cpp from source
+against `grpc/1.62.0` + `protobuf/3.21.12` +
+`abseil/20240116.2`. ~30-60 min on first build; cached
+afterward.
+
+This is acceptable for a tutorial demo where
+reproducibility matters more than build speed. In CI
+the cache would be hot from the first run; in a laptop
+dev loop, the long first build only happens when the
+override combination changes.
+
+**Containerfile updated** to `COPY conanfile.py` instead
+of `COPY conanfile.txt`. Conan would auto-detect either,
+but only one file should exist to avoid confusion.
+
+**Removed conanfile.txt entirely.**
+
+**Promoted to G-25** with full Problem/Why/Fix shape
+including:
+
+- The recipe-revision-vs-version distinction (Conan 2.x
+  packages are addressed by name+version+revision; the
+  revision can change without the version changing, and
+  with it the transitive constraints).
+- Why conanfile.txt fundamentally can't fix this (no
+  override section, no extension mechanism).
+- The `override=True` fix and how `default_options` carries
+  the option set across the format conversion.
+- The "from-source rebuild as the cost of override" pattern.
+- The discoverability tip (when Conan says "Conflict
+  originates from X", X is pinning a specific transitive
+  version — possibly a different one than the user expected
+  from documentation written against an older recipe).
+- The reproducibility lesson worth surfacing in §13: a
+  published version pin is not actually reproducible
+  unless paired with a revision pin (`conan.lock`).
+- Pair with G-22, G-23, G-24: all forms of the same
+  general skill — drop one abstraction layer, inspect
+  the actual mechanism.
+
+**Anticipated outcomes:**
+
+- **Best case:** Conan accepts overrides, builds
+  OTel-cpp from source against pinned transitives,
+  the binary links cleanly because grpc/1.62.0 has
+  Status::OK + GetGlobalCallbackHook() as linkable
+  statics. Demo runs. r47 verifies signal flow.
+  ~30-60 min wait time on first run.
+- **OTel-cpp 1.14.2 source won't compile against
+  protobuf/3.21.12:** the recipe was probably updated
+  for a reason (a real protobuf API change OTel-cpp
+  source now uses). We'd see a compile error from
+  inside OTel-cpp. Fall back: try a newer OTel-cpp
+  version whose source still works with
+  protobuf/3.21.12, or upgrade the override to
+  protobuf/4.x.
+- **gRPC 1.62.0 source won't compile against
+  protobuf/3.21.12:** unlikely given they were
+  paired originally. If it happens, narrow the
+  protobuf pin range.
+- **All compiles, link fails on Status::OK:** would
+  mean grpc/1.62.0's Conan recipe doesn't actually
+  expose Status::OK despite the source defining one.
+  Diagnostic: `nm` on the built libgrpc++.a inside
+  the container. Possible if Conan's grpc recipe
+  builds with `-fvisibility=hidden` plus deprecated-
+  symbol attributes.
+
+**What r46 specifically ships:**
+
+1. New `examples/demo-04-observability/conanfile.py`
+   replacing `conanfile.txt`.
+2. Updated `examples/demo-04-observability/Containerfile`
+   `COPY` line.
+3. Updated comment block at top of conanfile.py
+   explaining the override rationale.
+4. G-25 promoted in plan with all the reasoning.
+5. `conanfile.txt` removed.
+
+**Cumulative round count: r46.** Demo-04 is 18 rounds in
+(r28→r46). The journey through Conan's edge cases is
+becoming a tutorial in itself — every modern C++
+project that uses transitive deps with version constraints
+will eventually hit one of these. Documenting them
+permanently means the tutorial captures more value than
+just demo-04's eventual passing.
 
 ---
 
