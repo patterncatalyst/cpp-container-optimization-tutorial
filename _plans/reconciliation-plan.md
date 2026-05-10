@@ -1375,6 +1375,63 @@ becomes the next active deliverable.**
 Verification matrix updated: 3 of 15 sections verified
 (§1 r08, §3 r18, §4 r18), demo-01 fully closed r20.
 
+### 2026-05-09 — r21: fix set -e regression introduced in r20
+
+User ran demo-01 on r20. Output stopped after the four
+working variants printed; the EXPECTED FAILURE block, the
+teaching-variant table row, and `==> Image labels` /
+`==> Done` were all missing. The "learning moment" was gone.
+
+**Root cause:** my r20 polish broke set -e exemption.
+
+The r19 structure was:
+
+    if wait_for_http "..." 30; then
+      # success
+    else
+      # failure with diagnostic
+    fi
+
+Where `wait_for_http` is the *test* of an `if`, set -e is
+exempt for that call — its non-zero exit just selects the
+else branch.
+
+My r20 changed it to:
+
+    if [[ "${tag}" == "ubi-micro-glibc-mismatch" ]]; then
+      wait_for_http "..." 30 2>/dev/null   # simple command, NOT in test ctx
+    else
+      wait_for_http "..." 30
+    fi
+    if [[ $? -eq 0 ]]; then ...
+
+That second wait_for_http call sits in a then/else block as
+a simple command, not as the test of an `if`. When the
+teaching variant timed out (return 1), set -e fired and
+killed the script. We never reached the diagnostic block.
+
+**Fix:** restore set -e exemption via the `cmd && var=1`
+pattern, which keeps the call inside an exempted context:
+
+    wait_ok=0
+    if [[ "${tag}" == "ubi-micro-glibc-mismatch" ]]; then
+      wait_for_http "..." 30 2>/dev/null && wait_ok=1
+    else
+      wait_for_http "..." 30 && wait_ok=1
+    fi
+    if (( wait_ok == 1 )); then ...
+
+Bash exempts every command in a `&&` chain except the
+final one, so wait_for_http's non-zero exit doesn't trigger
+set -e. wait_ok stays 0; we branch into the diagnostic.
+
+Comment block in demo.sh explains the trap so a future
+reader doesn't repeat the mistake.
+
+This is a pure bug fix; no other changes. Demo-01
+verification is still closed; r21 just makes r20's polish
+actually run end-to-end.
+
 
 ---
 

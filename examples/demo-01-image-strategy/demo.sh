@@ -184,16 +184,25 @@ for tag in "${ORDER[@]}"; do
   # for ubi-micro: container exited fast, --rm cleaned up, log
   # capture got "no such container".
   podman run -d --name "demo01-bench-${tag}" -p "${port}:8080" "${IMG_PREFIX}:${tag}" >/dev/null
-  # The teaching variant is EXPECTED to fail wait_for_http; suppress
-  # wait_for_http's "[fail] timed out..." stderr line for that one
-  # variant so it doesn't read as an unexpected error in the output.
-  # Other variants keep the normal error path so real failures show.
+  # The teaching variant is EXPECTED to fail wait_for_http. We want to:
+  #   (a) suppress wait_for_http's "[fail] timed out..." stderr line
+  #       (the EXPECTED FAILURE block right after is self-explanatory)
+  #   (b) NOT have the script terminate when it does fail
+  #
+  # `set -e` would terminate on a failed wait_for_http unless that call
+  # is in an exempted context. The `... && wait_ok=1` pattern provides
+  # that exemption: bash exempts every command in a `&&` chain except
+  # the final one, so wait_for_http's non-zero exit doesn't trigger
+  # set -e — wait_ok stays 0 and we branch normally below. (r20 used
+  # `if/else; if [[ $? -eq 0 ]]; then` which is NOT exempt and killed
+  # the script on the teaching variant's expected failure.)
+  wait_ok=0
   if [[ "${tag}" == "ubi-micro-glibc-mismatch" ]]; then
-    wait_for_http "http://127.0.0.1:${port}/healthz" 30 2>/dev/null
+    wait_for_http "http://127.0.0.1:${port}/healthz" 30 2>/dev/null && wait_ok=1
   else
-    wait_for_http "http://127.0.0.1:${port}/healthz" 30
+    wait_for_http "http://127.0.0.1:${port}/healthz" 30 && wait_ok=1
   fi
-  if [[ $? -eq 0 ]]; then
+  if (( wait_ok == 1 )); then
     out=$(hey -n 5000 -c 50 "http://127.0.0.1:${port}/" 2>/dev/null || true)
     # Match both `50% in` and `50%% in` — different hey builds escape the
     # percent sign differently in the latency-distribution block. The `%+`
