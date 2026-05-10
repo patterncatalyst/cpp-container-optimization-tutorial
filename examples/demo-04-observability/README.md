@@ -5,17 +5,20 @@ Tutorial section: §9 (Observability and profiling)
 ## What this demo shows
 
 A small C++ HTTP service instrumented with OpenTelemetry (logs, metrics,
-traces) running alongside the full Grafana stack from `observability/`:
+traces) running alongside the **`grafana/otel-lgtm`** all-in-one
+observability container from `observability/`. That single image
+bundles the receiving end of all three OTLP signals:
 
-- **Prometheus** — scrapes the service's `/metrics`
-- **Mimir** — long-term metric storage (Prometheus remote-write target)
-- **Tempo** — OTLP trace receiver
-- **Loki** — OTLP log receiver
-- **Grafana** — pre-provisioned datasources and one starter dashboard
+- **Tempo** — accepts OTLP traces from the service
+- **Loki** — accepts OTLP logs from the service
+- **Prometheus** — accepts OTLP metrics from the service
+- **Grafana** — pre-configured datasources for the three above; one
+  starter dashboard is mounted into Grafana's provisioning directory
 
-Plus a `bpftrace` script you can run on the host to see kernel-level
-events (sched switches, futex waits) during the workload, demonstrating
-the fourth observability dimension that lives outside the container.
+A `bpftrace` script you can run on the host complements the
+application metrics with kernel-level events (sched switches,
+futex waits) — the fourth observability dimension that lives
+outside the container.
 
 ## Run it
 
@@ -43,5 +46,6 @@ is reusable from elsewhere if you want it.
   `./demo.sh --workload-only` after bringing up the stack manually.
 - bpftrace requires CAP_SYS_ADMIN (or root). The demo script runs the
   probes via `sudo bpftrace` and asks first.
-- Mimir, Tempo, and Loki are all in single-binary mode for the demo;
-  not a production deployment topology.
+- `grafana/otel-lgtm` runs every component in a single container —
+  perfect for a tutorial, not a production deployment topology.
+  §9's prose covers what a production split looks like.

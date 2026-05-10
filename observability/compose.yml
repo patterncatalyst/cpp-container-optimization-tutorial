@@ -1,4 +1,4 @@
-# Reusable observability stack.
+# Observability stack — grafana/otel-lgtm (all-in-one).
 #
 # Bring up standalone:
 #   podman compose -f observability/compose.yml up -d
@@ -6,120 +6,54 @@
 # Or include from a demo's compose.yml via:
 #   podman compose -f compose.yml -f observability/compose.yml up
 #
-# Single-binary mode for Mimir/Tempo/Loki — fine for a tutorial, not
-# production. All ports are bound to 127.0.0.1 (no external exposure)
-# and Grafana is set to anonymous viewer so the audience can browse
-# without typing a password.
+# Why one image instead of six:
+# `grafana/otel-lgtm` bundles Grafana, Loki, Tempo, Prometheus, and an
+# OTel Collector into a single container. For a tutorial this is the
+# right call — you get the same OTLP endpoint, the same dashboards,
+# the same query languages, with a fraction of the moving parts and a
+# single image to pull. The reference repo
+# patterncatalyst/otel-observability-demos uses this exact pattern.
 #
-# ── Image registry policy ────────────────────────────────────────────────
-# Our own builds (everything under examples/) use registry.access.redhat.com/
-# ubi9/... — the project's UBI-first container policy (see CONTRIBUTING.md).
+# Trade-off: in production you'd run each component separately so you
+# can scale and tune them independently. The tutorial covers that
+# architecture in §9; the all-in-one is the running example.
 #
-# The third-party services below cannot all be sourced from UBI:
-#
-#   prometheus      → quay.io/prometheus/prometheus
-#                     (Prometheus team's primary registry; works without
-#                     docker.io reachability.)
-#
-#   otel-collector  → docker.io/otel/opentelemetry-collector-contrib
-#                     Alternative if docker.io is blocked:
-#                     ghcr.io/open-telemetry/opentelemetry-collector-releases/
-#                     opentelemetry-collector-contrib:<same-tag>
-#
-#   grafana, loki,  → docker.io/grafana/...
-#   tempo, mimir      Grafana Labs publishes these only to Docker Hub at
-#                     the time of writing. If your network blocks docker.io,
-#                     see §1 Prerequisites for the podman save/load workaround.
-#
-# Each docker.io reference above is a documented exception. Don't add new
-# ones without rationale.
+# Image policy: this image is the documented exception covered in
+# CONTRIBUTING.md → Container image policy. Grafana Labs publishes
+# only to Docker Hub; UBI / Quay alternatives don't exist for this
+# bundle.
 
 services:
-  otel-collector:
-    # Note: also available as ghcr.io/open-telemetry/opentelemetry-collector-releases/
-    # opentelemetry-collector-contrib:<tag> — switch if docker.io is blocked.
-    image: docker.io/otel/opentelemetry-collector-contrib:0.103.0
-    container_name: tutorial-otel-collector
-    command: ["--config=/etc/otel/config.yaml"]
-    volumes:
-      - ./otel-collector.yaml:/etc/otel/config.yaml:ro,Z
+  lgtm:
+    image: docker.io/grafana/otel-lgtm:0.8.1
+    container_name: tutorial-lgtm
     ports:
+      - "127.0.0.1:3000:3000"   # Grafana UI
       - "127.0.0.1:4317:4317"   # OTLP gRPC
       - "127.0.0.1:4318:4318"   # OTLP HTTP
-    networks:
-      - obs
-    depends_on:
-      - prometheus
-      - tempo
-      - loki
-
-  prometheus:
-    image: quay.io/prometheus/prometheus:v2.55.0
-    container_name: tutorial-prometheus
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--enable-feature=otlp-write-receiver"
-      - "--web.enable-remote-write-receiver"
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro,Z
-    ports:
-      - "127.0.0.1:9090:9090"
-    networks:
-      - obs
-
-  mimir:
-    image: docker.io/grafana/mimir:2.13.0
-    container_name: tutorial-mimir
-    command: ["-config.file=/etc/mimir/config.yaml"]
-    volumes:
-      - ./mimir/mimir.yaml:/etc/mimir/config.yaml:ro,Z
-    ports:
-      - "127.0.0.1:9009:9009"
-    networks:
-      - obs
-
-  tempo:
-    image: docker.io/grafana/tempo:2.5.0
-    container_name: tutorial-tempo
-    command: ["-config.file=/etc/tempo/config.yaml"]
-    volumes:
-      - ./tempo/tempo.yaml:/etc/tempo/config.yaml:ro,Z
-    ports:
-      - "127.0.0.1:3200:3200"   # HTTP API
-    networks:
-      - obs
-
-  loki:
-    image: docker.io/grafana/loki:3.1.0
-    container_name: tutorial-loki
-    command: ["-config.file=/etc/loki/config.yaml"]
-    volumes:
-      - ./loki/loki-config.yaml:/etc/loki/config.yaml:ro,Z
-    ports:
-      - "127.0.0.1:3100:3100"
-    networks:
-      - obs
-
-  grafana:
-    image: docker.io/grafana/grafana:11.2.0
-    container_name: tutorial-grafana
+      - "127.0.0.1:9090:9090"   # Prometheus UI (handy for ad-hoc PromQL)
+      - "127.0.0.1:3100:3100"   # Loki HTTP API (handy for LogCLI)
+      - "127.0.0.1:3200:3200"   # Tempo HTTP API
     environment:
+      # Grafana: anonymous viewer so the audience can browse without
+      # typing a password.
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
-      GF_AUTH_DISABLE_LOGIN_FORM: "false"
       GF_FEATURE_TOGGLES_ENABLE: "traceqlEditor"
+    # Grafana stores its sqlite state under /data; in rootless podman
+    # bind mounts can hit ownership issues, so use tmpfs and run the
+    # bundled Grafana as root inside the container. Hard-won fix from
+    # patterncatalyst/otel-observability-demos.
+    user: root
+    tmpfs:
+      - /data
     volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro,Z
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro,Z
-    ports:
-      - "127.0.0.1:3000:3000"
+      # Optional: drop pre-built dashboards into this directory and
+      # they'll show up under the 'Tutorial' folder in Grafana on
+      # next start. Empty for now; demo 4 mounts its own.
+      - ./grafana/dashboards:/otel-lgtm/grafana/conf/provisioning/dashboards/tutorial:ro,Z
     networks:
       - obs
-    depends_on:
-      - prometheus
-      - tempo
-      - loki
-      - mimir
 
 networks:
   obs:

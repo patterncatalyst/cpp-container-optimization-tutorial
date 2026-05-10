@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Demo 4 — observability stack: spin up Grafana/Tempo/Loki/Mimir/Prom +
-# the OTel-instrumented service, generate load, optionally run bpftrace.
+# Demo 4 — observability stack: spin up grafana/otel-lgtm (Grafana+Tempo+
+# Loki+Prometheus+OTel Collector all-in-one) plus the OTel-instrumented
+# service, generate load, optionally run bpftrace.
 #
 #   ./demo.sh
 #   ./demo.sh --workload-only
@@ -68,6 +69,5 @@ log_info "  Grafana:    http://127.0.0.1:3000  (anonymous viewer)"
 log_info "  Prometheus: http://127.0.0.1:9090"
 log_info "  Tempo API:  http://127.0.0.1:3200"
 log_info "  Loki API:   http://127.0.0.1:3100"
-log_info "  Mimir API:  http://127.0.0.1:9009"
 log_info "  Service:    http://127.0.0.1:18401"
 log_info "Tear down with: ./demo.sh --clean"

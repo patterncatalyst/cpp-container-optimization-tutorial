@@ -382,6 +382,57 @@ Verification status: §1 still drafted — needs another clean
 check-host.sh run with 26 PASS lines including the new quay.io
 check before flipping to verified.
 
+### 2026-05-09 — r06: align with patterncatalyst/otel-observability-demos
+
+User pointed at the `otel-observability-demos` reference repo as a
+working podman compose + OTel pattern to align with. Adopted the
+verified architecture and conventions:
+
+- **Replaced 6-service observability stack with the all-in-one
+  `grafana/otel-lgtm:0.8.1` image.** Same OTLP endpoint (4317), same
+  Grafana UI (3000), same query languages — but one image to pull
+  instead of six and one set of endpoints instead of five. The
+  reference repo verified this image works for talks/demos; we now
+  use it for the same reason.
+- **Dropped orphaned config files**: `observability/{prometheus,
+  loki,tempo,mimir,grafana}/...` configs, plus `otel-collector.yaml`,
+  are no longer needed since lgtm bundles its own. Kept the starter
+  dashboard (`observability/grafana/dashboards/demo-overview.json`)
+  which lgtm picks up via the dashboards volume mount.
+- **Adopted the rootless-podman Grafana fix**: `user: root` + `tmpfs:
+  /data` in compose so Grafana's sqlite state isn't owned by root on
+  a host-bind mount the rootless container can't write to. Hard-won
+  fix from the reference repo's PREREQUISITES.md.
+- **Added `pre-pull.sh`** at repo root: pulls every image (UBI 9,
+  Alpine, lgtm, Prometheus-on-Quay) so cold-cache demos start in
+  seconds instead of minutes.
+- **Added `verify-stacks.sh`** at repo root: smoke-tests every
+  podman-compose stack in the project. Brings each up, probes its
+  health endpoint, brings it down. Catches "broke since last week"
+  before an audience does.
+- **Updated demo-04**: compose.yml now points at the `lgtm` service,
+  README and demo.sh updated to reflect the all-in-one architecture
+  (Mimir reference dropped — Prometheus inside lgtm covers metrics
+  storage).
+- **§1 Prerequisites**: added a "Pre-pull and verify-stacks" section
+  pointing at the new scripts; added a UBI subscription note in the
+  "Why Fedora 44" section; rewrote the docker.io fallback to reflect
+  that only one image (`grafana/otel-lgtm`) is now affected by
+  Docker Hub blocks.
+- **CONTRIBUTING.md image policy**: simplified the exceptions list
+  (was five Grafana/OTel images, now one — the lgtm bundle).
+
+Net effect:
+- Before: 6 third-party docker.io images + 5 config files in
+  observability/, demo-04 reaches across 6 service names.
+- After: 1 third-party docker.io image + 0 config files, demo-04
+  reaches one service `lgtm`. Same observability semantics for the
+  reader; vastly less surface area to misconfigure.
+
+Verification status: §1 still drafted; no new check-host.sh run yet
+on user's host post-r06. Ship-ready when user runs it again and
+reports clean.
+
 ---
 
 ## Known divergences from the PRD
@@ -390,4 +441,9 @@ A running list of things the shipped tutorial does differently from
 what the PRD says. Update as you discover them; the gap between
 PRD and reality is usually instructive at retrospective time.
 
-- (none yet)
+- **Mimir dropped from observability stack (r06).** PRD §1 lists
+  "podman+grafana+tempo+loki+prometheus+mimir" as the stack.
+  Aligned with the verified `grafana/otel-lgtm` reference, which
+  bundles Prometheus (not Mimir) for metrics. For tutorial
+  purposes Prometheus covers the same teaching ground; production
+  Mimir setups are mentioned in §9's "for deeper coverage" pointers.

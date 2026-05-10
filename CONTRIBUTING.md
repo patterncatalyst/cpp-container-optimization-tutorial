@@ -118,12 +118,18 @@ Two and only two:
    officially discouraged and full of runtime traps (NSS, getaddrinfo,
    locale). The final runtime stage is `scratch` — nothing Alpine
    reaches the produced image.
-2. **`observability/compose.yml`** pulls the Grafana stack (Grafana,
-   Loki, Tempo, Mimir) and the OTel Collector from Docker Hub because
-   their maintainers don't publish to Red Hat or Quay registries. We
-   route Prometheus through Quay (`quay.io/prometheus/prometheus`) and
-   note the GHCR alternative for the OTel Collector. Each `docker.io/`
-   reference in that file has an explanatory comment.
+2. **`observability/compose.yml`** pulls
+   `docker.io/grafana/otel-lgtm:0.8.1` — the all-in-one Grafana Labs
+   image bundling Grafana, Loki, Tempo, Prometheus, and an OTel
+   Collector. Grafana Labs publishes the bundle only to Docker Hub.
+   We chose the all-in-one image (instead of running each component
+   separately) because the tutorial's focus is C++ optimization, not
+   observability operations; one image instead of six is faster to
+   pull and harder to misconfigure.
+
+We also route Prometheus through Quay (`quay.io/prometheus/prometheus`)
+where applicable; that's a registry-preference improvement, not an
+exception.
 
 ### Adding a new exception
 

@@ -1,11 +1,14 @@
 # Demo 4 brings up:
 #   - the demo service (this directory)
-#   - the full observability stack (../../observability/compose.yml)
-# on a shared network so the service can reach the OTel collector / Tempo /
-# Loki / Mimir endpoints by name.
+#   - the all-in-one observability stack (../../observability/compose.yml)
 #
-# Bring up:  podman compose -f compose.yml -f ../../observability/compose.yml up --build
-# Tear down: ./demo.sh --clean
+# Service points at the bundled OTel Collector inside grafana/otel-lgtm,
+# reachable on the shared `tutorial-obs` network as `lgtm:4317`.
+#
+# Bring up:
+#   podman compose -f compose.yml -f ../../observability/compose.yml up --build
+# Tear down:
+#   ./demo.sh --clean
 
 services:
   demo-04-svc:
@@ -14,13 +17,15 @@ services:
     image: cpp-tut/demo-04:latest
     container_name: demo04-svc
     environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      # The lgtm container exposes OTLP gRPC on port 4317 inside its
+      # network, same as a standalone OTel Collector would.
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://lgtm:4317"
       OTEL_SERVICE_NAME: "demo-04-svc"
       OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=tutorial"
     ports:
-      - "18401:8080"
+      - "127.0.0.1:18401:8080"
     depends_on:
-      - otel-collector
+      - lgtm
     networks:
       - obs
 

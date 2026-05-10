@@ -40,6 +40,12 @@ importance:
    ships in `gcc-toolset-14`), Clang for the PGO and static-musl
    builds (better profile-data tooling, cleaner `-stdlib=libc++`).
 
+> **No subscription needed.** Every UBI 9 image we use comes from
+> `registry.access.redhat.com/ubi9/...` and is freely pullable and
+> redistributable. You don't need a Red Hat subscription for any
+> of the demos. Subscription-only images like `ubi9/toolbox` are not
+> in use.
+
 Other distros that should work with minor adjustments:
 
 | Distro                | Verdict                                                                                |
@@ -313,46 +319,23 @@ all *our* container images come from Red Hat UBI, and Prometheus
 routes through Quay (`quay.io/prometheus/prometheus`). Demos 1, 2,
 3, 5, and 6 will run fine without Docker Hub reachability.
 
-The Grafana stack (Grafana, Loki, Tempo, Mimir) and the OTel
-Collector publish only to Docker Hub at the time of writing. **If
-Docker Hub is blocked, demo 4 (the observability stack) won't run.**
+The one image affected is `docker.io/grafana/otel-lgtm`, which our
+observability stack uses for demo 4. **If Docker Hub is blocked,
+demo 4 won't run** unless you mirror the image.
 
-Two workable fallbacks:
-
-**Switch the OTel Collector to GHCR.** The OpenTelemetry team also
-publishes to GitHub Container Registry. In `observability/compose.yml`,
-replace:
-
-```yaml
-image: docker.io/otel/opentelemetry-collector-contrib:0.103.0
-```
-
-with:
-
-```yaml
-image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.103.0
-```
-
-(Verify the tag exists on GHCR before swapping — they release
-slightly later than Docker Hub.)
-
-**Pre-pull and re-tag from a reachable host.** If you have a
-network-reachable jump box that *can* reach Docker Hub:
+The `podman save | podman load` air-gap workaround:
 
 ```bash
-# On the jump host:
-podman pull docker.io/grafana/grafana:11.2.0
-podman save docker.io/grafana/grafana:11.2.0 -o grafana.tar
+# On a reachable jump host:
+podman pull docker.io/grafana/otel-lgtm:0.8.1
+podman save docker.io/grafana/otel-lgtm:0.8.1 -o lgtm.tar
 
-# Transfer grafana.tar to your build host (scp, USB, whatever), then:
-podman load -i grafana.tar
+# Transfer lgtm.tar to your build host (scp, USB, whatever), then:
+podman load -i lgtm.tar
 ```
 
-Repeat for `grafana/loki`, `grafana/tempo`, `grafana/mimir`. This is
-tedious but works in an air-gapped or DNS-blocked environment.
-
-If neither fallback is viable, demo 4 simply won't run — but
-everything else will.
+If a mirror isn't viable, demo 4 simply won't run — but everything
+else will.
 
 ## Clone this repo
 
@@ -427,6 +410,31 @@ remediation command for each failure.
 > if you cloned an older revision and the file isn't there yet, the
 > bash version is short enough to inline below. We're keeping it in
 > `scripts/` so it stays runnable outside the tutorial flow.
+
+## Pre-pull and verify-stacks
+
+Two convenience scripts at the repo root that save you debugging time:
+
+```bash
+./pre-pull.sh                 # pulls every image referenced by the project
+./verify-stacks.sh            # smoke-tests every podman-compose stack
+./verify-stacks.sh --quick    # skip the observability stack (slow)
+```
+
+**Run `./pre-pull.sh` once after first clone** — it warms the local
+image cache so subsequent demo runs start in seconds instead of
+minutes. Especially important if you'll be presenting; you want
+the network surprises to happen now, not in front of an audience.
+
+**Run `./verify-stacks.sh` whenever you think something might have
+broken** — after a system update, after pulling fresh images, or
+before walking on stage. Each stack passes if it can `up`, respond
+to a health endpoint, and `down` cleanly.
+
+If any pull fails, the message will say which image and why — usually
+either Docker Hub being throttled (re-run later) or a network /
+firewall blocking the registry (see "When `docker.io` is unreachable"
+above for the workaround).
 
 ## Common things that go wrong
 
