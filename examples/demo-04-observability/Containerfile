@@ -1,5 +1,8 @@
 ARG UBI_VERSION=9.4
 
+# ════════════════════════════════════════════════════════════════════════
+# Build stage — UBI 9.4 with gcc-toolset-14, Conan 2.x for C++ deps.
+# ════════════════════════════════════════════════════════════════════════
 FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build
 
 # UBI w/o entitlement: silence subscription-manager.
@@ -8,73 +11,67 @@ RUN rm -f /etc/yum.repos.d/redhat.repo && \
     sed -i 's/^enabled=1/enabled=0/' \
         /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
 
-# UBI 9.4's BaseOS + AppStream don't carry the modern C++ ecosystem
-# packages we need (gRPC, protobuf, abseil-cpp, nlohmann-json,
-# ninja-build). UBI doesn't ship CodeReady Builder either — that's a
-# subscription-only repo. EPEL 9 is the right answer for a non-
-# subscribed UBI build: the rpm is publicly hosted and the packages
-# are freely redistributable. See G-13 in the reconciliation plan.
-RUN dnf install -y --setopt=install_weak_deps=False \
-        https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm \
-    && dnf clean all
-
-# Now install the build deps. c-ares-devel was explicit before; it's a
-# transitive dep of grpc-devel so the explicit line is redundant — and
-# c-ares-devel itself is in CRB (subscription-only on UBI), not EPEL,
-# so the explicit ask was double trouble. Let grpc-devel pull it.
+# Build basics. Conan handles all C++ ecosystem deps (gRPC, protobuf,
+# abseil-cpp, opentelemetry-cpp) — UBI 9 BaseOS+AppStream are enough
+# for the toolchain itself. We don't need EPEL for this demo (G-13
+# story in the plan covers why we stopped chasing system C++ packages).
 RUN dnf install -y --setopt=install_weak_deps=False \
         gcc-toolset-14 \
         cmake \
         ninja-build \
         git \
-        grpc-devel \
-        protobuf-devel \
-        protobuf-compiler \
-        abseil-cpp-devel \
-        nlohmann-json-devel \
+        python3-pip \
     && dnf clean all
 
 ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
-ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64
 
-# Build OpenTelemetry C++ from source. Pinned tag.
-ARG OTEL_TAG=v1.16.1
-RUN git clone --depth 1 --branch "${OTEL_TAG}" \
-        https://github.com/open-telemetry/opentelemetry-cpp.git /tmp/otel \
- && cmake -S /tmp/otel -B /tmp/otel/build -G Ninja \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DBUILD_TESTING=OFF \
-        -DWITH_OTLP_GRPC=ON \
-        -DWITH_OTLP_HTTP=OFF \
-        -DWITH_LOGS_PREVIEW=ON \
-        -DWITH_ABSEIL=ON \
- && cmake --build /tmp/otel/build -j"$(nproc)" \
- && cmake --install /tmp/otel/build
+# Conan 2.x via pip — packaged Conan in distros lags upstream and
+# Conan 2's CLI/recipe format is what we want.
+RUN pip3 install --no-cache-dir 'conan~=2.0'
+
+# Generate a default profile from the running compiler, then nail
+# down the C++ standard so the demo's std::print uses are honored.
+RUN conan profile detect --force && \
+    sed -i 's|^compiler.cppstd=.*|compiler.cppstd=23|' \
+        /root/.conan2/profiles/default
 
 WORKDIR /src
+
+# Vendor cpp-httplib at build time (single header, no Conan recipe
+# needed for this version — the project pins its own).
+ARG HTTPLIB_VERSION=v0.16.0
+RUN mkdir -p src/third_party && \
+    curl -fsSL -o src/third_party/httplib.h \
+        "https://raw.githubusercontent.com/yhirose/cpp-httplib/${HTTPLIB_VERSION}/httplib.h"
+
+# Conan install: opentelemetry-cpp pulls gRPC, protobuf, abseil, etc.
+# from Conan Center as transitive deps. --build=missing falls back to
+# from-source for any dep that isn't pre-built for our profile.
+COPY conanfile.txt ./
+RUN conan install . --output-folder=build/conan \
+                    -s build_type=Release \
+                    --build=missing
+
 COPY src/ ./src/
 COPY CMakeLists.txt ./
 
-# Vendor cpp-httplib at build time.
-ARG HTTPLIB_VERSION=v0.16.0
-RUN mkdir -p src/third_party \
- && curl -fsSL -o src/third_party/httplib.h \
-        "https://raw.githubusercontent.com/yhirose/cpp-httplib/${HTTPLIB_VERSION}/httplib.h"
+# Build against the Conan-generated toolchain.
+RUN cmake -S . -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_TOOLCHAIN_FILE=build/conan/conan_toolchain.cmake \
+    && cmake --build build -j"$(nproc)" \
+    && strip --strip-all build/demo-04-svc
 
-RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
- && cmake --build build -j"$(nproc)" \
- && strip --strip-all build/demo-04-svc
-
-# ---- runtime ----
+# ════════════════════════════════════════════════════════════════════════
+# Runtime stage — ubi-minimal with just the C++ ABI lib.
+# Static linkage from Conan deps means the binary doesn't pull a
+# single C++ ecosystem package at runtime.
+# ════════════════════════════════════════════════════════════════════════
 FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION}
-# Same EPEL story as the build stage: ubi-minimal doesn't ship grpc /
-# protobuf / abseil-cpp in its repos either. microdnf accepts an URL
-# rpm install just like dnf does.
+
 RUN microdnf install -y --setopt=install_weak_deps=0 \
-        https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm \
- && microdnf install -y --setopt=install_weak_deps=0 \
-        libstdc++ grpc protobuf abseil-cpp c-ares \
- && microdnf clean all
+        libstdc++ \
+    && microdnf clean all
 
 ARG GIT_SHA=unknown
 LABEL tutorial.demo="04-observability" \
@@ -82,9 +79,7 @@ LABEL tutorial.demo="04-observability" \
 
 WORKDIR /app
 COPY --from=build /src/build/demo-04-svc /app/demo-04-svc
-COPY --from=build /usr/local/lib64/libopentelemetry_*.so* /usr/local/lib64/
 
-ENV LD_LIBRARY_PATH=/usr/local/lib64
 USER 1001:1001
 EXPOSE 8080
 ENTRYPOINT ["/app/demo-04-svc"]

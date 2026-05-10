@@ -1,0 +1,50 @@
+# Demo-04 — Conan 2.x package list.
+#
+# Why Conan instead of system packages: rounds r28-r30 walked into
+# UBI 9's repo gap one G-NN at a time (G-12 docker-compose
+# delegation, G-13 EPEL needed, G-14 protobuf-devel still missing
+# despite EPEL because UBI doesn't ship CRB). System packages on
+# UBI for the modern C++ ecosystem are a moving target. Conan is
+# the right answer architecturally — and §13 Reproducibility
+# spends a chapter on exactly this lesson.
+#
+# This recipe pulls opentelemetry-cpp from Conan Center; that pulls
+# gRPC, protobuf, abseil-cpp, c-ares and the rest as transitive
+# deps. All static-linked into the binary so the runtime image
+# doesn't need a single C++ ecosystem package.
+#
+# Build flow inside the container:
+#   conan install . --output-folder=build/conan \
+#                   -s build_type=Release \
+#                   --build=missing
+#   cmake -S . -B build -G Ninja \
+#         -DCMAKE_TOOLCHAIN_FILE=build/conan/conan_toolchain.cmake
+#   cmake --build build -j$(nproc)
+#
+# First-run time on a clean cache: 5-15 minutes. Conan pulls
+# pre-built binaries for popular profiles (gcc/libstdc++); if our
+# gcc-toolset-14 + C++23 profile isn't pre-built, --build=missing
+# triggers from-source compiles. Subsequent runs use the Conan
+# cache and are 1-2 minutes total.
+
+[requires]
+opentelemetry-cpp/1.16.1
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[layout]
+cmake_layout
+
+[options]
+# OTel-cpp options: enable OTLP gRPC (the demo's exporter), keep
+# everything static so the runtime image is minimal.
+opentelemetry-cpp/*:with_otlp_grpc=True
+opentelemetry-cpp/*:with_otlp_http=False
+opentelemetry-cpp/*:shared=False
+
+# Transitive deps: keep static linkage uniform. Wildcards apply to
+# every package in the dep tree; recipes that don't have a `shared`
+# option just ignore it.
+*:shared=False

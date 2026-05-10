@@ -5,8 +5,11 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# OpenTelemetry C++ SDK is fetched and built by the Containerfile against
-# the system's gRPC/protobuf, then exposed via CMake config files.
+# OpenTelemetry C++ + transitive gRPC/protobuf/abseil come from Conan,
+# pulled by `conan install` from Conan Center. The Containerfile invokes
+# Conan before this CMake step and exports the dep set via
+# CMakeDeps + CMakeToolchain. find_package() resolves against those
+# generator outputs. See conanfile.txt for the recipe spec.
 find_package(opentelemetry-cpp CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 

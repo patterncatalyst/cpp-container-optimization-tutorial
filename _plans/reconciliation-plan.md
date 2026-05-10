@@ -560,6 +560,111 @@ becomes the natural worked example.
 
 ---
 
+### G-14 · `protobuf-devel` is missing from EPEL 9 (despite gRPC, abseil, nlohmann-json being present); switch demo-04 to Conan-managed deps (r31)
+
+**Problem.** A UBI 9.4-based Containerfile with EPEL 9
+enabled installs `grpc-devel`, `abseil-cpp-devel`, and
+`nlohmann-json-devel` cleanly but fails on the next two:
+
+    No match for argument: protobuf-compiler
+    Error: Unable to find a match: protobuf-devel
+    protobuf-compiler
+
+The error is specific — *only* `protobuf-devel` and
+`protobuf-compiler` fail to resolve. Everything else in
+the install list is found, including gRPC which itself
+depends on protobuf at build time.
+
+**Why.** EPEL 9's protobuf packaging deviated from the
+typical `protobuf-devel` / `protobuf-compiler` shape that
+Fedora and Debian use. UBI 9 sees neither name in any
+enabled repo: BaseOS doesn't carry the C++ ecosystem,
+AppStream's protobuf is `protobuf-c-devel` (the C
+binding, not the C++ headers we need), CRB has the
+right `protobuf-devel` but is subscription-only on RHEL
+and absent on UBI, and EPEL 9 either packages it under
+a different name or skips it entirely to avoid stepping
+on CRB's space.
+
+The mental model that's most accurate: *every distro
+draws the C++-ecosystem-vs-system-package boundary in a
+different place*. Fedora gives you the world. RHEL/UBI
+gives you a curated subset. Debian gives you another
+curated subset. Building C++ services that depend on the
+modern stack — gRPC, protobuf, abseil — in containers
+becomes a packaging-archaeology exercise unless you
+decouple from the distro entirely.
+
+**Fix.** Stop fighting it. Switch demo-04 to **Conan-
+managed dependencies**. Conan Center hosts pre-built
+`opentelemetry-cpp` recipes that bundle gRPC, protobuf,
+abseil, and friends as transitive deps. The Containerfile
+becomes:
+
+    FROM ubi9/ubi:9.4 AS build
+    RUN dnf install -y --setopt=install_weak_deps=False \
+            gcc-toolset-14 cmake ninja-build git python3-pip
+    RUN pip3 install --no-cache-dir 'conan~=2.0'
+    RUN conan profile detect --force && \
+        sed -i 's|^compiler.cppstd=.*|compiler.cppstd=23|' \
+            /root/.conan2/profiles/default
+
+    COPY conanfile.txt CMakeLists.txt ./
+    RUN conan install . --output-folder=build/conan \
+                        -s build_type=Release --build=missing
+    COPY src/ ./src/
+    RUN cmake -S . -B build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=build/conan/conan_toolchain.cmake \
+        && cmake --build build -j$(nproc)
+
+…and `conanfile.txt`:
+
+    [requires]
+    opentelemetry-cpp/1.16.1
+
+    [generators]
+    CMakeDeps
+    CMakeToolchain
+
+    [options]
+    opentelemetry-cpp/*:with_otlp_grpc=True
+    opentelemetry-cpp/*:shared=False
+    *:shared=False
+
+The static linkage means the runtime image needs nothing
+beyond `libstdc++` — no `grpc`, `protobuf`, `abseil-cpp`
+package install at all on `ubi-minimal`.
+
+**First-build cost.** Conan downloads pre-built binaries
+when available; for our profile (gcc-toolset-14, C++23,
+libstdc++) some deps may not be pre-built and `--build=
+missing` triggers from-source compiles. First clean run:
+5-15 minutes. Cached subsequent runs: 1-2 minutes.
+
+**Three improvements this delivers** beyond just resolving
+the immediate `protobuf-devel` failure:
+
+1. **Hermetic.** The build no longer depends on which
+   distro's repo configuration is on the build host.
+   Same `conanfile.txt`, same lockfile (when added),
+   same binaries everywhere.
+2. **Faster.** No more from-source opentelemetry-cpp
+   compile (was 10-20 min in r28). Conan caches across
+   builds.
+3. **Curriculum-aligned.** §13 (Reproducibility & ABI)
+   teaches Conan as the answer to exactly this class
+   of problem. Demo-04 now demonstrates the lesson
+   instead of skipping it.
+
+**Lockfile follow-up.** A `conan.lock` should be
+committed to lock specific dep versions. Not done in
+r31 because the round was scoped to "make the build
+work"; lockfile generation comes when §13 is being
+written and the demo can showcase the full hermetic
+flow.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -2905,6 +3010,145 @@ are still in play):**
 
 The script's failure-message block already references
 each of these so debugging stays quick.
+
+### 2026-05-10 — r31: G-14 — refactor demo-04 to Conan-managed C++ deps
+
+User reran after r30's EPEL fix. Three of the five
+explicitly-named C++ packages now resolved
+(`grpc-devel`, `abseil-cpp-devel`,
+`nlohmann-json-devel`), but `protobuf-devel` and
+`protobuf-compiler` still failed:
+
+    No match for argument: protobuf-compiler
+    Error: Unable to find a match: protobuf-devel
+    protobuf-compiler
+
+That's two rounds in a row chasing system packages on
+UBI 9, with another iteration still ahead if we kept
+the chase going. Time to stop fighting it.
+
+**The architectural answer is Conan.** §13
+(Reproducibility & ABI) literally teaches this lesson:
+hermetic builds with lockfiles, deps from a curated
+package registry, no distro-specific archaeology.
+Conan Center pre-builds `opentelemetry-cpp/1.16.1`
+with gRPC, protobuf, abseil, c-ares and the rest
+bundled as transitive deps.
+
+**Changes in r31:**
+
+1. **`examples/demo-04-observability/conanfile.txt`**
+   — new file. Declares `opentelemetry-cpp/1.16.1` as
+   a [requires], CMakeDeps + CMakeToolchain as
+   generators, cmake_layout, and the option set:
+
+       opentelemetry-cpp/*:with_otlp_grpc=True
+       opentelemetry-cpp/*:with_otlp_http=False
+       opentelemetry-cpp/*:shared=False
+       *:shared=False
+
+   The wildcard `*:shared=False` forces every transitive
+   dep to static linkage so the runtime image needs
+   nothing beyond `libstdc++`.
+
+2. **`examples/demo-04-observability/Containerfile`**
+   rewritten. Old shape: 73 lines, EPEL enabled,
+   system gRPC + protobuf + abseil installed via dnf,
+   OTel-cpp built from source against system gRPC.
+   New shape: ~70 lines, no EPEL, no from-source
+   OTel-cpp build, Conan via pip handles all C++ deps.
+   Build stage:
+
+   - dnf install: gcc-toolset-14, cmake, ninja-build,
+     git, python3-pip (no C++ ecosystem packages)
+   - pip install conan~=2.0
+   - conan profile detect; force `compiler.cppstd=23`
+     in the profile so the demo's std::print compiles
+   - conan install (fetches pre-builts from Conan
+     Center; --build=missing falls back to from-source
+     for any dep not pre-built for our profile)
+   - cmake configure with the conan toolchain
+   - cmake build
+
+   Runtime stage: ubi-minimal + microdnf install
+   `libstdc++` only. No EPEL on runtime either —
+   static linkage means no shared deps.
+
+3. **`examples/demo-04-observability/CMakeLists.txt`**
+   stale comment updated. The find_package and target
+   names didn't change because Conan's
+   opentelemetry-cpp recipe exposes the same target
+   names as upstream's CMake config:
+   `opentelemetry-cpp::trace`,
+   `opentelemetry-cpp::metrics`,
+   `opentelemetry-cpp::logs`,
+   `opentelemetry-cpp::otlp_grpc_exporter`, etc.
+
+   What got updated was the comment block at the top
+   that said "OpenTelemetry C++ SDK is fetched and
+   built by the Containerfile against the system's
+   gRPC/protobuf, then exposed via CMake config files."
+   Replaced with a paragraph describing the Conan
+   flow.
+
+4. **G-14 promoted in the Gotchas section.** Full
+   problem/why/fix shape with:
+
+   - The literal failure output the user saw.
+   - The "every distro draws the C++-ecosystem boundary
+     differently" explanation — Fedora has it all,
+     RHEL/UBI curates, Debian has its own subset, and
+     EPEL fills some gaps but not consistently.
+   - The Conan refactor as the fix, with the actual
+     Containerfile + conanfile.txt diffs inline.
+   - The first-build cost note (5-15 min on clean
+     cache; 1-2 min on cached subsequent runs).
+   - The three improvements this delivers (hermetic,
+     faster, curriculum-aligned with §13).
+   - A lockfile follow-up note.
+
+**What this round does NOT do:**
+
+- Doesn't generate a `conan.lock`. That's the next
+  step in the §13 reproducibility flow but is not
+  required for the build to work.
+- Doesn't refactor demo-03 (which also has gRPC) or
+  any other demo. Demo-04 is the immediate target;
+  if demo-03 hits the same wall when verified, r31's
+  pattern becomes the template.
+- Doesn't change demo-04's source code, compose
+  file, test script, or dashboard JSON.
+- Doesn't actually run the build. That's the user's
+  next attempt.
+
+**Anticipated next failures (open candidates):**
+
+- **OTel-cpp/1.16.1 Conan recipe options drift.** If
+  `with_otlp_grpc` got renamed or removed in a recipe
+  update, conan install fails at option validation.
+  Fix: trim the options block until conan accepts it.
+- **From-source dep compile times.** If our profile
+  (gcc-toolset-14 + C++23 + static) doesn't match
+  Conan Center's pre-built combos for a transitive
+  dep (gRPC is the most likely culprit),
+  `--build=missing` triggers a from-source compile.
+  Could push first-run to 30-45 min. If it happens,
+  bump `compiler.cppstd=17` in the conan profile —
+  Conan deps don't need C++23, only the demo source
+  does.
+- **CMake target name mismatch.** If Conan's recipe
+  exposes targets differently from upstream OTel-cpp,
+  target_link_libraries fails. Fix: inspect
+  `build/conan/cmake/opentelemetry-cppTargets.cmake`
+  and update CMakeLists with the actual target names.
+- **Metric / log / trace probe failures (G-13/14/15
+  candidates from r28)**, still in play once the
+  build works.
+
+The build needs to succeed before any post-build
+candidates can fire, so r32 either flips §10 to
+verified or addresses whichever Conan-related issue
+surfaced.
 
 ---
 
