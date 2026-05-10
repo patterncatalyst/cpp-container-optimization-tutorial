@@ -38,10 +38,18 @@ CMakeToolchain
 cmake_layout
 
 [options]
-# OTel-cpp options: enable OTLP gRPC (the demo's exporter), keep
-# everything static so the runtime image is minimal.
+# OTel-cpp options:
+#  - with_otlp_grpc=True: the demo's exporter (OTLP/gRPC to lgtm:4317)
+#  - with_otlp_http=False: the demo doesn't speak OTLP/HTTP
+#  - with_zipkin=False: drops libcurl from the dep tree. libcurl is
+#    pulled by OTel-cpp solely for the Zipkin exporter, which the
+#    demo doesn't use. Skipping it eliminates an autotools-using
+#    transitive dep that has its own perl-module + autotools needs
+#    (G-17). About 5 fewer deps to build from source.
+#  - shared=False: keep static so the runtime image is minimal.
 opentelemetry-cpp/*:with_otlp_grpc=True
 opentelemetry-cpp/*:with_otlp_http=False
+opentelemetry-cpp/*:with_zipkin=False
 opentelemetry-cpp/*:shared=False
 
 # OpenSSL options: skip the FIPS module. gRPC pulls openssl as a

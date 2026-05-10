@@ -916,18 +916,24 @@ build-stage dnf:
 
     perl-threads
     perl-threads-shared
+    perl-Thread-Queue
     perl-Term-ANSIColor
 
-`perl-threads` is the immediate need.
-`perl-threads-shared` is its companion (the
-`Thread::*` higher-level primitives use shared
-state); included pre-emptively.
-`perl-Term-ANSIColor` is commonly used by autotools'
-error formatting; included to head off a likely
-near-future `Can't locate Term/ANSIColor.pm` failure.
+`perl-threads` is for the `threads` module
+itself — automake's `aclocal` hits this first.
+`perl-threads-shared` provides `threads::shared`
+which the higher-level Thread::* primitives use.
+`perl-Thread-Queue` provides Thread::Queue, which
+automake's `automake` script (separate from
+aclocal) hits in a later phase. r35 originally
+included only the first two; r36 added
+`perl-Thread-Queue` after automake hit Thread::Queue
+in its second phase. `perl-Term-ANSIColor` is
+commonly used by autotools error formatting; included
+to head off a likely near-future cascade.
 
 This brings the total count of perl modules in the
-build-stage dnf to fourteen. The list is now
+build-stage dnf to fifteen. The list is now
 heterogeneous in purpose:
 
   - openssl Configure (G-15): FindBin, IPC::Cmd,
@@ -935,33 +941,53 @@ heterogeneous in purpose:
     File::Copy, File::Path, Time::Piece, Getopt::Long.
   - openssl FIPS post-build (G-16): Digest::SHA.
   - autotools (G-17): threads, threads::shared,
-    Term::ANSIColor.
+    Thread::Queue, Term::ANSIColor.
 
-**Mitigation if more perl modules surface.** Two
-options when (not if) the next from-source dep wants
-a perl module not yet on the list:
+**Better fix: skip libcurl entirely.** As of r36,
+the conanfile.txt sets:
 
-  1. Add it to the list, same shape. This is the
-     incremental approach we've been taking; tedious
-     but predictable.
+    opentelemetry-cpp/*:with_zipkin=False
+
+libcurl is pulled into the dep tree solely because
+OTel-cpp's Zipkin exporter uses it. Our demo doesn't
+use Zipkin; we use OTLP/gRPC. With `with_zipkin=False`,
+libcurl drops out of the transitive dep set entirely,
+and the autotools build path that needs Thread::Queue
+isn't exercised at all.
+
+The perl-Thread-Queue install is kept as belt-and-
+suspenders: if some other autotools-using dep
+surfaces (independent of libcurl/Zipkin), it'll find
+the module without another iteration. Build-stage
+images get thrown away by the multi-stage pattern,
+so the cost is invisible at runtime.
+
+**Mitigations called out earlier but not yet used.**
+Two options if a future from-source dep wants a perl
+module not yet on the list:
+
+  1. Add it to the list, same shape. This was the
+     working strategy for r32 → r35; r36 is the
+     first round where we strategically pivoted
+     instead.
   2. Switch to `perl-core` — RHEL/UBI 9's metapackage
-     that bundles ~80 perl modules. Heavier image
-     but eliminates the iteration. The build stage
-     gets thrown away by the multi-stage pattern, so
-     the size cost is invisible at runtime. If r36
-     shows another "missing module" round, this is
-     the right pivot.
+     that bundles ~80 common perl modules. Heavier
+     image but eliminates iteration. Note: `perl-core`
+     does NOT include `perl-threads`, `perl-threads-
+     shared`, or `perl-Thread-Queue` — those are
+     standalone packages even on systems where
+     `perl-core` exists. So the explicit Thread::*
+     install is still required even after a `perl-
+     core` pivot.
 
-**Mitigation to skip libcurl entirely.** libcurl is
-the immediate failure point but the demo doesn't
-strictly need it — opentelemetry-cpp pulls libcurl
-for the Zipkin exporter, which we don't use. Setting
-`opentelemetry-cpp/*:with_zipkin=False` in
-`conanfile.txt` *should* skip libcurl. Not done in
-r35 because: (a) it adds a recipe-option-name guess
-that could itself fail, and (b) we want to know that
-autotools is fundamentally working in case some
-other dep needs it later.
+**Pivot logic in retrospect.** r35's documented
+mitigation was "switch to `perl-core` if more rounds
+fire." When r35's failure surfaced (Thread::Queue
+missing), the better mitigation turned out to be
+"skip the dep that's making us run autotools at all"
+rather than "install more perl modules." Sometimes
+the right answer to a missing-tool problem is to
+remove the tool's consumer.
 
 ---
 
@@ -3888,6 +3914,152 @@ The build is making consistent forward progress each
 attempt. r36 either hits the post-build phase or
 addresses whatever the 20-package dep tree throws
 at us next.
+
+### 2026-05-10 — r36: G-17 expanded — perl Thread::Queue + skip Zipkin to drop libcurl from dep tree
+
+User reran after r35. Build went 599 seconds (just under
+10 min, similar to r35's 614 s — same dep set up to
+libcurl). Now automake's *second* perl script (`automake`
+itself, separate from the `aclocal` we fixed in r35)
+hit *another* missing perl module:
+
+    libtoolize: copying file 'm4/lt~obsolete.m4'
+    libtoolize: Remember to add 'LT_INIT' to configure.ac.
+    Can't locate Thread/Queue.pm in @INC ...
+    BEGIN failed--compilation aborted at
+    .../share/automake-1.16/.../bin/automake line 61.
+    autoreconf: error: automake failed with exit
+    status: 2
+
+So `aclocal` is fine now (had `threads`), `libtoolize`
+ran, `automake` runs and immediately wants
+`Thread::Queue` (a higher-level Thread::* primitive
+that's a separate package on UBI 9, even though it
+sounds like it should be in `perl-threads-shared`).
+
+Four rounds of "add the next perl module" (r32 → r33
+→ r34 → r35), and r36 would be the fifth. The
+incremental strategy is failing — automake has more
+perl module needs than we can guess from each
+preceding failure. Time to pivot.
+
+**The strategic pivot: skip libcurl entirely.**
+libcurl is in the dep tree only because OTel-cpp's
+Zipkin exporter uses it. Our demo uses OTLP/gRPC, not
+Zipkin. Setting:
+
+    opentelemetry-cpp/*:with_zipkin=False
+
+in `conanfile.txt` drops libcurl from the transitive
+dep set. With libcurl gone, the autotools build path
+that needs Thread::Queue (and whatever other perl
+modules automake would discover next) doesn't run at
+all. About 5 fewer deps to build from source; faster
+build wall-clock too.
+
+This was the mitigation called out in G-17's r35
+text but held in reserve. r36 uses it.
+
+**Belt-and-suspenders fix shipped together: install
+`perl-Thread-Queue`.** If `with_zipkin=False` is
+rejected by Conan (recipe option name drift,
+unlikely but possible), `conan install` aborts at
+option validation in seconds, before any from-
+source build runs. The `perl-Thread-Queue` install
+is moot in that scenario but doesn't hurt. If the
+option works, libcurl skips and Thread::Queue
+isn't exercised — but the install is still worth
+keeping because some other autotools-using dep
+might surface that needs Thread::Queue. The build
+stage image gets thrown away; no runtime cost.
+
+**Changes in r36:**
+
+1. **`conanfile.txt`** adds
+   `opentelemetry-cpp/*:with_zipkin=False`. The OTel-
+   cpp options block now has `with_otlp_grpc=True` +
+   `with_otlp_http=False` + `with_zipkin=False` +
+   `shared=False`. Comment in conanfile explains the
+   libcurl-via-Zipkin rationale.
+
+2. **`Containerfile`** adds `perl-Thread-Queue` to
+   the dnf install list. Total perl modules: 15.
+
+3. **G-17 amended** to reflect the four-module
+   autotools list (threads, threads-shared,
+   Thread-Queue, Term-ANSIColor) and the better-fix
+   pivot (skip Zipkin → no libcurl → no autotools
+   build path). G-17 also notes that
+   `perl-Thread-Queue` is *not* in the `perl-core`
+   metapackage (a footnote against the earlier
+   pivot suggestion); even after a `perl-core`
+   migration, the explicit Thread::* installs would
+   still be needed.
+
+**A retrospective on the pivot logic.** r35
+documented "switch to perl-core if more rounds fire"
+as the mitigation if another perl module went
+missing. That was reasonable but turned out to be
+the *second-best* answer. The first-best was
+"remove the dep tree path that's invoking autotools
+at all." Sometimes the right answer to a missing-
+tool problem is to remove the tool's consumer. G-17
+now records this as the pattern.
+
+**What this round does NOT do:**
+
+- Doesn't switch to perl-core. Held in reserve in
+  case some other autotools-using dep surfaces.
+  perl-core wouldn't fully solve that anyway since
+  Thread::Queue isn't in it.
+- Doesn't change cppstd. Still 23 in the conan
+  profile.
+- Doesn't add `with_prometheus=False` or other
+  exporter-skipping options. Could add as a build-
+  time optimization but no current failure
+  motivates it.
+- Doesn't actually run the build. User's next
+  attempt.
+
+**Possible new failure shapes after r36:**
+
+- **`with_zipkin` recipe option rejected.** Symptom:
+  `conan install` fails fast (seconds, not minutes)
+  with "ERROR: option 'with_zipkin' doesn't exist"
+  or similar. Fix: drop the line in r37; perl-
+  Thread-Queue still gets installed; build proceeds
+  with libcurl still in the tree but Thread::Queue
+  available.
+- **Yet another perl module needed for libcurl or
+  another autotools-using dep that's still in the
+  tree.** Less likely now that libcurl is supposed
+  to skip; but if an unrelated autotools dep is
+  pulled by gRPC or another package, possible.
+  Pivot: add the module + consider perl-core.
+- **OTel-cpp's own from-source compile fails.**
+  Last package (20 of 20). Most likely failure mode:
+  C++ source-level error from new compiler/stdlib
+  combo or recipe drift. Mitigations:
+  bump/downgrade OTel-cpp version in conanfile.
+- **CMakeLists target name mismatch.** When the
+  demo's actual cmake step runs, `find_package(
+  opentelemetry-cpp CONFIG REQUIRED)` may resolve
+  but `target_link_libraries(demo-04-svc PRIVATE
+  opentelemetry-cpp::trace ...)` might fail if the
+  Conan recipe exposes target names differently
+  from upstream. Inspect
+  `build/conan/cmake/opentelemetry-cppTargets.cmake`
+  to see what's actually exported.
+- **Build succeeds, signal probes fail.** r28's
+  original anticipated candidates (metric drift,
+  log label drop, dashboard UID).
+
+The r36 changes pivot strategy decisively away from
+"chase missing perl modules one at a time." If
+`with_zipkin=False` works, libcurl drops and we
+shed several from-source deps. If it doesn't, we
+have a fast fail and a one-line revert. Either way
+we know more after the next attempt.
 
 ---
 
