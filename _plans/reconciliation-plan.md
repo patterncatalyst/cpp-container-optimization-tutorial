@@ -2099,6 +2099,146 @@ mirroring the dep graph is part of the job.
 
 ---
 
+### G-27 · Older C++ libraries don't compile under newer gcc + cppstd; lower profile cppstd while keeping app cppstd via target-level override (r48)
+
+**Problem.** r47's grpc/1.54.3 override resolved the
+"version not in remotes" error from G-26 — Conan
+downloaded the recipe and started building from source.
+But the build crashed five minutes in:
+
+    [...]
+    |     ^~~~~~~~~~~~~~~
+    gmake[2]: *** [CMakeFiles/grpc.dir/build.make:8143:
+        CMakeFiles/grpc.dir/src/core/lib/iomgr/tcp_posix.cc.o] Error 1
+    grpc/1.54.3: ERROR: Package '...' build failed
+
+The actual error message above the `^~~~~~~~~~~~~~~`
+underline got truncated in the user's output, so the
+exact diagnostic is unknown — but the symptom shape is
+classic "older C++ source, newer compiler + standard."
+
+gRPC 1.54.3 was released mid-2023, paired with gcc
+12-13 and cppstd=gnu17 in its CI matrix. We're building
+it against gcc-toolset-14 (gcc 14) and the user's
+profile pinned cppstd=23. Newer C++ standards remove
+or restrict patterns older code legitimately used:
+
+- C++20 banned aggregate initialization with
+  designated and non-designated members mixed.
+- C++23 stricter on integer narrowing.
+- C++23 modified `static_assert` formatting requirements.
+- gcc 14 enables more `-W*-error` diagnostics by default.
+- gcc 14 stricter on template-id resolution and
+  ADL.
+
+Search results confirm grpc/1.54.3 builds successfully
+with gcc 12-13 + gnu17 across multiple Conan Center
+issues; no positive results for gcc 14 + cppstd=23.
+The cppstd is the variable we control; gcc 14 is
+fixed by the Red Hat gcc-toolset-14 we use throughout
+the tutorial.
+
+**Why we don't simply downgrade everything to cppstd=17.**
+The tutorial promises "Modern C++" — main.cpp uses
+C++23 features (or at least is positioned to). Forcing
+the entire build to cppstd=17 would lose those
+capabilities. We need cppstd=17 for *deps only*, while
+the *app target* stays at cppstd=23.
+
+**Fix.** Two-layer cppstd control:
+
+1. **Profile-level cppstd=gnu17** (set in the
+   Containerfile's profile-detection block):
+   ```
+   conan profile detect --force && \
+       sed -i 's|^compiler.cppstd=.*|compiler.cppstd=gnu17|' \
+           /root/.conan2/profiles/default
+   ```
+   This is what Conan uses when building dep packages.
+   grpc, protobuf, abseil, opentelemetry-cpp all build
+   with gnu17.
+
+2. **Target-level cppstd=23** (set in our
+   `CMakeLists.txt` for the app's executable target):
+   ```cmake
+   set(CMAKE_CXX_STANDARD 23)
+   set(CMAKE_CXX_STANDARD_REQUIRED ON)
+   ```
+   This is per-target in CMake. When CMake builds our
+   `demo-04-svc` executable, the per-target setting
+   overrides the toolchain's default. The binary
+   compiles with C++23 even though the toolchain says
+   gnu17.
+
+The two layers don't conflict because:
+- Conan's toolchain sets `CMAKE_CXX_STANDARD` and
+  `CMAKE_CXX_STANDARD_REQUIRED` from the profile, but
+  CMakeLists.txt's `set()` calls override.
+- libstdc++ ABI is stable across cppstd versions for
+  the types these libs expose. A C++23 binary linking
+  against a gnu17-compiled libgrpc++.a is fine.
+
+**Why gnu17 and not just 17:** gRPC's source uses some
+GNU extensions (`__builtin_*`, statement expressions,
+`alloca`). Plain `cppstd=17` enables strict ISO mode
+which can reject these. `gnu17` enables C++17 with GNU
+extensions, which is what gRPC was actually tested
+against.
+
+**Discoverability lessons:**
+
+- **The cppstd setting in a Conan profile is the
+  level at which deps build.** The CMakeLists.txt
+  setting in your own project is per-target and
+  overrides for that target only.
+- **When an old library fails to build under a new
+  compiler, lowering cppstd is the first thing to
+  try.** Cheaper than patching source. Almost always
+  resolves "unsupported syntax in newer standard"
+  errors.
+- **Don't sacrifice your app's modernity to make deps
+  build.** The two-layer pattern (profile-level gnu17
+  + target-level 23) lets your app stay current while
+  deps use whatever standard they were tested against.
+- **`gnu*` variants over plain `*` for Linux deps.**
+  Most C++ libraries on Linux were tested against GNU
+  extensions enabled. Plain ISO modes can cause
+  confusing failures in code that "should compile."
+
+**Tutorial value.** This is a textbook §5 (Compile-time
+wins) topic: **the C++ standard you build against is
+not always the same as the C++ standard you write in.**
+The dep ecosystem moves at its own pace; pinning your
+app's standard to the latest doesn't constrain (and
+doesn't have to constrain) the standard your deps
+build against. The two-layer split is a reusable
+pattern.
+
+**Anticipated outcomes:**
+
+- **Best case:** grpc/1.54.3 compiles cleanly under
+  gnu17, the rest of the dep chain follows, OTel-cpp
+  rebuilds against the new chain, link succeeds (G-22's
+  Status::OK symbol is in 1.54.3's libgrpc++.a). Demo
+  runs.
+- **gnu17 also fails grpc/1.54.3 against gcc 14:**
+  unlikely (gnu17 is what gRPC tested with), but if
+  it happens, we'd need to patch grpc's recipe with a
+  CFLAGS injection to suppress specific gcc 14
+  diagnostics, or downshift gcc-toolset-13.
+- **Build succeeds but main.cpp fails to compile under
+  C++23 mode against gnu17 deps:** unlikely. Could
+  happen if a dep's header uses something the gcc
+  treats differently in 23 vs 17 (e.g., concept
+  shenanigans). Fix: per-file cppstd flag.
+- **Some other unrelated grpc 1.54.3 build error
+  unmasked once the cppstd issue is resolved:** quite
+  possible. Would surface a different compile error,
+  diagnosable from the actual message above
+  `^~~~~~~~~~~~~~~`.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -6580,6 +6720,122 @@ they form a fairly complete tour of the Conan + modern-C++
 ecosystem's failure modes. The user's continued patience
 is converting each failure into a teaching moment for the
 tutorial.
+
+### 2026-05-10 — r48: G-27 — gRPC 1.54.3 fails to compile under gcc 14 + cppstd=23; lower profile cppstd to gnu17, keep app cppstd=23 via target override
+
+User reran with r47's `grpc/1.54.3` override. Conan
+resolved successfully — package was hosted, override
+accepted. The from-source build started, ran for ~5
+minutes, and crashed compiling `tcp_posix.cc.o`:
+
+    [...]
+    |     ^~~~~~~~~~~~~~~
+    gmake[2]: *** [.../tcp_posix.cc.o] Error 1
+    grpc/1.54.3: ERROR: Package '...' build failed
+
+The actual diagnostic above the `^~~~~~~~~~~~~~~`
+underline got truncated in the user's paste, so we
+don't know the exact message — but the symptom shape is
+classic "older C++ source, newer compiler+standard."
+
+gRPC 1.54.3 (mid-2023) was tested against gcc 12-13 +
+cppstd=gnu17. We're building under gcc-toolset-14 + the
+profile's pinned cppstd=23. Web search confirmed
+grpc/1.54.3 builds successfully under those older
+combinations across multiple Conan Center issue threads;
+no positive results for gcc 14 + cppstd=23 specifically.
+
+**The fix doesn't require sacrificing the app's modernity.**
+cppstd is set in two independent places:
+
+1. **Conan profile** (`/root/.conan2/profiles/default`):
+   used when Conan builds dep packages.
+2. **CMakeLists.txt** (`set(CMAKE_CXX_STANDARD 23)`):
+   used per-target for our app's executable.
+
+Lower the profile to `gnu17`, keep the CMakeLists.txt
+at 23. The deps build with gnu17; our `demo-04-svc`
+binary still compiles with C++23 because per-target
+overrides per-toolchain. ABI compatibility holds because
+libstdc++'s ABI is stable across cppstd versions for
+the types these libs expose.
+
+**Why gnu17 and not 17:** gRPC's source uses GNU
+extensions (`__builtin_*`, statement expressions). Plain
+ISO `cppstd=17` rejects these. `gnu17` is C++17 with
+GNU extensions enabled — what gRPC was actually tested
+against.
+
+**Single-line change** in the Containerfile:
+
+    -    sed -i 's|^compiler.cppstd=.*|compiler.cppstd=23|' \
+    +    sed -i 's|^compiler.cppstd=.*|compiler.cppstd=gnu17|' \
+
+The comment block was also rewritten to explain G-27's
+two-layer rationale so a future reader doesn't restore
+cppstd=23 in the profile thinking "modern tutorial means
+modern profile" without realizing the profile drives
+*dep* builds, not the app.
+
+CMakeLists.txt unchanged — already has
+`CMAKE_CXX_STANDARD 23` for our target.
+
+**Promoted to G-27** in Gotchas with full Problem/Why/Fix:
+
+- The "older library + newer compiler/standard" pattern
+- The cppstd two-layer architecture (profile vs target)
+- Why gnu17 over plain 17 for Linux libs
+- The discoverability lessons (cppstd is the first
+  knob to try when old code fails on new compilers;
+  don't sacrifice your app's standard to make deps
+  build; gnu* variants over plain * for Linux deps)
+- Tutorial value: this is a §5 (Compile-time wins) topic
+  worth surfacing — the C++ standard you build against
+  isn't always the standard you write in
+
+**What r48 specifically ships:**
+
+1. Containerfile: profile cppstd 23 → gnu17, comment
+   block rewritten to explain G-27.
+2. G-27 promoted in plan.
+3. r48 round entry.
+
+**What this round does NOT do:**
+
+- Doesn't change conanfile.py (overrides unchanged).
+- Doesn't change CMakeLists.txt (already correct).
+- Doesn't actually run the build. User's next attempt.
+- Doesn't address the actual specific error message we
+  couldn't see — this is a probabilistic fix based on
+  symptom pattern. If a different error surfaces, we'll
+  see the specific text and fix accordingly.
+
+**Anticipated outcomes:**
+
+- **Best case:** grpc/1.54.3 compiles cleanly under
+  gnu17, dep chain follows, OTel-cpp rebuilds, link
+  succeeds because grpc/1.54.3's libgrpc++.a has
+  Status::OK + GetGlobalCallbackHook(). Demo runs.
+  r49 verifies signal flow.
+- **gnu17 also fails grpc/1.54.3 against gcc 14:**
+  unlikely (gnu17 is what gRPC tested with), but
+  possible if the actual error was something else
+  entirely (e.g., a missing kernel header, a
+  new-glibc-ism). Fix: requires the specific error
+  message above the `^~~~~~~~~~~~~~~` to diagnose.
+- **Build succeeds, but main.cpp fails to compile
+  under C++23 against gnu17 deps:** unlikely. Possible
+  if a dep header uses something gcc treats differently
+  in 23 vs 17 (e.g., concept shenanigans). Fix:
+  per-file cppstd flag.
+- **Some other grpc 1.54.3 build error unmasked once
+  the cppstd issue is resolved:** quite possible.
+  Would produce a different compile error with
+  visible message text.
+
+**Cumulative round count: r48.** Demo-04 is 20 rounds in.
+G-12 through G-27 are documented; the gotcha catalog is
+becoming the most teaching-dense part of the tutorial.
 
 ---
 

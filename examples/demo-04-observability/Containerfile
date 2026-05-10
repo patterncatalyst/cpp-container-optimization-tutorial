@@ -51,10 +51,20 @@ ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
 # Conan 2's CLI/recipe format is what we want.
 RUN pip3 install --no-cache-dir 'conan~=2.0'
 
-# Generate a default profile from the running compiler, then nail
-# down the C++ standard so the demo's std::print uses are honored.
+# Generate a default profile from the running compiler, then pin
+# compiler.cppstd to gnu17 for dep builds. Why gnu17 not 23 (G-27):
+# our pinned grpc/1.54.3 (G-26) was released mid-2023 against gcc
+# 12-13 + cppstd=gnu17 and doesn't compile cleanly against
+# gcc 14 + cppstd=23 — the newer compiler+standard rejects code
+# patterns the older grpc source still uses. Lowering the *profile*
+# cppstd to gnu17 means Conan-managed deps (grpc, protobuf, abseil,
+# OTel-cpp) build with gnu17. Our app's CMakeLists.txt separately
+# sets CMAKE_CXX_STANDARD 23, which overrides per-target — the
+# demo-04-svc binary still compiles with C++23 features. ABI
+# compatibility holds because libstdc++'s ABI is stable across
+# cppstd versions for the types these libs expose.
 RUN conan profile detect --force && \
-    sed -i 's|^compiler.cppstd=.*|compiler.cppstd=23|' \
+    sed -i 's|^compiler.cppstd=.*|compiler.cppstd=gnu17|' \
         /root/.conan2/profiles/default
 
 WORKDIR /src
