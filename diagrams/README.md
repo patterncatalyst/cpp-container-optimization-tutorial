@@ -23,17 +23,18 @@ Examples that already have placeholders pointed at them:
 | `01-prerequisites-toolchain`          | §1      | toolchain layout                       |
 | `02-introduction-four-layers`         | §2      | the four-layer mental model            |
 | `02-threading-models`                 | §2      | C++ threading models — stack vs scheduler |
-| `03-image-strategy-multistage`        | §3      | multi-stage image strategy             |
-| `04-compile-time-pgo-flow`            | §4      | LTO / PGO build flow                   |
-| `05-stl-layout-flat-vs-node`          | §5      | flat vs node containers                |
-| `06-allocator-stack`                  | §6      | the allocator stack                    |
-| `07-io-uring-rings`                   | §7      | io_uring SQ/CQ rings                   |
-| `08-networking-veth-vs-host`          | §8      | container networking modes             |
-| `09-observability-otel-stack`         | §9      | observability stack                    |
-| `10-isolation-cgroup-tree`            | §10     | cgroup v2 weight & cpuset              |
-| `11-debug-sidecar-pattern`            | §11     | ephemeral gdb sidecar                  |
-| `12-reproducibility-conan-flow`       | §12     | hermetic build pipeline                |
-| `13-pitfalls-avx512-mismatch`         | §13     | AVX-512 mismatch trap                  |
+| `03-raii-discipline`                  | §3      | RAII vs manual cleanup leak paths      |
+| `04-image-strategy-multistage`        | §4      | multi-stage image strategy             |
+| `05-compile-time-pgo-flow`            | §5      | LTO / PGO build flow                   |
+| `06-stl-layout-flat-vs-node`          | §6      | flat vs node containers                |
+| `07-allocator-stack`                  | §7      | the allocator stack                    |
+| `08-io-uring-rings`                   | §8      | io_uring SQ/CQ rings                   |
+| `09-networking-veth-vs-host`          | §9      | container networking modes             |
+| `10-observability-otel-stack`         | §10     | observability stack                    |
+| `11-isolation-cgroup-tree`            | §11     | cgroup v2 weight & cpuset              |
+| `12-debug-sidecar-pattern`            | §12     | ephemeral gdb sidecar                  |
+| `13-reproducibility-conan-flow`       | §13     | hermetic build pipeline                |
+| `14-pitfalls-avx512-mismatch`         | §14     | AVX-512 mismatch trap                  |
 
 ## Editing a diagram
 

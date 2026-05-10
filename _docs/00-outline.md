@@ -64,17 +64,17 @@ and uses pre-recorded video for everything else:
 - §0 Outline — 2 min
 - §1 Prerequisites — 5 min (skip the demo; show host-check video)
 - §2 Introduction & mental model — 8 min
-- §3 Container strategy + Demo 1 video — 12 min
-- §6 Memory management — 15 min
-- §7 I/O latency + Demo 3 video — 15 min
-- §9 Observability + Demo 4 video — 15 min
-- §13 Pitfalls highlights — 10 min
-- §14 Where to go next — 3 min
+- §4 Container strategy + Demo 1 video — 12 min
+- §7 Memory management — 15 min
+- §8 I/O latency + Demo 3 video — 15 min
+- §10 Observability + Demo 4 video — 15 min
+- §14 Pitfalls highlights — 10 min
+- §15 Where to go next — 3 min
 - Q&A buffer — 5 min
 
-Topics linked to but not visited live: §4 (LTO/PGO theory mentioned in
-§3), §5 (STL silent overhead — link to site), §8 (kernel parameters),
-§10 (noisy neighbors), §11 (analysis), §12 (ABI).
+Topics linked to but not visited live: §5 (LTO/PGO theory mentioned in
+§4), §6 (STL silent overhead — link to site), §9 (kernel parameters),
+§11 (noisy neighbors), §12 (analysis), §13 (ABI).
 
 ### The 3-hour PPTX cut
 
@@ -109,14 +109,28 @@ Why container constraints change C++ performance reasoning. The
 Where each performance lever lives. Why advice that's correct on
 bare metal can be actively wrong inside a container.
 
-### [§3 — Container strategy: UBI, ubi-micro, multi-stage builds](../03-image-strategy/)
+### [§3 — RAII & container resource discipline](../03-raii-discipline/)
+
+The C++ idiom that the rest of the tutorial assumes. **RAII —
+Resource Acquisition Is Initialization** — binds resource
+lifetime to object lifetime so cleanup happens on every exit
+path: normal returns, early returns, exceptions. Outside a
+container, leaking a few file descriptors is cosmetic; inside
+a 256 MB cgroup with `nofile=1024` and a service expected to
+stay up for weeks, leaks compound into outages. This section
+introduces the mechanic, the four resource classes you'll meet
+(memory / fds / locks / sockets), the canonical 20-line
+`unique_fd` wrapper, and what RAII honestly does *not* save
+you from.
+
+### [§4 — Container strategy: UBI, ubi-micro, multi-stage builds](../04-image-strategy/)
 
 Demo 1 territory. When to use UBI vs UBI-micro, why
 multi-stage builds matter for both image size and supply chain,
 and the **AVX-512 mismatch trap** that bites builds promoted from
 a builder host with newer silicon to a runtime host without it.
 
-### [§4 — Compile-time wins: LTO, PGO, constexpr](../04-compile-time-wins/)
+### [§5 — Compile-time wins: LTO, PGO, constexpr](../05-compile-time-wins/)
 
 Still Demo 1. What LTO actually does, why thin LTO is usually the
 right default, when PGO is worth the extra build phase, and what
@@ -124,14 +138,14 @@ right default, when PGO is worth the extra build phase, and what
 full PGO instrumentation flow: build instrumented → run training
 workload → merge profiles → rebuild optimized.
 
-### [§5 — STL, layout, and C++20/23 containers](../05-stl-layout/)
+### [§6 — STL, layout, and C++20/23 containers](../06-stl-layout/)
 
 Demo 2 territory. `std::vector` vs `std::deque` cache behaviour;
 when C++23's `flat_map` and `flat_set` win and when they lose;
 the **silent memory overhead** of node-based containers; the
 allocator-aware refactoring story for hot data structures.
 
-### [§6 — Memory management: allocators, huge pages, cgroups v2, OOM](../06-memory-management/)
+### [§7 — Memory management: allocators, huge pages, cgroups v2, OOM](../07-memory-management/)
 
 Still Demo 2. PMR allocators, transparent huge pages, mimalloc
 and jemalloc as `LD_PRELOAD` swaps, **cgroups v2 `memory.max` vs
@@ -140,14 +154,14 @@ reclaims it, the **RSS / working set / `memory.current` distinction**,
 and the **LinuxMemoryChecker pattern** for keeping your service a
 safe distance below the OOM ceiling.
 
-### [§7 — I/O latency: io_uring, async gRPC, SO_REUSEPORT](../07-io-latency/)
+### [§8 — I/O latency: io_uring, async gRPC, SO_REUSEPORT](../08-io-latency/)
 
 Demo 3 territory. The submission queue / completion queue model,
 multishot accept and multishot recv, provided buffer rings, async
 gRPC's completion-queue API, and `SO_REUSEPORT` for letting the
 kernel distribute connections across worker processes.
 
-### [§8 — Networking & kernel parameters](../08-networking-kernel/)
+### [§9 — Networking & kernel parameters](../09-networking-kernel/)
 
 Still Demo 3. The cost of **veth pairs vs `--network=host`** in
 rootless Podman, the sysctls that matter for low-latency C++
@@ -155,7 +169,7 @@ services (`net.core.somaxconn`, TCP timestamps and SACK,
 `net.ipv4.tcp_rmem` / `tcp_wmem`), and where the comparison
 between rootless and rootful networking actually lives.
 
-### [§9 — Observability & profiling: Grafana stack, perf, eBPF](../09-observability-profiling/)
+### [§10 — Observability & profiling: Grafana stack, perf, eBPF](../10-observability-profiling/)
 
 Demo 4 territory. The full Grafana / Prometheus / Mimir / Tempo /
 Loki stack via `podman compose`, OTLP/gRPC instrumentation from C++,
@@ -163,24 +177,24 @@ and three host-side observability layers that complement application
 metrics: `perf` for CPU sampling, `bcc-tools` for off-CPU and syscall
 analysis, and `bpftrace` for ad-hoc kernel probes.
 
-### [§10 — Noisy neighbor isolation: cgroups, CPU pinning, NUMA](../10-noisy-neighbors/)
+### [§11 — Noisy neighbor isolation: cgroups, CPU pinning, NUMA](../11-noisy-neighbors/)
 
 Demo 5 territory. The two-tenant scenario: a latency-sensitive
 service next to a CPU/memory-bound noisy neighbor. **`cpu.weight`,
 `io.weight`, `cpuset.cpus`**, `numactl --membind`, and what each
 knob actually controls under contention.
 
-### [§11 — Static analysis & debugging in containers](../11-analysis-debugging/)
+### [§12 — Static analysis & debugging in containers](../12-analysis-debugging/)
 
 Demo 6 territory. cppcheck and clang-tidy as build stages, gtest
 + gmock as a separate build target, **AddressSanitizer / UBSan /
 MSan / TSan** with a slowdown comparison table, **Valgrind**
 trade-offs, **Meta's Object Introspection** for the silent-overhead
-pitfalls from §5, and the **ephemeral gdb sidecar** pattern for
+pitfalls from §6, and the **ephemeral gdb sidecar** pattern for
 attaching to a running container without putting `gdb` into the
 runtime image.
 
-### [§12 — Reproducibility & ABI: Conan, CMake presets, hermetic builds](../12-reproducibility-abi/)
+### [§13 — Reproducibility & ABI: Conan, CMake presets, hermetic builds](../13-reproducibility-abi/)
 
 Still Demo 6. Conan 2 lockfiles for fully-pinned dependencies,
 CMake presets for build-environment portability, and **`abidiff`
@@ -188,17 +202,17 @@ from libabigail** for catching silent ABI breaks before they reach
 production. The mental model: every binary you ship should be
 rebuildable byte-for-byte from a commit and a lockfile.
 
-### [§13 — Pitfalls](../13-pitfalls/)
+### [§14 — Pitfalls](../14-pitfalls/)
 
 The traps that catch experienced people: AVX-512 instruction-set
 mismatch between builder and runtime host, abstraction overhead
 from misjudged virtual interfaces, build-time delays from
 unbounded layer cache miss patterns, and a few smaller ones.
 Each pitfall is presented as **symptom → root cause → fix**, in
-the runbook style §11's "distroless gotchas" page in the
+the runbook style §12's "distroless gotchas" page in the
 hummingbird-tutorial popularised.
 
-### [§14 — Where to go next](../14-where-to-go-next/)
+### [§15 — Where to go next](../15-where-to-go-next/)
 
 Pointers to the four reference books we draw on, what each is
 strongest at, and what topics this tutorial deliberately doesn't
@@ -239,13 +253,13 @@ If you read every section and run every demo, expect:
 
 - **45 minutes to 1.5 hours** for §0–§2 (the prerequisites and the
   mental model)
-- **2 to 3 hours** for §3–§6 (Demo 1 and Demo 2; the bulk of the
+- **2 to 3 hours** for §4–§7 (Demo 1 and Demo 2; the bulk of the
   compile-time and memory material)
-- **1.5 to 2.5 hours** for §7–§9 (Demo 3 and Demo 4; I/O, networking,
+- **1.5 to 2.5 hours** for §8–§10 (Demo 3 and Demo 4; I/O, networking,
   and the full observability stack)
-- **2 to 3 hours** for §10–§13 (Demos 5 and 6, plus the pitfalls
+- **2 to 3 hours** for §11–§14 (Demos 5 and 6, plus the pitfalls
   reference)
-- **15 minutes** for §14
+- **15 minutes** for §15
 
 Total reading + running time: **roughly 7–10 hours**, spread over
 however many sittings you want. The first three rows are the

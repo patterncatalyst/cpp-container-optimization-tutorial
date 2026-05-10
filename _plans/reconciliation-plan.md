@@ -24,11 +24,11 @@ flagged.
 ## At-a-glance status
 
 ```
-G.1 Sections drafted:             15 / 15  (stub level — outlines only)
-G.2 Sections verified:             3 / 15  ← §1 (r08), §3 (r18), §4 (r18)
+G.1 Sections drafted:             16 / 16  (stub level — outlines only)
+G.2 Sections verified:             3 / 16  ← §1 (r08), §4 (r20), §5 (r20)
 G.3 Demos scaffolded:              6 / 6   (build files + sources + Containerfiles)
 G.4 Demos passing test scripts:    0 / 6   (test scripts exist; not run yet)
-G.5 Diagram pairs in place:       13 / 13  (placeholders; not drawn yet)
+G.5 Diagram pairs in place:       15 / 15  (placeholders; 3 hand-drawn so far)
 G.6 PPTX export validated:        no
 ```
 
@@ -47,18 +47,19 @@ on a clean Fedora 44 host; that's what the verification pass turns
 | 0  | Outline                                                            | [x]     | drafted (r03)               | Full prose, sidebar dropped, dual-target sizing called out  |
 | 1  | Prerequisites                                                      | [x]     | verified (r08)              | r08: 24/24 required check-host.sh checks pass on user's Fedora 44; 2 warnings for quay.io and docker.io reachability are informational only (don't gate any non-demo-04 demo). |
 | 2  | Introduction & Mental Model                                        | [x]     | drafted with prose (r22)    | r22: ~4500 words; four-layer model spine; LTO/PGO/PIE/ASLR explainers; threading deep-dive (std::thread/jthread, library pools, coroutines, Boost.Fibers/Context) with I/O-vs-CPU dimension and three container traps; toolkit subsection (gdb/Valgrind/perf/eBPF) with forward refs; two real Excalidraw diagrams committed (`02-introduction-four-layers`, `02-threading-models`) |
-| 3  | Container Strategy: UBI, scratch, multi-stage builds               | [x]     | verified (r20)              | demo-01 measured: 689 MB single-stage-naive → 114 MB ubi-multistage (6×) → 26.4 MB ubi-micro w/ fully-static -static binary (26×); ubi-micro-glibc-mismatch teaching variant captures the cross-image glibc symbol-version trap live (`GLIBC_2.35 not found`) |
-| 4  | Compile-Time Wins: LTO, PGO, constexpr                             | [x]     | verified (r20)              | demo-01: all four variants build with thin LTO; PGO captures real .gcda data and rebuilds with -fprofile-use; wall-clock latency at -c 50 shows no toolchain delta (40.7-40.8 ms p50 across all variants) — that IS the §4 lesson: PGO/LTO show in CPU profiles, not p50 latency, when queue dynamics dominate |
-| 5  | STL, Layout, and C++20/23 Containers                               | [x]     | unverified                  | Tied to Demo 2; verify GCC 14 supports `flat_set`    |
-| 6  | Memory Management: Allocators, Huge Pages, cgroups v2, OOM         | [x]     | unverified                  | Expanded 2026-05-09 with cgroup memory.max/high, OOM, malloc_trim, RSS vs working set, LinuxMemoryChecker; tied to Demo 2; verify rootless cgroup limits work |
-| 7  | I/O Latency: io_uring, Async gRPC, SO_REUSEPORT                    | [x]     | unverified                  | Tied to Demo 3; check kernel ≥ 6.0                   |
-| 8  | Networking & Kernel Parameters                                     | [x]     | unverified                  | Tied to Demo 3; veth vs host comparison              |
-| 9  | Observability & Profiling: Grafana Stack, perf, eBPF               | [x]     | unverified                  | Tied to Demo 4; full stack must come up clean        |
-| 10 | Noisy Neighbor Isolation: cgroups, CPU pinning, NUMA               | [x]     | unverified                  | Tied to Demo 5; needs ≥ 8 cores ideally              |
-| 11 | Static Analysis & Debugging in Containers                          | [x]     | unverified                  | Expanded 2026-05-09 with ASan/UBSan/MSan/TSan in containers, Valgrind tradeoffs, Meta Object Introspection; tied to Demo 6; gdbserver attach pattern |
-| 12 | Reproducibility & ABI: Conan, CMake Presets, Hermetic Builds       | [x]     | unverified                  | Tied to Demo 6; verify abidiff catches a real break  |
-| 13 | Pitfalls: AVX-512 mismatch, abstraction overhead, build delays     | [x]     | unverified                  | AVX-512 demo crash recovery needs hardware variance  |
-| 14 | Where to Go Next                                                   | [x]     | unverified                  | —                                                    |
+| 3  | RAII & Container Resource Discipline                               | [x]     | drafted with prose (r27)    | r27: ~1700 words; container framing for tight-cgroup leak math; two-feature mechanic (lifetime + unwinding); concrete `unique_fd` 20-line wrapper with leaky-vs-RAII side-by-side; four-resource-class table; three failure modes; honest non-promises (cycles, terminate, OOM-kill, layout); forward refs to §6/§7/§8/§11; lab-tip pointing at a future demo. New diagram `03-raii-discipline` (SVG hand-authored; .excalidraw stub). |
+| 4  | Container Strategy: UBI, scratch, multi-stage builds               | [x]     | verified (r20)              | demo-01 measured: 689 MB single-stage-naive → 114 MB ubi-multistage (6×) → 26.4 MB ubi-micro w/ fully-static -static binary (26×); ubi-micro-glibc-mismatch teaching variant captures the cross-image glibc symbol-version trap live (`GLIBC_2.35 not found`) |
+| 5  | Compile-Time Wins: LTO, PGO, constexpr                             | [x]     | verified (r20)              | demo-01: all four variants build with thin LTO; PGO captures real .gcda data and rebuilds with -fprofile-use; wall-clock latency at -c 50 shows no toolchain delta (40.7-40.8 ms p50 across all variants) — that IS the §5 lesson: PGO/LTO show in CPU profiles, not p50 latency, when queue dynamics dominate |
+| 6  | STL, Layout, and C++20/23 Containers                               | [x]     | unverified                  | Tied to Demo 2; verify GCC 14 supports `flat_set`    |
+| 7  | Memory Management: Allocators, Huge Pages, cgroups v2, OOM         | [x]     | unverified                  | Expanded 2026-05-09 with cgroup memory.max/high, OOM, malloc_trim, RSS vs working set, LinuxMemoryChecker; tied to Demo 2; verify rootless cgroup limits work |
+| 8  | I/O Latency: io_uring, Async gRPC, SO_REUSEPORT                    | [x]     | unverified                  | Tied to Demo 3; check kernel ≥ 6.0                   |
+| 9  | Networking & Kernel Parameters                                     | [x]     | unverified                  | Tied to Demo 3; veth vs host comparison              |
+| 10 | Observability & Profiling: Grafana Stack, perf, eBPF               | [x]     | unverified                  | Tied to Demo 4; full stack must come up clean — option B target |
+| 11 | Noisy Neighbor Isolation: cgroups, CPU pinning, NUMA               | [x]     | unverified                  | Tied to Demo 5; needs ≥ 8 cores ideally              |
+| 12 | Static Analysis & Debugging in Containers                          | [x]     | unverified                  | Expanded 2026-05-09 with ASan/UBSan/MSan/TSan in containers, Valgrind tradeoffs, Meta Object Introspection; tied to Demo 6; gdbserver attach pattern |
+| 13 | Reproducibility & ABI: Conan, CMake Presets, Hermetic Builds       | [x]     | unverified                  | Tied to Demo 6; verify abidiff catches a real break  |
+| 14 | Pitfalls: AVX-512 mismatch, abstraction overhead, build delays     | [x]     | unverified                  | AVX-512 demo crash recovery needs hardware variance  |
+| 15 | Where to Go Next                                                   | [x]     | unverified                  | —                                                    |
 
 ---
 
@@ -90,18 +91,20 @@ just look "filled in" don't count.
 | Diagram (basename)                    | placeholder | drawn  | Embedded in §  | Notes                                              |
 |---------------------------------------|-------------|--------|----------------|----------------------------------------------------|
 | 01-prerequisites-toolchain            | [x]         | [ ]    | §1 (gallery)   | Toolchain → Conan cache → Podman storage           |
-| 02-introduction-four-layers           | [x]         | [ ]    | §2             | Compile time → image → kernel → runtime            |
-| 03-image-strategy-multistage          | [x]         | [ ]    | §3             | Trade-off matrix: size, debug, attack surface       |
-| 04-compile-time-pgo-flow              | [x]         | [ ]    | §4             | Instrumented build → workload → optimized build    |
-| 05-stl-layout-flat-vs-node            | [x]         | [ ]    | §5             | Cache-line footprint: set / flat_set / vector       |
-| 06-allocator-stack                    | [x]         | [ ]    | §6             | App → PMR → glibc/jemalloc/mimalloc → cgroup        |
-| 07-io-uring-rings                     | [x]         | [ ]    | §7             | SQ/CQ mental model + multishot recv                 |
-| 08-networking-veth-vs-host            | [x]         | [ ]    | §8             | Packet path under each networking mode              |
-| 09-observability-otel-stack           | [x]         | [ ]    | §9             | OTel collector fan-out to Prom/Mimir/Tempo/Loki     |
-| 10-isolation-cgroup-tree              | [x]         | [ ]    | §10            | cgroup hierarchy: weight + cpuset + NUMA            |
-| 11-debug-sidecar-pattern              | [x]         | [ ]    | §11            | Ephemeral sidecar sharing PID namespace             |
-| 12-reproducibility-conan-flow         | [x]         | [ ]    | §12            | Conan lockfile + preset → image with ABI labels     |
-| 13-pitfalls-avx512-mismatch           | [x]         | [ ]    | §13            | The SIGILL trap visualized                          |
+| 02-introduction-four-layers           | [x]         | [x]    | §2             | Four-layer mental model with demo-01 trace overlay |
+| 02-threading-models                   | [x]         | [x]    | §2             | Stack vs scheduler quadrant; M:N at top, 1:1 bottom|
+| 03-raii-discipline                    | [x]         | [x]    | §3             | RAII vs manual cleanup leak paths (SVG hand-authored; .excalidraw stub) |
+| 04-image-strategy-multistage          | [x]         | [ ]    | §4             | Trade-off matrix: size, debug, attack surface       |
+| 05-compile-time-pgo-flow              | [x]         | [ ]    | §5             | Instrumented build → workload → optimized build    |
+| 06-stl-layout-flat-vs-node            | [x]         | [ ]    | §6             | Cache-line footprint: set / flat_set / vector       |
+| 07-allocator-stack                    | [x]         | [ ]    | §7             | App → PMR → glibc/jemalloc/mimalloc → cgroup        |
+| 08-io-uring-rings                     | [x]         | [ ]    | §8             | SQ/CQ mental model + multishot recv                 |
+| 09-networking-veth-vs-host            | [x]         | [ ]    | §9             | Packet path under each networking mode              |
+| 10-observability-otel-stack           | [x]         | [ ]    | §10            | OTel collector fan-out to Prom/Mimir/Tempo/Loki     |
+| 11-isolation-cgroup-tree              | [x]         | [ ]    | §11            | cgroup hierarchy: weight + cpuset + NUMA            |
+| 12-debug-sidecar-pattern              | [x]         | [ ]    | §12            | Ephemeral sidecar sharing PID namespace             |
+| 13-reproducibility-conan-flow         | [x]         | [ ]    | §13            | Conan lockfile + preset → image with ABI labels     |
+| 14-pitfalls-avx512-mismatch           | [x]         | [ ]    | §14            | The SIGILL trap visualized                          |
 
 ---
 
@@ -2083,6 +2086,183 @@ The Gotchas section, the demo verification matrices, and
 the round log are untouched. Future stub fills can use
 the same `{% include section.html n=N %}` pattern; r26
 defines the convention.
+
+### 2026-05-09 — r27: insert §3 RAII & Container Resource Discipline; renumber §3-§14 → §4-§15
+
+User asked for RAII to be added as its own section
+with a tutorial card, a slide, and possibly a demo. RAII
+ties together memory, file descriptors, sockets, locks,
+and exception safety — all of which surface in later
+sections — so making readers learn the vocabulary up
+front pays off across the rest of the tutorial. The
+shipping decision was to insert RAII as new §3 between
+§2 (Mental Model) and the old §3 (Container Strategy),
+shifting everything else down by one.
+
+This is the largest structural change since r03's
+scaffolding round. Captured here in detail so future
+"why is this section numbered differently from the PRD"
+questions have an answer.
+
+**Renumbering scope:**
+
+- 12 doc files renamed: `03-image-strategy.md` →
+  `04-image-strategy.md`, ..., `14-where-to-go-next.md`
+  → `15-where-to-go-next.md`. `git mv` so history
+  follows.
+- 11 diagram files renamed (svg + .excalidraw pairs):
+  `03-image-strategy-multistage.{svg,excalidraw}` →
+  `04-image-strategy-multistage.{svg,excalidraw}`, etc.
+- `order:` front-matter bumped in each renamed doc to
+  match the new file number.
+- `diagrams/README.md` table updated to reflect the new
+  numbering plus the new `03-raii-discipline` row.
+- `index.html` had one stale hardcoded URL
+  (`/docs/14-where-to-go-next/`) which moved to
+  `/docs/15-where-to-go-next/`.
+- `_includes/section.html` comment example updated:
+  the n=4 example now resolves to Container Strategy
+  rather than Compile-Time Wins, but the lookup-by-
+  `order` mechanic is unchanged.
+
+**Inverse mapping — old § ↔ new § for cross-referencing:**
+
+| was | is now | title                               |
+|-----|--------|-------------------------------------|
+| —   | §3     | RAII & Container Resource Discipline (NEW) |
+| §3  | §4     | Container Strategy                  |
+| §4  | §5     | Compile-Time Wins                   |
+| §5  | §6     | STL, Layout, and C++20/23           |
+| §6  | §7     | Memory Management                   |
+| §7  | §8     | I/O Latency                         |
+| §8  | §9     | Networking & Kernel                 |
+| §9  | §10    | Observability & Profiling           |
+| §10 | §11    | Noisy Neighbor Isolation            |
+| §11 | §12    | Static Analysis & Debugging         |
+| §12 | §13    | Reproducibility & ABI               |
+| §13 | §14    | Pitfalls                            |
+| §14 | §15    | Where to Go Next                    |
+
+**Cross-reference fix-up:**
+
+Because the `section.html` include resolves by `order:`
+front-matter, every `{% include section.html n=N %}`
+call became wrong the moment the orders shifted —
+`n=3` used to mean Container Strategy, now resolves to
+RAII. Two prose files needed bumping:
+
+- `_docs/02-introduction.md`: 25 includes bumped (every
+  `n=N` for N ≥ 3 became `n=(N+1)`). Verified each one
+  routes to the correct concept after the bump.
+- `_docs/03-raii-discipline.md`: 4 includes bumped for
+  the same reason — the new prose was authored with the
+  old mental numbering.
+- `_docs/00-outline.md`: the section walk and bullet-
+  list at the top got a mass bump, plus a new `### [§3 —
+  RAII & container resource discipline]` paragraph
+  inserted between §2 and §4.
+
+Round-log entries from earlier rounds (r03, r12, r17,
+etc.) reference sections by their numbering AT THE TIME
+those rounds ran. Those references are NOT updated —
+the round log is a chronological record. When you
+read "r03 expanded §6 (Memory Management)", that
+referred to what is now §7. Treat the round log as
+historical; treat the matrices and current prose as
+authoritative.
+
+**The new §3 itself:**
+
+- `_docs/03-raii-discipline.md`, ~1700 words. Title:
+  "RAII & Container Resource Discipline". Description:
+  "Deterministic cleanup is a vibe on a fat host and a
+  survival skill in a 256MB cgroup."
+- Container framing: tight `nofile`, `pids.max`,
+  `memory.high` change the leak math from cosmetic to
+  outage-causing. Concrete numbers: 17 minutes to EMFILE
+  at 1 leak/sec on `nofile=1024`; 17 MB after a million
+  requests for a 200-byte allocation lost per request.
+- Two-feature mechanic: object lifetime bound to scope +
+  destructor runs during stack unwinding.
+- Three-failure-modes-that-disappear catalog: early
+  return, exception propagation, refactor adds an exit
+  path nobody updated. Each tied to a line of the leaky
+  example function.
+- Concrete `unique_fd` 20-line wrapper, full
+  implementation including move ctor, deleted copy,
+  `release()`. Not a sketch — copy-pasteable production
+  code.
+- Four-resource-class table: memory, fd, mutex, OS
+  handle, with the canonical std type for each (and a
+  callout that `std::unique_fd` doesn't exist —
+  P1885/P2146 stalled — so every codebase ends up
+  rolling its own `unique_fd`).
+- Honest non-promises section: RAII does not save you
+  from cycles, `std::terminate`, cgroup-OOM, or layout
+  problems. Saying what something *won't* do is
+  discipline.
+- Forward refs to §7 (Memory), §8 (I/O), §9
+  (Networking), §12 (Debugging) — every later section
+  that depends on RAII as foundational vocabulary.
+- Lab tip: `--ulimit nofile=64` + leaky loop reproduces
+  EMFILE in ~60 iterations. Sized to be a finger
+  exercise; full demo deferred.
+
+**The new diagram:**
+
+`diagrams/03-raii-discipline.svg`, hand-authored,
+920×560, side-by-side comparison. Left panel: leaky
+manual cleanup with red `leaks fd` annotations on the
+two early-exit paths. Right panel: RAII wrapper with
+green arrows from every exit path converging on
+`~unique_fd()`. Same color/font conventions as the
+four-layer diagram.
+
+`diagrams/03-raii-discipline.excalidraw` is a placeholder
+stub matching the convention of other not-yet-authored
+Excalidraw sources. Real Excalidraw source-of-truth
+authoring deferred.
+
+**At-a-glance count updates:**
+
+- G.1 Sections drafted: 15 / 15 → 16 / 16
+- G.2 Sections verified: 3 / 15 → 3 / 16; the verifier
+  notes that referenced "§3 (r18), §4 (r18)" corrected
+  to "§4 (r20), §5 (r20)" — also fixing two stale round
+  numbers caught while in there.
+- G.5 Diagrams in place: 13 / 13 → 15 / 15 (RAII added,
+  plus 02-threading-models was an undercount before).
+
+**What's still TODO for §3:**
+
+1. **Slide content for the PPTX.** User explicitly asked
+   for "at least a single slide in the presentation."
+   Slide outline: title bar, 2-line definition, condensed
+   `unique_fd` snippet on the right, three-bullet
+   container-stakes box at the bottom. Building the
+   actual PPTX is a separate workflow not yet started;
+   when it begins, §3 gets one slide minimum.
+2. **A real demo (optional).** User said "Perhaps even
+   a demo/example?" — the inline `unique_fd` example
+   plus the lab tip cover the conceptual ground; a full
+   demo with measured EMFILE-vs-clean comparison would
+   be a strong addition. Candidate slot: bundle into
+   {% include section.html n=8 %}'s I/O demo material
+   (where `unique_fd` shows up wrapping `io_uring` fds),
+   or a standalone demo-NN if time permits.
+
+**What this round does NOT do:**
+
+- Doesn't touch demo-01, the demo matrices, or any
+  existing C++ code.
+- Doesn't add a new demo for §3 itself.
+- Doesn't update the PPTX (still un-started).
+- Doesn't restructure Option B for tomorrow — that
+  plan is unchanged; §10 verification is still next.
+
+Renumbering is fundamentally tedious work; the goal of
+this entry is that nobody has to re-derive the mapping
+six months from now.
 
 ---
 
