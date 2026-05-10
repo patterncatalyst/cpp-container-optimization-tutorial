@@ -2542,6 +2542,147 @@ before are now necessary.
 
 ---
 
+### G-30 · One-shot readiness probes race the LGTM bundle's warmup window; use polling with generous timeout (r51)
+
+**Problem.** r50's main.cpp fix worked — the binary
+built, the container started, Grafana and demo-04-svc
+both responded to their healthchecks. The verification
+script then ran Phase 2 and immediately reported
+two-thirds of the LGTM backends as down:
+
+    [ ok ]    mimir: ready (http://127.0.0.1:9090/-/ready)
+    [fail]    tempo: NOT ready at http://127.0.0.1:3200/ready
+    [fail]    loki:  NOT ready at http://127.0.0.1:3100/ready
+    [fail]  2/3 backends not ready; aborting
+
+But the stack was fine. Mimir came up immediately,
+Tempo and Loki were genuinely just still warming up.
+The script was probing them too aggressively.
+
+**Why.** The `grafana/otel-lgtm` bundle starts four
+services (Grafana, Tempo, Loki, Prometheus-as-Mimir)
+inside one container. They start in parallel but
+**don't all become ready at the same speed**:
+
+- **Grafana** is up within a few seconds; its
+  `/api/health` endpoint reflects only the HTTP
+  server.
+- **Prometheus** (exposed as Mimir at `:9090`) is
+  ready almost immediately for our purposes — the
+  `/-/ready` endpoint returns 200 once the server
+  socket is bound.
+- **Tempo** has a deliberate **warmup window** built
+  into its readiness check. After the HTTP server
+  starts, `/ready` returns `503 Service Unavailable`
+  with body `Ingester not ready: waiting for 15s
+  after being ready` for ~15–30 seconds. This is a
+  startup-stability feature: Tempo wants the cluster
+  to settle before accepting traffic.
+- **Loki** has the same warmup pattern. Same
+  message format, same ~15–30 s window.
+
+The earlier verification script used a one-shot
+`curl -sf --max-time 3 "$url"` and immediately
+declared failure if it didn't get an immediate 200.
+It had no retry loop. Phase 1 only waited for
+Grafana and our service. By the time Phase 2 ran,
+Mimir was ready (won the race) but Tempo and Loki
+were still in warmup. The script aborted on a
+race-condition false negative.
+
+**Fix.** Use the existing `wait_for_http` helper with
+a generous timeout (90s) for each backend in Phase 2:
+
+    for name in tempo loki mimir; do
+        url="${BACKENDS[$name]}"
+        if wait_for_http "$url" 90; then
+            log_ok "  $name: ready ($url)"
+        else
+            log_err "  $name: NOT ready at $url"
+            # Show the response body so we can distinguish:
+            #   "Ingester not ready: waiting for Ns" → warmup
+            #   404 / connection refused → wrong endpoint or
+            #     container crashed
+            body=$(curl -s --max-time 3 "$url" 2>&1 || true)
+            log_err "    last response body: ${body:0:200}"
+            backend_errors=$((backend_errors + 1))
+        fi
+    done
+
+`wait_for_http` polls every 500 ms with a 2-second
+per-attempt timeout, returning success on the first
+HTTP 200. Within 90 seconds, Tempo and Loki will
+both finish warmup unless something is genuinely
+wrong.
+
+The body-on-failure log makes future failures
+self-diagnosing: if you see `Ingester not ready:
+waiting for ...`, raise the timeout. If you see
+`Connection refused`, the lgtm container hasn't
+started or has crashed. If you see HTML / `404
+Not Found`, the endpoint moved.
+
+A small log_info hint is added for the next reader
+of a failure message.
+
+**Discoverability lessons:**
+
+- **Readiness checks have warmup windows.**
+  Production-grade backends (Tempo, Loki, Mimir,
+  most Prometheus-stack tools) deliberately
+  introduce a "settle delay" before claiming ready.
+  Test scripts must poll, not snap.
+- **Mismatched warmup speeds within a single
+  container look like partial failures.** All four
+  LGTM components share the lgtm container's
+  process; if you only check liveness of the
+  *container*, you can't tell which backends inside
+  are still warming up.
+- **Always log the response body on readiness
+  failure.** The body distinguishes warmup-still-
+  open from real failure. 200 chars is enough.
+- **Two timeouts: one for the HTTP request, one
+  for the polling loop.** `--max-time 2` per attempt
+  prevents a hung backend from stretching the loop;
+  the 90-second outer timeout caps total wait. The
+  earlier script conflated these (just one
+  `--max-time 3` with no retry).
+
+**Tutorial value.** This is a §10 (Observability &
+Profiling) topic in disguise: **a stack that's
+"started" isn't the same as a stack that's "ready
+to accept signals."** When teaching observability,
+showing the warmup window explicitly — and showing
+how a naive readiness probe races it — is more
+honest than pretending everything is binary.
+
+**What this round does:**
+
+1. Replaces the one-shot probe with `wait_for_http`
+   per backend + 90s timeout.
+2. Adds body-on-failure logging.
+3. Adds a hint message for the
+   "warmup-still-open" case.
+4. Documents G-30 with the warmup-window mechanism.
+
+**Anticipated outcomes:**
+
+- **Best case:** Phase 2 passes within 30-60s, the
+  workload generator runs, signals reach Mimir,
+  Tempo, Loki, the corresponding queries return
+  data, the script prints the success message, §10
+  flips to verified.
+- **Tempo or Loki really doesn't come up:** the
+  90-second timeout runs out, the body shows the
+  actual error from the backend, we get a
+  diagnosable signal.
+- **Some other failure further into Phase 3-4:**
+  the original r28 anticipated category — metric
+  drift, log label mismatch, dashboard UID issue,
+  trace exporter misroute. Each is now reachable.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -7349,6 +7490,126 @@ flow — the kind of debugging tutorial students will
 actually face. The 23-stage gauntlet of toolchain
 compatibility issues is documented permanently as
 G-12 through G-29.
+
+### 2026-05-10 — r51: G-30 — verification script raced LGTM warmup window; replace one-shot probe with `wait_for_http`
+
+User reran with r50's processor.h includes. **The
+binary built. The container started. Healthchecks
+passed:**
+
+    Successfully built 4ea39494e3da
+    Successfully tagged cpp-tut/demo-04:latest
+     ✔ Image cpp-tut/demo-04:latest Built
+     ✔ Network tutorial-obs Created
+     ✔ Container tutorial-lgtm Started
+     ✔ Container demo04-svc Started
+    [ ok ] Grafana ready
+    [ ok ] demo-04-svc ready
+
+The dep wilderness is decisively behind us. Then
+Phase 2 of the verification script reported:
+
+    [ ok ]    mimir: ready (http://127.0.0.1:9090/-/ready)
+    [fail]    tempo: NOT ready at http://127.0.0.1:3200/ready
+    [fail]    loki:  NOT ready at http://127.0.0.1:3100/ready
+    [fail]  2/3 backends not ready; aborting
+
+**This was a script race condition, not a stack
+failure.** The `grafana/otel-lgtm` bundle starts
+all four services in one container, but they don't
+all reach ready at the same speed:
+
+- Grafana: ~5s
+- Prometheus (as Mimir): ~5s
+- Tempo: 15-30s — its `/ready` returns 503 with
+  body `Ingester not ready: waiting for 15s after
+  being ready` during a deliberate warmup window
+- Loki: same pattern
+
+The earlier script used a one-shot
+`curl -sf --max-time 3` per backend with no retry.
+By the time Phase 2 ran, Mimir was ready (won the
+race) but Tempo and Loki were still warming up.
+False-negative abort.
+
+**Fix:** replace the one-shot probe with
+`wait_for_http "$url" 90` per backend. This polls
+every 500 ms with a 2-second per-attempt timeout
+until either an HTTP 200 arrives or 90 seconds
+elapse. Tempo and Loki finish warmup well within
+that window unless something is genuinely wrong.
+
+Also added: when a probe times out, log the actual
+HTTP response body (truncated to 200 chars) so the
+failure is self-diagnosing —
+"Ingester not ready: waiting for ..." → warmup
+window still open vs. "Connection refused" →
+container crashed vs. "404 Not Found" → endpoint
+moved. And a hint message for the warmup-still-open
+case.
+
+**Promoted to G-30** with full Problem/Why/Fix:
+
+- The mechanics of the LGTM bundle's per-backend
+  warmup speeds (Grafana fast, Mimir fast, Tempo &
+  Loki slow with deliberate `/ready` 503 warmup
+  windows)
+- "Started ≠ ready" — distinct concepts in
+  production-grade backends; readiness checks
+  deliberately introduce settle delays
+- Always log response body on readiness failure;
+  it distinguishes warmup-still-open from real
+  failure
+- Two timeouts: per-request (`--max-time 2`) and
+  polling-loop outer (90s) — earlier script
+  conflated them
+- Tutorial value: §10 (Observability) — a stack
+  that's "started" isn't the same as a stack that's
+  "ready to accept signals"; honest about the
+  warmup mechanism
+
+**What r51 specifically ships:**
+
+1. scripts/test-demo-04-observability.sh: Phase 2's
+   one-shot `curl -sf` replaced with
+   `wait_for_http "$url" 90` per backend; body
+   logging on failure; warmup-hint message.
+2. G-30 promoted in plan.
+3. r51 round entry.
+
+**What this round does NOT do:**
+
+- Doesn't change main.cpp.
+- Doesn't change the container or Conan setup —
+  the dep chain is now stable.
+- Doesn't actually run the verification.
+
+**Anticipated outcomes:**
+
+- **Best case:** Phase 2 passes within 30-60s,
+  Phase 3 generates load, Phase 4 queries each
+  backend and finds the data. Script prints
+  success. §10 (Observability & Profiling) flips
+  to **verified**. **Demo-04 done.**
+- **Tempo or Loki really doesn't come up:** the
+  90-second timeout runs out, the body log shows
+  why, we get a diagnosable signal. Almost
+  certainly some lgtm config issue rather than a
+  fundamental block.
+- **Phase 2 passes, Phase 3-4 finds no signals:**
+  the original r28 anticipated category — metric
+  name drift, log label drop, exporter route
+  misconfiguration. Each surfaces a specific
+  diagnosable failure now that we can actually
+  reach the backends.
+
+**Cumulative round count: r51.** Demo-04 is 23 rounds
+in. Every dependency, every transitive constraint,
+every gnu17/abseil-pair/incomplete-type, every
+warmup-window — solved and documented. G-12
+through G-30. The tutorial's gotcha catalog is
+becoming the densest concentration of real-world
+modern-C++ container build wisdom in the project.
 
 ---
 

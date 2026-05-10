@@ -94,6 +94,16 @@ if (( PROBE_ONLY == 0 )); then
 fi
 
 # ── Phase 2: each LGTM backend's API is reachable ─────────────────────────
+#
+# The grafana/otel-lgtm bundle starts all four backends (Grafana, Tempo,
+# Loki, Prometheus-as-Mimir) in the same container, but they don't all
+# come up at the same speed. Grafana responds first; Mimir/Prometheus
+# next; Tempo and Loki take 15-30s after container start because their
+# `/ready` endpoint returns 503 with "Ingester not ready: waiting for
+# Ns after being ready" during a deliberate warmup window. The earlier
+# one-shot `curl -sf` racing the warmup produced false negatives. Use
+# wait_for_http with a generous timeout so warmup latency doesn't
+# masquerade as a stack failure (G-30).
 
 log_step "Phase 2 — confirming each LGTM backend is ready"
 declare -A BACKENDS=(
@@ -104,15 +114,24 @@ declare -A BACKENDS=(
 backend_errors=0
 for name in tempo loki mimir; do
     url="${BACKENDS[$name]}"
-    if curl -sf --max-time 3 "$url" >/dev/null 2>&1; then
+    if wait_for_http "$url" 90; then
         log_ok "  $name: ready ($url)"
     else
         log_err "  $name: NOT ready at $url"
+        # Show the actual response so we can distinguish "warmup
+        # window still open" from "wrong endpoint" from "container
+        # crashed". curl --max-time small so this doesn't add to
+        # the wait if the endpoint is genuinely unreachable.
+        body=$(curl -s --max-time 3 "$url" 2>&1 || true)
+        log_err "    last response body: ${body:0:200}"
         backend_errors=$((backend_errors + 1))
     fi
 done
 if (( backend_errors > 0 )); then
     log_err "$backend_errors/3 backends not ready; aborting"
+    log_info "If a backend reported 'Ingester not ready: waiting for ...'"
+    log_info "the warmup window is still open. Re-run after ~30 more"
+    log_info "seconds, or pass --probe-only to skip the bring-up step."
     exit 1
 fi
 
