@@ -34,8 +34,14 @@ opentelemetry-cpp/1.16.1
 CMakeDeps
 CMakeToolchain
 
-[layout]
-cmake_layout
+# No [layout] section: we use Conan 2.x's default flat layout because
+# this is a single-build-type containerized one-shot compile. The
+# `cmake_layout` pattern adds `build/<build_type>/generators/` path
+# components that are useful for host-side multi-config workflows but
+# just complicate the Containerfile path math here. With no [layout],
+# `conan install . --output-folder=build/conan` puts the toolchain at
+# `build/conan/conan_toolchain.cmake` — which is exactly what the
+# Containerfile's `-DCMAKE_TOOLCHAIN_FILE=...` flag expects. See G-18.
 
 [options]
 # OTel-cpp options:
