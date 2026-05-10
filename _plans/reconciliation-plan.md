@@ -771,6 +771,60 @@ GCC 14's libstdc++ which has `<print>`). If all four variants build
 and the latency/size tables emit, §3 and §4 promote to verified
 in r13.
 
+### 2026-05-09 — r13: demo-01 comparison-output bug; r12 builds confirmed clean
+
+User ran demo-01 on r12. Run completed in 1m 6s. The
+`==> Image size comparison` section header printed but no table
+followed, and the latency comparison section never executed at all.
+
+What this confirms first: **all four r12 variants built successfully.**
+The script reaches line 106 ("Image size comparison" header) only
+after the four `podman build` invocations have completed. The C++23
+`<print>` failure that prompted r12 is gone. The PGO flow with
+gcc-toolset-14 + same-binaryDir works.
+
+What broke after the header: a downstream output bug, two issues
+colliding:
+
+1. Podman 5.x stores locally-built images with a `localhost/` prefix
+   in the local store. So `podman images` shows them as
+   `localhost/cpp-tut/demo-01:ubi-multistage` (etc.), not
+   `cpp-tut/demo-01:...`.
+2. Line 107's pipeline used a strict regex grep:
+       podman images --format '...' | grep "^${IMG_PREFIX}:" | column -t
+   The grep found zero matches. With `set -euo pipefail` at the top
+   of the script, that propagated as a failed pipeline and triggered
+   `set -e`. Script aborted right after the header.
+
+Fix in r13:
+
+- **Image listing**: switched to podman's native `--filter
+  "reference=..."` (added two filter flags so both `cpp-tut/...`
+  and `localhost/cpp-tut/...` shapes match). Piped through
+  `sort -u` to dedupe in case both shapes hit. Appended `|| true`
+  so a future format mismatch can't blow up the whole script
+  again.
+- **Latency comparison loop**: wrapped the `wait_for_http` /
+  `hey` step in an if-block so a single failing variant prints
+  `NORUN` for that row instead of aborting the whole loop. Added
+  `|| true` to `podman stop` (cleanup shouldn't fail the script).
+- **Labels print**: added `2>/dev/null` to `podman inspect` and
+  graceful fallback ("(no labels)") if jq fails. Same anti-set-e
+  reasoning.
+
+Net effect: the comparison phase is now resilient to the kinds
+of small variations (registry prefix shape, transient health-probe
+miss, etc.) that should be informational rather than fatal in a
+demo script. `set -e` is still on for the build phase, where its
+strictness catches real toolchain failures (which is what we want).
+
+Verification status: pending demo-01 re-run with r13. The specific
+"empty table after header" failure is structurally removed. With
+r13 the script should print the size table, the latency table,
+and the label block to completion. If it does, §3 and §4 promote
+to verified.
+
+
 ---
 
 ## Known divergences from the PRD

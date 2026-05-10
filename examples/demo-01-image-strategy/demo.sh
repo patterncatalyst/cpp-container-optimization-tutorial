@@ -104,7 +104,17 @@ fi
 
 # ---------------------------------------------------------------------
 header "Image size comparison"
-podman images --format '{{.Repository}}:{{.Tag}}\t{{.Size}}' | grep "^${IMG_PREFIX}:" | column -t
+# Use podman's --filter rather than a regex grep: podman 5.x prefixes
+# locally-built images with `localhost/` in `podman images` output,
+# so a strict `grep "^${IMG_PREFIX}:"` would match nothing and (under
+# `set -e` + `pipefail`) abort the script before the latency table.
+podman images \
+  --filter "reference=${IMG_PREFIX}:*" \
+  --filter "reference=localhost/${IMG_PREFIX}:*" \
+  --format '{{.Repository}}:{{.Tag}}\t{{.Size}}' \
+  | sort -u \
+  | column -t \
+  || true
 
 # ---------------------------------------------------------------------
 header "Latency comparison ('hey -n 10000 -c 100')"
@@ -120,13 +130,16 @@ printf -- '-%.0s' {1..62}; echo
 for tag in "${!IMAGES[@]}"; do
   port="${IMAGES[$tag]}"
   podman run --rm -d --name "demo01-bench-${tag}" -p "${port}:8080" "${IMG_PREFIX}:${tag}" >/dev/null
-  wait_for_http "http://127.0.0.1:${port}/healthz" 20
-  out=$(hey -n 10000 -c 100 "http://127.0.0.1:${port}/" 2>/dev/null)
-  p50=$(awk '/50% in/ {print $3 * 1000}' <<<"$out")
-  p95=$(awk '/95% in/ {print $3 * 1000}' <<<"$out")
-  p99=$(awk '/99% in/ {print $3 * 1000}' <<<"$out")
-  printf '%-22s  %-10s  %-10s  %-10s\n' "$tag" "${p50:-?}" "${p95:-?}" "${p99:-?}"
-  podman stop "demo01-bench-${tag}" >/dev/null
+  if wait_for_http "http://127.0.0.1:${port}/healthz" 20; then
+    out=$(hey -n 10000 -c 100 "http://127.0.0.1:${port}/" 2>/dev/null || true)
+    p50=$(awk '/50% in/ {print $3 * 1000}' <<<"$out")
+    p95=$(awk '/95% in/ {print $3 * 1000}' <<<"$out")
+    p99=$(awk '/99% in/ {print $3 * 1000}' <<<"$out")
+    printf '%-22s  %-10s  %-10s  %-10s\n' "$tag" "${p50:-?}" "${p95:-?}" "${p99:-?}"
+  else
+    printf '%-22s  %-10s  %-10s  %-10s\n' "$tag" "NORUN" "NORUN" "NORUN"
+  fi
+  podman stop "demo01-bench-${tag}" >/dev/null 2>&1 || true
 done
 
 # ---------------------------------------------------------------------
@@ -134,8 +147,9 @@ header "Image labels (provenance for each build)"
 for tag in "${!IMAGES[@]}"; do
   echo
   echo "[$tag]"
-  podman inspect --format='{{json .Config.Labels}}' "${IMG_PREFIX}:${tag}" \
-    | jq -r 'to_entries[] | "  \(.key)=\(.value)"' 2>/dev/null || true
+  podman inspect --format='{{json .Config.Labels}}' "${IMG_PREFIX}:${tag}" 2>/dev/null \
+    | jq -r 'to_entries[] | "  \(.key)=\(.value)"' 2>/dev/null \
+    || echo "  (no labels)"
 done
 
 echo
