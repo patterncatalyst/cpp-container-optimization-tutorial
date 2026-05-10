@@ -44,6 +44,16 @@ opentelemetry-cpp/*:with_otlp_grpc=True
 opentelemetry-cpp/*:with_otlp_http=False
 opentelemetry-cpp/*:shared=False
 
+# OpenSSL options: skip the FIPS module. gRPC pulls openssl as a
+# transitive dep for TLS support, but our demo uses plaintext gRPC
+# inside the container network — no TLS, no FIPS-validated crypto
+# requirement. Skipping FIPS:
+#   - removes the mk-fipsmodule-cnf.pl build step that needs perl
+#     Digest::SHA (G-16)
+#   - shrinks the openssl static library
+#   - cuts openssl build time
+openssl/*:no_fips=True
+
 # Transitive deps: keep static linkage uniform. Wildcards apply to
 # every package in the dep tree; recipes that don't have a `shared`
 # option just ignore it.

@@ -773,6 +773,104 @@ compile-time choice, not a Conan-profile choice.
 
 ---
 
+### G-16 · OpenSSL FIPS-module post-build script needs `Digest::SHA`; or skip FIPS entirely with `no_fips=True` (r34)
+
+**Problem.** OpenSSL's Configure now passes (G-15 fix
+worked), the actual C compilation runs to completion
+(libcrypto.a gets assembled, providers/fips.so links),
+and *then* a post-compile perl script dies:
+
+    Can't locate Digest/SHA.pm in @INC ...
+    BEGIN failed--compilation aborted at
+    util/mk-fipsmodule-cnf.pl line 42.
+    make[1]: *** [Makefile:4616: providers/fipsmodule.cnf]
+    Error 2
+
+The script `mk-fipsmodule-cnf.pl` runs after the FIPS
+provider library is linked and computes a SHA-256
+integrity hash that gets baked into
+`providers/fipsmodule.cnf`. The hash gets validated at
+runtime so the FIPS module knows it hasn't been
+tampered with. The script needs `Digest::SHA` to
+compute the hash.
+
+**Why.** Same UBI 9 packaging story as G-15 — perl
+modules are individual RPMs and `Digest::SHA` lives in
+`perl-Digest-SHA`, separate from the perl base. G-15
+caught Configure-script needs (ten modules from
+`INSTALL.md`), but didn't catch the post-compile
+script that lives in `util/`. OpenSSL's documentation
+lists `Digest::SHA` as a build-time dep but it's
+filed under "FIPS module" rather than the main
+required-modules list.
+
+This is the second FIPS-related stumble against UBI's
+minimal perl. In a normal Fedora dev environment all
+of these modules come along for free with the perl
+base; UBI's deliberate minimalism makes them visible.
+
+**Fix — two pieces, both shipped together in r34:**
+
+**Piece 1: Install `perl-Digest-SHA`.** Eleven modules
+in the build-stage `dnf install` now (was ten):
+
+    perl-FindBin
+    perl-IPC-Cmd
+    perl-Data-Dumper
+    perl-Pod-Html
+    perl-Pod-Usage
+    perl-File-Compare
+    perl-File-Copy
+    perl-File-Path
+    perl-Time-Piece
+    perl-Getopt-Long
+    perl-Digest-SHA      # ← new in r34
+
+This makes the build correct under any future openssl
+config that needs Digest::SHA (e.g., signed manifests,
+TLS cert hashing, etc.).
+
+**Piece 2: Skip the FIPS module entirely.** Add to
+`conanfile.txt`:
+
+    openssl/*:no_fips=True
+
+The Conan openssl recipe accepts `no_fips` as an option
+(default False, meaning FIPS *is* built). Setting it
+True drops the entire `providers/fips.so` build path —
+the `mk-fipsmodule-cnf.pl` script doesn't run, no
+SHA-256 of fips.so is computed, no fipsmodule.cnf is
+generated. OpenSSL still compiles; FIPS-validated
+crypto just isn't available.
+
+**Why disable FIPS for this demo.** Demo-04 talks
+plaintext gRPC to `lgtm:4317` inside the
+`tutorial-obs` container network. There's no TLS in
+the data path; even if we added TLS, FIPS-validated
+crypto isn't a tutorial requirement. The full FIPS
+module costs:
+
+  - extra build time (the `providers/fips.so`
+    linkage + the SHA hashing post-build)
+  - ~1 MB of static-link size in the binary
+  - the `Digest::SHA` perl dep (which we're now
+    handling defensively anyway)
+
+For a tutorial demo, none of these are worth keeping.
+Production builds where FIPS validation is a
+compliance requirement should leave the option at its
+default and accept the perl-module cost.
+
+**Belt and suspenders rationale.** Both fixes ship in
+r34 because they protect different scenarios. The perl
+module install is correct under "FIPS enabled, Digest::SHA
+needed somewhere," the no_fips=True option is correct
+under "we don't need FIPS." Either alone would unblock
+the build; both together also speed it up and shrink
+the static library. No reason to pick one.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -3462,6 +3560,114 @@ The build is now progressing iteratively further each
 attempt. r34 either hits the post-build phase with
 real signals to verify, or addresses whichever
 remaining build issue fires.
+
+### 2026-05-10 — r34: G-16 — openssl FIPS post-build script needs Digest::SHA; also skip FIPS
+
+User reran after r33. Major progress:
+
+- All ten perl modules from r33 satisfied openssl's
+  Configure script — Configure ran to completion,
+  generating `configdata.pm` and `Makefile.in`.
+- The actual C compilation succeeded — we saw `gcc
+  -fPIC -pthread ... -shared ... -o providers/fips.so`
+  (the FIPS provider linked successfully) and `ar qc
+  libcrypto.a ...` (the static library was being
+  assembled).
+- Then a *post-compile* perl script died:
+
+      Can't locate Digest/SHA.pm in @INC ...
+      BEGIN failed--compilation aborted at
+      util/mk-fipsmodule-cnf.pl line 42.
+
+The script `mk-fipsmodule-cnf.pl` runs *after* the
+FIPS provider library is linked. It computes a SHA-256
+hash of `fips.so` and bakes it into
+`providers/fipsmodule.cnf` for runtime integrity
+verification of the FIPS module. The script needs
+`Digest::SHA`. UBI 9 ships that as `perl-Digest-SHA`,
+separate from the perl base.
+
+This is the second FIPS-related stumble against UBI's
+minimal perl. r33's `INSTALL.md`-driven module list
+caught Configure-script needs but missed
+post-compile scripts in `util/`. OpenSSL's docs list
+`Digest::SHA` separately under "FIPS module" rather
+than the main required-modules list.
+
+**Two-pronged fix shipped in r34:**
+
+**Piece 1: install `perl-Digest-SHA`.** Eleven perl
+modules in the build-stage `dnf install` now. This
+makes the build correct for any future openssl
+configuration that needs Digest::SHA (signed
+manifests, TLS cert hashing, etc.).
+
+**Piece 2: skip the FIPS module entirely.** Added to
+`conanfile.txt`:
+
+    openssl/*:no_fips=True
+
+The Conan openssl recipe accepts `no_fips` as an
+option (default False, meaning FIPS *is* built).
+Setting it True drops the entire `providers/fips.so`
+build path — `mk-fipsmodule-cnf.pl` doesn't run, no
+SHA-256 of fips.so is computed, no fipsmodule.cnf is
+generated. OpenSSL still compiles; FIPS-validated
+crypto just isn't available.
+
+Why both? Demo-04 talks plaintext gRPC to lgtm:4317
+inside the `tutorial-obs` container network. There's
+no TLS in the data path; FIPS-validated crypto isn't a
+tutorial requirement. The full FIPS module costs
+extra build time, ~1 MB of static-link size, and the
+Digest::SHA perl dep. For a tutorial demo, none of
+these are worth keeping. The perl-Digest-SHA install
+is also kept (defense in depth — if Conan's openssl
+recipe ignores no_fips for some reason, or some
+later piece of the build chain wants Digest::SHA, the
+module is there).
+
+**Promoted to G-16** — separate gotcha from G-15
+because the failure phase is different (post-compile
+build script, not Configure script) and the fix has
+two pieces with their own rationales (install module
++ skip FIPS). G-15 stays as "Configure script's perl
+modules"; G-16 is "FIPS module post-build perl
+modules and the no_fips alternative."
+
+**What this round does NOT do:**
+
+- Doesn't change the cppstd setting (still 23 in the
+  conan profile; mitigation reserved per G-15).
+- Doesn't add autotools (autoconf/automake/libtool)
+  pre-emptively. If c-ares or another autotools-based
+  dep fires, that becomes G-NN.
+- Doesn't actually run the build. User's next attempt.
+
+**Anticipated next failures (open candidates):**
+
+- **More perl modules.** Less likely now — Configure
+  + FIPS-post-build modules covered. But Conan's
+  openssl recipe might run a different perl utility
+  in some edge case.
+- **autotools missing for c-ares from-source.**
+  c-ares uses autotools; if Conan Center doesn't
+  have a pre-built for our profile, the Containerfile
+  needs autoconf/automake/libtool added.
+- **gRPC link OOM.** gRPC is a large C++ build with
+  expensive link-time optimization. On hosts with
+  < 4 GB of RAM (or in podman with memory limits),
+  ld can OOM. Mitigation: drop parallelism with
+  `cmake --build -j2`, or add memory.
+- **Original post-build candidates** still in play
+  once openssl finishes and the rest of the dep tree
+  builds successfully.
+
+The compilation-correctness story for openssl should
+be settled now (Configure ✓ + main compile ✓ +
+post-build hash step skipped ✓). Next likely failure
+shifts to a different dep or the post-build signal
+verification.
 
 ---
 
