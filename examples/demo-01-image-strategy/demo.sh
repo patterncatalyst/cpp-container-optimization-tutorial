@@ -79,30 +79,24 @@ if [[ $DO_PGO -eq 1 ]]; then
 
   header "Running representative workload to gather profile data"
   rm -rf pgo-profiles && mkdir -p pgo-profiles
+  # Bind-mount pgo-profiles/ onto the exact build directory the
+  # instrumented binary was compiled at (/src/build/pgo). GCC's runtime
+  # writes .gcda files using paths baked into the binary at compile
+  # time, so mounting at the same path makes them land alongside the
+  # .gcno files where the optimized rebuild needs them.
   podman run --rm -d --name demo01-pgo-train \
     -p ${PORT_BASE}:8080 \
-    -v "$PWD/pgo-profiles:/profiles:Z" \
+    -v "$PWD/pgo-profiles:/src/build/pgo:Z" \
     "${IMG_PREFIX}:pgo-instrumented"
   wait_for_http "http://127.0.0.1:${PORT_BASE}/healthz" 30
   hey -n 5000 -c 50 "http://127.0.0.1:${PORT_BASE}/" >/dev/null
   hey -n 2500 -c 25 -m POST -d "$(printf 'x%.0s' {1..512})" \
     "http://127.0.0.1:${PORT_BASE}/echo" >/dev/null || true
   podman stop demo01-pgo-train >/dev/null
-  note "Captured $(ls -1 pgo-profiles/*.profraw 2>/dev/null | wc -l) profraw file(s)"
+  note "Captured $(find pgo-profiles -name '*.gcda' | wc -l) .gcda file(s)"
 
-  header "Merging profile data with llvm-profdata"
-  # Run llvm-profdata inside a throwaway toolchain image so the host
-  # doesn't need clang installed. The leading rm + sed silence the
-  # subscription-manager plugin (UBI w/o entitlement); free UBI repos
-  # are unaffected so `dnf install -y llvm` proceeds normally.
-  podman run --rm \
-    -v "$PWD/pgo-profiles:/profiles:Z" \
-    registry.access.redhat.com/ubi9/ubi:9.4 \
-    bash -c 'rm -f /etc/yum.repos.d/redhat.repo && \
-      sed -i "s/^enabled=1/enabled=0/" /etc/dnf/plugins/subscription-manager.conf 2>/dev/null; \
-      dnf install -y llvm >/dev/null 2>&1 && \
-      llvm-profdata merge -output=/profiles/default.profdata /profiles/*.profraw'
-  note "Merged profile: pgo-profiles/default.profdata ($(stat -c %s pgo-profiles/default.profdata 2>/dev/null || echo 0) bytes)"
+  # No separate merge step needed for GCC PGO — .gcda files go straight
+  # into the optimized build context via the optimized stage's COPY.
 
   header "Building PGO step 2 (optimized using gathered profile)"
   podman build -f Containerfile.pgo --target optimized -t "${IMG_PREFIX}:pgo" .

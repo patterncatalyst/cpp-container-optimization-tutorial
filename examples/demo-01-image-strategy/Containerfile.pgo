@@ -1,16 +1,20 @@
-# PGO build, two stages.
+# PGO build, two stages — both using gcc-toolset-14.
 #
 # Stage 1 (`instrumented`) builds with -fprofile-generate. We run that
 # binary against a representative workload (see demo.sh's pgo_train phase),
-# collect .profraw files, merge them with llvm-profdata, and copy the
-# resulting profile back into the build context.
+# and GCC's runtime writes `.gcda` files to /src/build/pgo (the path
+# baked into the binary at compile time). demo.sh bind-mounts the
+# host's pgo-profiles/ directory onto that path, so the .gcda files
+# land alongside the .gcno files in pgo-profiles/CMakeFiles/...
 #
-# Stage 2 (`optimized`) consumes the merged profile via -fprofile-use
-# and produces the final image.
+# Stage 2 (`optimized`) starts fresh, COPYs the captured pgo-profiles/
+# back into /src/build/pgo, then rebuilds with -fprofile-use. Because
+# the build directory path is the same in both stages, GCC finds the
+# .gcda files exactly where it expects them.
 #
 # Build:
 #   podman build -f Containerfile.pgo --target instrumented -t demo-01-pgo-instrumented .
-#   # ... run training workload, collect profile to ./pgo-profiles/default.profdata ...
+#   # ... run training workload, .gcda files captured to ./pgo-profiles/ ...
 #   podman build -f Containerfile.pgo --target optimized -t demo-01-pgo-optimized .
 
 ARG UBI_VERSION=9.4
@@ -25,13 +29,15 @@ RUN rm -f /etc/yum.repos.d/redhat.repo && \
         /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
 
 RUN dnf install -y --setopt=install_weak_deps=False \
-        clang \
-        llvm \
+        gcc-toolset-14 \
         cmake \
         ninja-build \
     && dnf clean all
 
-# ---- stage: instrumented ----
+ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64
+
+# ---- stage: instrumented-build ----
 FROM toolchain AS instrumented-build
 WORKDIR /src
 COPY src/ ./src/
@@ -40,33 +46,35 @@ COPY CMakeLists.txt CMakePresets.json ./
 RUN cmake --preset pgo-generate \
  && cmake --build --preset pgo-generate -j"$(nproc)"
 
+# ---- stage: instrumented runtime ----
 FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION} AS instrumented
-# -fprofile-generate statically links the profile runtime into the binary,
-# so we only need libstdc++ at runtime.
-RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ \
+RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ libgcc \
  && microdnf clean all
 WORKDIR /app
-COPY --from=instrumented-build /src/build/pgo-generate/demo-svc /app/demo-svc
+COPY --from=instrumented-build /src/build/pgo/demo-svc /app/demo-svc
 LABEL tutorial.demo="01-image-strategy" \
       tutorial.variant="pgo-instrumented" \
+      tutorial.toolchain="gcc-toolset-14" \
       tutorial.lto="thin"
-ENV LLVM_PROFILE_FILE=/profiles/demo-svc-%p-%m.profraw
 EXPOSE 8080
-# Profiles are written under /profiles; mount that as a volume when running.
+# Note: runs as root in this stage so it can write .gcda files into the
+# bind-mounted /src/build/pgo path.
 ENTRYPOINT ["/app/demo-svc"]
 
-# ---- stage: optimized ----
-# Consumes the merged profile from ./pgo-profiles/default.profdata.
+# ---- stage: optimized-build ----
+# Consumes the captured .gcda files from ./pgo-profiles/ and replays
+# them into /src/build/pgo so GCC finds them with -fprofile-use.
 FROM toolchain AS optimized-build
 WORKDIR /src
 COPY src/ ./src/
 COPY CMakeLists.txt CMakePresets.json ./
-COPY pgo-profiles/default.profdata /pgo/default.profdata
+COPY pgo-profiles/ /src/build/pgo/
 
 RUN cmake --preset pgo-use \
  && cmake --build --preset pgo-use -j"$(nproc)" \
- && strip --strip-all build/pgo-use/demo-svc
+ && strip --strip-all build/pgo/demo-svc
 
+# ---- stage: optimized runtime ----
 FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION} AS optimized
 RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ \
  && microdnf clean all
@@ -78,12 +86,12 @@ LABEL org.opencontainers.image.title="cpp-container-tutorial demo-01 pgo-optimiz
       org.opencontainers.image.created="${BUILD_DATE}" \
       tutorial.demo="01-image-strategy" \
       tutorial.variant="pgo-optimized" \
-      tutorial.toolchain="clang-19" \
+      tutorial.toolchain="gcc-toolset-14" \
       tutorial.lto="thin" \
       tutorial.pgo="true"
 
 WORKDIR /app
-COPY --from=optimized-build /src/build/pgo-use/demo-svc /app/demo-svc
+COPY --from=optimized-build /src/build/pgo/demo-svc /app/demo-svc
 USER 1001:1001
 EXPOSE 8080
 ENTRYPOINT ["/app/demo-svc"]

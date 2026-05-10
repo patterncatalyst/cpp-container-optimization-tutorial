@@ -16,7 +16,6 @@
 #     a libstdc++.so from the builder into the runtime image.
 #   - We don't fight glibc by trying to static-link it (that approach is
 #     officially discouraged and full of NSS / getaddrinfo traps).
-#   - No extra package ecosystem (Alpine, musl) — UBI all the way.
 
 ARG UBI_VERSION=9.4
 FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build

@@ -689,43 +689,87 @@ build path is much simpler now (no apk, no Alpine package version
 hunting); the failure mode that prompted r11 is structurally
 removed, not just patched.
 
-User reported demo-01 build failed with the classic UBI-without-
-entitlement issue: `dnf install` triggers the `subscription-manager`
-plugin to refresh entitlement-only repos, which fails with `Unable
-to read consumer identity` and on some configurations exits non-zero,
-killing the build. Resolved in the user's reference projects
-(otel-observability-demos, hummingbird-tutorial, optimizing-java).
+### 2026-05-09 — r12: PGO uses gcc-toolset-14 + simpler GCC PGO flow
 
-Fix applied uniformly: right after every `FROM
-registry.access.redhat.com/ubi9/ubi:...` line (the "full" UBI base
-that uses `dnf`, not the minimal one that uses `microdnf`):
+User ran demo-01 on r11 and hit a real C++23 build failure in the
+PGO instrumented stage:
 
-    RUN rm -f /etc/yum.repos.d/redhat.repo && \
-        sed -i 's/^enabled=1/enabled=0/' \
-            /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
+    /src/src/main.cpp:11:10: fatal error: print: No such file or directory
+       11 | #include <print>      // C++23 std::print
 
-Removing `redhat.repo` stops dnf trying to refresh the entitlement
-repos (which is what triggers the consumer-identity check); the
-plugin disable silences any residual warnings. UBI's free repos in
-`/etc/yum.repos.d/ubi.repo` are unaffected, so `dnf install`
-continues working normally — UBI without entitlement is a documented
-Red Hat configuration.
+Root cause: Containerfile.pgo's toolchain stage installed `clang`
+and `llvm` but never set CC/CXX or PATH'd anything. CMake silently
+fell back to system `/usr/bin/c++` — UBI 9's stock GCC 11.5 — which
+doesn't ship `<print>`. That landed in GCC 14.
 
-Files patched (Python script in r09 commit): 8 Containerfiles,
-9 FROM lines total (demo-06 has two `ubi9/ubi` stages — toolchain
-and gdbserver — both got the fix). Plus the throwaway PGO merge
-container in `examples/demo-01-image-strategy/demo.sh`.
+Even if cmake had picked up clang correctly, UBI's clang uses the
+system libstdc++, which is also gcc 11.5's. Same `<print>` problem.
 
-Convention documented in CONTRIBUTING.md → "UBI without a Red Hat
-subscription" sub-section so future Containerfiles include it.
-Future `ubi9/ubi` builder stages without this fragment should be
-flagged in review.
+Fix: switched Containerfile.pgo to gcc-toolset-14, the same toolchain
+the other three demo-01 variants already use. This:
 
-`ubi9/ubi-minimal` runtime stages need no fix; microdnf has no
-subscription-manager plugin and no `redhat.repo`.
+- Removes the toolchain inconsistency across the four variants
+- Eliminates the entire clang + llvm-profdata merge ceremony.
+  GCC's PGO uses `.gcda` files that go straight into the rebuild,
+  no separate merge step needed
+- Avoids the libstdc++-version-from-system-gcc trap
 
-Verification status: pending demo-01 re-run on user's host. If it
-runs clean, §3 and §4 (the demo-01 sections) get promoted.
+The trick that makes GCC PGO work cleanly across the two-stage
+build: pin both PGO presets to the same `binaryDir`
+(`build/pgo` — overrides `_base`'s default of `build/${presetName}`)
+and bind-mount the host's `pgo-profiles/` directly onto that path
+during the training run. GCC writes `.gcda` files alongside the
+`.gcno` files at exactly the path baked into the instrumented
+binary, so the optimized stage finds them via
+`COPY pgo-profiles/ /src/build/pgo/`.
+
+Files changed:
+- `examples/demo-01-image-strategy/Containerfile.pgo`: rewritten.
+  Toolchain stage installs `gcc-toolset-14` instead of clang/llvm.
+  Sets PATH and LD_LIBRARY_PATH to gcc-toolset-14 (matches the
+  other three Containerfiles). Instrumented runtime stage adds
+  `libgcc` to microdnf install for gcov runtime support. Optimized
+  stage COPYs `pgo-profiles/` into `/src/build/pgo` before cmake.
+- `examples/demo-01-image-strategy/CMakePresets.json`: `pgo-generate`
+  and `pgo-use` switched to GCC flag syntax (`-fprofile-generate` /
+  `-fprofile-use` without paths; `-fprofile-correction` in the use
+  stage to handle minor source drift). Both presets pinned to
+  `binaryDir: ${sourceDir}/build/pgo`.
+- `examples/demo-01-image-strategy/demo.sh`: training-run mount
+  changed from `pgo-profiles:/profiles:Z` to
+  `pgo-profiles:/src/build/pgo:Z`. Removed the entire llvm-profdata
+  merge step — no throwaway `dnf install llvm` container any more.
+  Captured-files note now counts `.gcda` instead of `.profraw`.
+
+User-requested cleanup: dropped the "no extra package ecosystem"
+comment from `Containerfile.ubi-micro`. Project convention going
+forward: don't mention that ecosystem in active content. Historical
+log entries from r02–r11 are the record of how we got here, kept
+as-is.
+
+User asked separately: "did you take any of the podman best practices
+from the optimizing java or hummingbird projects like the :Z?" —
+answered yes, audited and confirmed:
+
+- All six `demo.sh` files use the
+  `cd "$(dirname "${BASH_SOURCE[0]}")"` cd-first pattern up front
+- Every bind mount in active composes/scripts uses `:Z` (or `:ro,Z`
+  for read-only mounts) for SELinux compatibility
+- Fully-qualified image names everywhere
+- 127.0.0.1-bound port mappings
+- `user: root` + `tmpfs: /data` for rootless Grafana (r06)
+- UBI w/o entitlement subscription-manager fix (r09)
+- pre-pull.sh + verify-stacks.sh patterns (r06–r08)
+- Anonymous Grafana viewer
+
+Image audit unchanged: 21 UBI references + 1 documented Docker Hub
+exception (`grafana/otel-lgtm`).
+
+Verification status: pending demo-01 re-run with r12. The specific
+`<print>` failure is structurally removed (gcc-toolset-14 provides
+GCC 14's libstdc++ which has `<print>`). If all four variants build
+and the latency/size tables emit, §3 and §4 promote to verified
+in r13.
 
 ---
 
