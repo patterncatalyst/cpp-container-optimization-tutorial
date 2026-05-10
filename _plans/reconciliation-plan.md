@@ -7788,6 +7788,137 @@ hours wall-clock of build + iterate + diagnose,
 one signal pipeline proven end-to-end. The
 tutorial's foundation is rock-solid.
 
+### 2026-05-10 — r53: post-demo-04 hardening — Conan lockfile for demo-04, §13 prose
+
+First of the five-item post-verification arc the user
+queued in r52's follow-up:
+
+> 1. Conan lockfile for demo-04
+> 2. Demo-02 (STL & layout)
+> 3. Demo-03 (async gRPC + io_uring)
+> 4. PPTX slides
+> 5. §13 reproducibility prose
+
+Cadence: iterative (same rhythm as demo-04). r53 ships
+item 1 + the §13 prose that motivates it.
+
+**What r53 ships:**
+
+1. **`scripts/regenerate-demo-04-lockfile.sh`** — a
+   one-shot podman-based lockfile generator that
+   mirrors the Containerfile's setup (UBI 9 +
+   gcc-toolset-14 + Conan 2 + cppstd=gnu17 profile)
+   inside a throwaway container, runs
+   `conan lock create .`, and drops `conan.lock`
+   into the demo dir for the user to commit. Marked
+   executable.
+2. **`examples/demo-04-observability/conan.lock`** —
+   empty placeholder file committed to the repo
+   so the Containerfile's `COPY conanfile.py
+   conan.lock ./` step works before a real
+   lockfile exists. The Containerfile checks file
+   *non-emptiness* (`[ -s conan.lock ]`) to decide
+   whether to pass `--lockfile=conan.lock` or
+   resolve fresh.
+3. **Containerfile** — `conan install` step rewritten
+   to branch on lockfile presence:
+   ```dockerfile
+   RUN if [ -s conan.lock ]; then \
+           conan install . --lockfile=conan.lock ... ; \
+       else \
+           conan install . ... ; \
+       fi
+   ```
+   Why the placeholder approach over a glob like
+   `conan.loc[k]`: BuildKit's handling of
+   no-match-glob varies by version; some fail the
+   build. The empty-placeholder pattern is portable
+   across podman, docker, and buildah without
+   special-casing.
+4. **§13 prose addition** — a substantial new
+   subsection "What a version pin doesn't pin"
+   walking through the recipe-revision-vs-version
+   distinction, what the lockfile guarantees, what
+   it can't fix (yanked packages — G-26), and when
+   to regenerate. Pulls G-22, G-24, G-25, G-26
+   directly into the tutorial's reproducibility
+   chapter while the lessons are crisp.
+
+**Why a regenerate script rather than commit a
+hand-crafted lockfile.** The lockfile content depends
+on Conan Center's current state: which recipe
+revisions are latest, which pre-builts exist for the
+profile, etc. A hand-written lockfile would go stale.
+A script that regenerates against the override combo
+in `conanfile.py` is durable: when versions change,
+or recipe revisions move, the user runs the script
+and gets a fresh accurate lockfile.
+
+The script is podman-based for two reasons: (a) it
+matches the build environment exactly, so the
+resolved graph is the one production builds will
+see; (b) the user already has podman as a
+prerequisite for everything else in this tutorial, so
+no new tools to install.
+
+**What this DOES NOT do:**
+
+- Doesn't generate a real `conan.lock` here in this
+  authoring environment. The placeholder gets
+  committed; the user runs the script on their host
+  (which has the working Conan cache from r52) to
+  produce a real lockfile, then commits that.
+- Doesn't change the demo-04 source code or run-time
+  behavior. Same binary, same signals; only the dep
+  resolution layer changed.
+- Doesn't address G-26 fully — the lockfile pins
+  revisions but can't replace a yanked package.
+  §13 prose calls this out explicitly with the
+  "mirror to your own remote" guidance.
+
+**User's next steps to activate the lockfile:**
+
+```bash
+./scripts/regenerate-demo-04-lockfile.sh
+git add examples/demo-04-observability/conan.lock
+git commit -m "chore(demo-04): seed Conan lockfile"
+./scripts/test-demo-04-observability.sh    # rerun to confirm
+```
+
+The rerun should be near-instant (everything cached),
+and should print the new "Using committed conan.lock"
+message from the Containerfile.
+
+**Anticipated outcomes:**
+
+- **Best case:** script runs cleanly in ~3-5 min (a
+  fresh ubi9 container + dnf install + pip install
+  conan + the actual `conan lock create` call), writes
+  a `conan.lock` of maybe 500-2000 lines pinning every
+  transitive package. User commits, reruns the test
+  script, the build picks up `--lockfile=conan.lock`
+  and proceeds normally.
+- **Script fails because the user's host can't run
+  the inner podman invocation:** would surface as a
+  podman / SELinux / volume-mount error. Common-case
+  fixes: `:Z` label on the volume (we already have
+  it), or running rootful podman if rootless can't
+  bind to volumes the way the script expects.
+- **Script runs but produces an empty / minimal
+  lockfile:** would mean conan lock create didn't
+  resolve the graph properly. Likely cause: the
+  profile inside the container didn't pick up our
+  cppstd=gnu17 setting before resolution. We'd see
+  it in the script's summary output.
+- **Lockfile present but Containerfile fails the
+  next build:** could happen if the lockfile's
+  pinned revisions don't have matching pre-builts
+  for our profile. `--build=missing` should rescue
+  this by rebuilding from source.
+
+**Item 1 of 5 done.** Item 2 (demo-02) is next on the
+queue.
+
 ---
 
 ## Known divergences from the PRD
