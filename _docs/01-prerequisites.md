@@ -70,8 +70,10 @@ right after.
 
 ### C++ toolchain
 
-- **`gcc-toolset-14`** — the gating GCC. Provides `g++` ≥ 14 with
-  full C++23 support.
+- **`gcc-c++`** — Fedora 44 ships GCC 14.x as the default `g++`,
+  which has full C++23 support; that's all you need on the host.
+  (UBI-based container builds use `gcc-toolset-14` separately, but
+  that's installed *inside* the container Image, not on your host.)
 - **`clang`, `clang-tools-extra`, `lld`, `llvm`** — the gating Clang.
   Used for PGO instrumentation, the static-musl variant, and
   `clang-tidy` in demo 6.
@@ -112,10 +114,10 @@ sudo dnf update -y
 ```bash
 sudo dnf install -y \
     podman podman-compose buildah skopeo \
-    gcc-toolset-14 \
+    gcc-c++ \
     clang clang-tools-extra lld llvm \
     cmake ninja-build \
-    python3-pip \
+    python3-pip golang \
     gdb gdb-gdbserver \
     cppcheck \
     libabigail \
@@ -126,6 +128,10 @@ sudo dnf install -y \
 ```
 
 This pulls roughly 800 MB of packages, mostly toolchain. Coffee break.
+
+`golang` is included because we use `go install` to fetch `hey` and
+(optionally) `ghz` — see step 4 below. If you already have a Go
+toolchain, the `dnf install` will no-op on it.
 
 ### 3. Install Conan 2 via pip
 
@@ -162,23 +168,42 @@ detected profile is fine.
 
 ### 4. Install `hey`
 
-Not in `dnf`. Two options:
-
-**Option A — pre-built binary (fastest):**
+`hey` is a small Go program; the canonical install is via `go
+install`. The previous AWS S3 binary distribution is no longer
+publicly readable (returns HTTP 403), so don't follow tutorials
+that point at it.
 
 ```bash
-curl -fsSL -o /tmp/hey \
-    https://hey-release.s3.us-east-2.amazonaws.com/hey_linux_amd64
-sudo install -m 0755 /tmp/hey /usr/local/bin/hey
-hey --version          # should print "hey ..."
+go install github.com/rakyll/hey@latest
 ```
 
-**Option B — via `go install` (cleanest if you already have Go):**
+Make sure Go's bin directory is on your `PATH`:
 
 ```bash
-sudo dnf install -y golang
-go install github.com/rakyll/hey@latest
-# binary lands in $(go env GOPATH)/bin; add it to PATH if needed
+# bash:
+echo 'export PATH="$(go env GOPATH)/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+# zsh:
+echo 'export PATH="$(go env GOPATH)/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+
+# verify
+hash -r
+which hey                  # → /home/<you>/go/bin/hey
+hey -h | head -3           # → "Usage: hey [options...] <url>"
+```
+
+If `go install` is slow or unreachable, the from-source build is
+the fallback:
+
+```bash
+mkdir -p /tmp/hey-build && cd /tmp/hey-build
+git clone --depth 1 https://github.com/rakyll/hey.git .
+go build -o hey .
+sudo install -m 0755 hey /usr/local/bin/hey
+cd && rm -rf /tmp/hey-build
+hey -h | head -3
 ```
 
 ### 5. (Optional) Install `ghz` for gRPC load testing
@@ -276,6 +301,38 @@ authenticate to bypass anonymous rate limits:
 podman login docker.io
 ```
 
+### When `docker.io` is unreachable
+
+A minority of corporate networks (and a few home setups with
+ad-blocking DNS) block `docker.io` outright. The host-check script
+will flag this with a `[fail] docker.io (hub) unreachable` line.
+
+Two workable fallbacks:
+
+**Mirror the Grafana stack from Quay.io.** Quay mirrors most of the
+Grafana Labs images. Edit `observability/compose.yml` and replace
+each `docker.io/grafana/...` with `quay.io/grafana/...`. The
+Prometheus image is on Quay as `quay.io/prometheus/prometheus`.
+
+**Pre-pull and re-tag from a reachable host.** If you have a
+network-reachable jump box that *can* reach Docker Hub:
+
+```bash
+# On the jump host:
+podman pull docker.io/grafana/grafana:11.2.0
+podman save docker.io/grafana/grafana:11.2.0 -o grafana.tar
+
+# Transfer grafana.tar to your build host (scp, USB, whatever), then:
+podman load -i grafana.tar
+```
+
+Repeat for each `observability/` image. This is tedious but works
+in an air-gapped or DNS-blocked environment.
+
+If neither fallback is available, **demo 4 (the observability stack)
+won't work** but everything else will. Demos 1, 2, 3, 5, and 6 use
+only UBI base images and don't touch Docker Hub.
+
 ## Clone this repo
 
 ```bash
@@ -312,26 +369,33 @@ PASS / FAIL line for each. **Run this before you touch any demo.**
 Expected output on a correctly-set-up Fedora 44 box:
 
 ```
-[ ok ]  fedora-44                    44 (KDE)
-[ ok ]  kernel >= 5.19               6.10.7-200.fc44.x86_64
-[ ok ]  cgroup v2                    cgroup2fs
-[ ok ]  rootless cgroup delegation   cpu cpuset io memory pids
-[ ok ]  podman >= 5.0                5.2.1
-[ ok ]  podman-compose               1.0.6
-[ ok ]  gcc-toolset-14               14.2.1
-[ ok ]  clang >= 18                  18.1.6
-[ ok ]  cmake >= 3.25                3.28.2
-[ ok ]  ninja                        1.11.1
-[ ok ]  conan 2.x                    2.5.0
-[ ok ]  hey                          v0.1.4
-[ ok ]  jq                           1.7.1
-[ ok ]  bpftrace                     0.21.0
-[ ok ]  abidiff (libabigail)         2.4.0
-[ ok ]  cppcheck                     2.13.0
-[ ok ]  registry.access.redhat.com   reachable
-[ ok ]  docker.io                    reachable
+[ ok ]  fedora baseline                  Fedora Linux 44 (Workstation Edition)
+[ ok ]  kernel >= 5.19                   6.10.7-200.fc44.x86_64
+[ ok ]  cgroup v2                        cgroup2fs
+[ ok ]  rootless cgroup delegation       cpu io memory pids
+[ ok ]  podman >= 5.0                    5.2.1
+[ ok ]  cmake >= 3.25                    3.28.2
+[ ok ]  podman-compose                   /usr/bin/podman-compose
+[ ok ]  buildah                          /usr/bin/buildah
+[ ok ]  skopeo                           /usr/bin/skopeo
+[ ok ]  ninja                            /usr/bin/ninja
+[ ok ]  jq                               /usr/bin/jq
+[ ok ]  curl                             /usr/bin/curl
+[ ok ]  bc                               /usr/bin/bc
+[ ok ]  git                              /usr/bin/git
+[ ok ]  gh                               /usr/bin/gh
+[ ok ]  hey                              /home/<you>/go/bin/hey
+[ ok ]  g++ >= 14                        14.2.1
+[ ok ]  clang >= 18                      18.1.6
+[ ok ]  conan 2.x                        2.5.0
+[ ok ]  cppcheck                         2.13.0
+[ ok ]  abidiff                          2.4.0
+[ ok ]  bpftrace                         0.21.0
+[ ok ]  gdb                              14.2
+[ ok ]  registry.access.redhat.com       reachable
+[ ok ]  docker.io (hub)                  reachable
 
-All 17 checks passed.
+All 25 checks passed.
 ```
 
 If any line says `FAIL`, scroll up — the script prints the exact

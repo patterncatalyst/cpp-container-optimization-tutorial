@@ -45,7 +45,7 @@ on a clean Fedora 44 host; that's what the verification pass turns
 | §  | Title                                                              | Drafted | Verified state              | Verifier notes                                       |
 |----|--------------------------------------------------------------------|---------|-----------------------------|------------------------------------------------------|
 | 0  | Outline                                                            | [x]     | drafted (r03)               | Full prose, sidebar dropped, dual-target sizing called out  |
-| 1  | Prerequisites                                                      | [x]     | drafted (r03)               | Full prose drafted; scripts/check-host.sh added; not yet run on fresh Fedora 44 VM |
+| 1  | Prerequisites                                                      | [x]     | drafted (r04)               | r04: 3 script bugs found and fixed via real-host run; user reports all packages install cleanly. Awaiting clean check-host.sh PASS line on a fresh Fedora 44 VM to flip to "verified". |
 | 2  | Introduction & Mental Model                                        | [x]     | unverified                  | —                                                    |
 | 3  | Container Strategy: UBI, scratch, multi-stage builds               | [x]     | unverified                  | Tied to Demo 1                                       |
 | 4  | Compile-Time Wins: LTO, PGO, constexpr                             | [x]     | unverified                  | Tied to Demo 1; PGO instrumentation step needs test  |
@@ -203,6 +203,73 @@ memory), what was tested, what passed, what surprised the verifier.
     unconditional `mkdir -p pgo-profiles`.
 
 ### 2026-05-09 — r03: Round 1 prose (§0, §1); sidebar drop; CONTRIBUTING.md
+
+- §0 Outline rewritten as full long-form prose. Documents how the
+  tutorial is organised, the two delivery targets (PPTX 1.5–3h vs
+  untimed site), the 1.5h vs 3h PPTX cuts, what each section covers,
+  what's deliberately out of scope, and the realistic 7–10h end-to-end
+  reading + running estimate.
+- §1 Prerequisites rewritten as a working install guide: dnf install
+  list, Conan 2 via pip, hey installation, rootless cgroup delegation
+  drop-in, kernel-feature checks, registry auth, repo clone, and a
+  "common things that go wrong" runbook.
+- Added `scripts/check-host.sh` that exercises every prerequisite
+  and prints a PASS/FAIL table with remediation hints. References
+  the Fedora baseline but degrades gracefully on other distros.
+- Site change (per user request): dropped the per-tutorial-page
+  sidebar entirely; the layout is now single-column with prev/next
+  pager, matching hummingbird-tutorial's behaviour. CSS for
+  `.tutorial__sidebar` excised; `.tutorial` no longer a grid.
+- Added `CONTRIBUTING.md` documenting the Conventional-Commits
+  format and the type list (`docs:`, `site:`, `demo:`, `obs:`,
+  `build:`, `ci:`, `chore:`, `fix:`, `feat:`, `refactor:`, `style:`).
+- Verification status: §0 and §1 are **drafted** but not yet
+  walked through on a fresh Fedora 44 host. The check-host.sh
+  output in §1 is illustrative; the script itself runs cleanly
+  in syntax check but needs an end-to-end pass to validate every
+  remediation hint.
+
+### 2026-05-09 — r04: §1 fixes from real-host check-host.sh run
+
+User ran `./scripts/check-host.sh` on Fedora 44 Workstation
+(kernel 6.19.14-300.fc44, podman 5.8.2, clang 22.1.4, conan 2.25.2).
+Output revealed three script bugs and one stale §1 instruction:
+
+- **Script bug**: cgroup-delegation predicate required `cpuset` but
+  user's cpuset wasn't delegated; demos 2/5/6 don't actually need
+  user-slice cpuset delegation (--cpuset-cpus on podman run is
+  per-container). Relaxed the predicate to require `cpu memory io`.
+- **Script bug**: `gcc-toolset-14` check fails on stock Fedora
+  because the package is in the RHEL/UBI repo flow, not Fedora's
+  default repos. Replaced with a host `g++ >= 14` check that
+  reads from the default `g++` (Fedora 44 ships GCC 14 by default,
+  so this passes out of the box).
+- **Script bug**: `docker.io` probe used `https://registry-1.docker.io/v2/`
+  which returns 401 to anonymous HEAD; `curl -fsS` treats 401 as
+  failure. Switched to `https://hub.docker.com/v2/` which is reliably
+  200 anonymous.
+- **§1 fix**: dropped `gcc-toolset-14` from the host install list
+  (it's container-side only); added `gcc-c++` instead. Added
+  `golang` to the dnf one-liner since hey is now installed via
+  go install.
+- **§1 fix**: replaced the stale AWS S3 `hey` binary URL (now 403
+  forbidden) with `go install github.com/rakyll/hey@latest` as
+  the canonical install path. Kept the from-source build as a
+  documented fallback.
+- **§1 addition**: new "When `docker.io` is unreachable" sub-section
+  covering the Quay.io mirror path and the `podman save | podman load`
+  air-gap fallback for demo 4 reachability problems.
+
+Other findings from the user's run that didn't need code changes:
+- `cppcheck`, `libabigail`, `bpftrace`, `gdb` were missing on user's
+  host; legitimate "install these" rather than script bugs.
+- `hey` had been installed via snap; user removed snap and reinstalled
+  via go. After the reinstall, user reported "they all worked".
+
+Verification status: §1 advanced from "drafted" toward "verified" —
+the user has run check-host.sh end-to-end and the script accurately
+diagnoses and remediates real failure modes. Still want a clean
+green run on a fresh Fedora 44 VM before flipping to "verified".
 
 - §0 Outline rewritten as full long-form prose. Documents how the
   tutorial is organised, the two delivery targets (PPTX 1.5–3h vs
