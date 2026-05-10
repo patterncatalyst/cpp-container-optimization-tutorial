@@ -475,6 +475,91 @@ environment, but neither is necessary once the
 
 ---
 
+### G-13 · UBI 9 BaseOS + AppStream don't carry the modern C++ ecosystem (gRPC / protobuf / abseil-cpp / nlohmann-json) (r30)
+
+**Problem.** A UBI 9.4-based Containerfile that lists modern
+C++ ecosystem packages in `dnf install` fails at the install
+step with:
+
+    No match for argument: nlohmann-json-devel
+    Error: Unable to find a match: grpc-devel protobuf-devel
+    protobuf-compiler abseil-cpp-devel c-ares-devel
+    nlohmann-json-devel
+
+Same error shape on `ubi-minimal` for the runtime-stage
+package list.
+
+**Why.** UBI 9 ships two enabled repos by default:
+
+- `ubi-9-baseos-rpms`: kernel-adjacent, system libraries, the
+  basics. glibc, openssl, c-ares, libstdc++.
+- `ubi-9-appstream-rpms`: developer toolchain. gcc-toolset-14,
+  cmake, ninja-build, git, python3, etc.
+
+Modern C++ ecosystem packages — gRPC, protobuf, abseil-cpp,
+nlohmann-json — live in **CodeReady Linux Builder (CRB)**,
+which is a Red Hat subscription-only repo on RHEL 9. UBI
+inherits RHEL 9's repo layout but **doesn't ship CRB at all**
+because UBI is meant to be subscription-free. So those
+packages are unreachable from a vanilla UBI 9 build.
+
+There's a third repo path that solves this: **EPEL 9** (Extra
+Packages for Enterprise Linux). EPEL is community-maintained,
+freely redistributable, and carries the modern C++ ecosystem
+explicitly because the same gap exists on every non-
+subscribed RHEL clone (Rocky, Alma, etc.). The `epel-release`
+RPM is publicly hosted at `dl.fedoraproject.org` — no
+authentication, no subscription.
+
+The first time this hits is the most confusing: the build
+stage fails on package install while the same package names
+work fine on a Fedora 44 host, which has these in BaseOS.
+Fedora's repo layout is more inclusive than RHEL's; UBI
+inherits the leaner RHEL layout.
+
+`c-ares-devel` deserves a mention. It's listed on most
+"build gRPC from source" guides as a separate dep, but on
+RHEL/UBI 9 it's actually transitively pulled in by
+`grpc-devel`. Listing it explicitly makes the failure worse,
+because `c-ares-devel` is in CRB (subscription-only) — even
+on EPEL-enabled UBI you'll fail finding it. Drop the
+explicit ask; let `grpc-devel` bring it.
+
+**Fix.** Two new RUN steps before each dnf/microdnf install
+of C++ packages:
+
+Build stage (UBI 9.4 / dnf):
+
+    RUN dnf install -y --setopt=install_weak_deps=False \
+        https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+
+Runtime stage (ubi-minimal 9.4 / microdnf):
+
+    RUN microdnf install -y --setopt=install_weak_deps=0 \
+        https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+
+Microdnf accepts URL-rpm installs the same way dnf does;
+this is the standard incantation for ubi-minimal.
+
+After EPEL is enabled, drop `c-ares-devel` from the
+explicit dep list — it'll come transitively with
+`grpc-devel`.
+
+**A note on the Conan alternative.** The architecturally
+cleaner path is to manage these deps with **Conan** instead
+of system packages: `conan install` from `conanfile.txt`
+fetches pre-built `opentelemetry-cpp` (with gRPC, protobuf,
+abseil bundled as transitive deps) from Conan Center, and
+the Containerfile no longer touches EPEL or builds anything
+from source. This is exactly the §13 (Reproducibility & ABI)
+lesson — hermetic builds with lockfiles. Demo-04 doesn't do
+this yet because the EPEL fix is one round-trip and the
+Conan refactor is several; the Conan migration is tracked
+as a follow-up improvement. When §13 is being written this
+becomes the natural worked example.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -2720,6 +2805,106 @@ includes:
 from the start. Adding this to CONTRIBUTING.md as a
 checklist item is a follow-up nicety; for now the G-12
 gotcha entry serves as the institutional memory.
+
+### 2026-05-10 — r30: G-13 — enable EPEL 9 in demo-04 Containerfile (build + runtime stages)
+
+User reran the test after r29's compose fix and Phase 1
+got further this time — past the docker-compose / Containerfile
+delegation, into the actual image build, where dnf failed:
+
+    No match for argument: nlohmann-json-devel
+    Error: Unable to find a match: grpc-devel protobuf-devel
+    protobuf-compiler abseil-cpp-devel c-ares-devel
+    nlohmann-json-devel
+
+This is the second of the four G-NN candidates I called out
+in r28 ("OTel-cpp build risk on UBI 9.4"), but the actual
+shape is different from what I anticipated — it's not a
+version mismatch in the OTel-cpp build, it's that those
+packages don't exist *at all* in UBI 9's default repos.
+
+**Why.** UBI 9 is intentionally lean. It ships BaseOS
+(kernel/system libs) and AppStream (toolchain), and excludes
+RHEL's CodeReady Linux Builder (CRB) repo because CRB is
+subscription-only. Modern C++ ecosystem packages — gRPC,
+protobuf, abseil-cpp, nlohmann-json — live in CRB on
+subscribed RHEL or in EPEL on non-subscribed clones. UBI
+gets neither by default. Hence dnf reports "no match."
+
+**Fix.** Enable EPEL 9 before the C++ dep install:
+
+- Build stage (`ubi:9.4`, dnf): one new RUN step that
+  installs `epel-release-latest-9.noarch.rpm` from
+  `dl.fedoraproject.org` (publicly hosted, no auth).
+- Runtime stage (`ubi-minimal:9.4`, microdnf): same fix,
+  microdnf accepts URL rpm installs the same way dnf
+  does.
+
+While in there, dropped `c-ares-devel` from the explicit
+dep list — it's a transitive dep of `grpc-devel` and
+listing it explicitly was actually doubly broken because
+`c-ares-devel` itself is in CRB (subscription-only),
+not EPEL, so even an EPEL-enabled UBI fails on the
+explicit ask. Letting `grpc-devel` bring it works
+because dnf resolves transitive deps from any enabled
+repo.
+
+**Promoted to G-13** in the Gotchas section, full
+problem/why/fix shape with:
+
+- The literal failure output (matches what user saw).
+- The repo landscape — UBI's BaseOS+AppStream vs RHEL's
+  full set including CRB, vs EPEL as the
+  non-subscription escape hatch.
+- The Fedora-vs-UBI mental-model trap (Fedora has these
+  in BaseOS; UBI doesn't; same package names work
+  totally differently across host vs container).
+- The c-ares-devel double-trouble explanation.
+- A note on the Conan alternative: managing these deps
+  via `conan install` from Conan Center would eliminate
+  the EPEL question entirely and matches §13's
+  reproducibility lesson. Tracked as a follow-up; not
+  doing it now because EPEL is a one-line fix and Conan
+  is a multi-round refactor.
+
+**What this round does NOT do:**
+
+- Doesn't refactor demo-04 to Conan-managed deps. That's
+  the architecturally clean answer and is on the
+  follow-up list, but doing it now derails option B for
+  another round-trip with potential Conan recipe
+  surprises. EPEL is the smaller change.
+- Doesn't change demo-04 source, compose, or the test
+  script. Just the Containerfile (build stage + runtime
+  stage RUN lines).
+- Doesn't change other demos. Only demo-04 was hitting
+  this; demo-03 has its own Containerfile but doesn't
+  install grpc/protobuf/abseil from system packages.
+- Doesn't actually run the test on the user's host. The
+  fix is structural; verification is the user's next
+  attempt.
+
+**Anticipated next failures (G-NN candidates from r28 that
+are still in play):**
+
+- OTel-cpp v1.16.1 build against system gRPC/abseil
+  versions might still drift. EPEL gRPC is currently
+  ~1.46-1.48 range; OTel-cpp v1.16.1 was tested against
+  similar gRPC vintages so it should work, but
+  warning-as-error or new abseil API names sometimes
+  bite. If this fires, the cmake step in the OTel-cpp
+  build will fail with a specific symbol/API error, and
+  the remedy is either a different OTEL_TAG (try 1.17.0
+  or 1.15.0) or swapping to OTLP HTTP exporters.
+- Metric name translation drift (G-13 candidate from
+  r28). Still unknown until signals actually flow.
+- Loki label drop (G-14 candidate from r28). Still
+  unknown until logs actually flow.
+- Dashboard datasource UID mismatch (G-15 candidate).
+  Still unknown until the dashboard renders.
+
+The script's failure-message block already references
+each of these so debugging stays quick.
 
 ---
 

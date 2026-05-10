@@ -8,6 +8,20 @@ RUN rm -f /etc/yum.repos.d/redhat.repo && \
     sed -i 's/^enabled=1/enabled=0/' \
         /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
 
+# UBI 9.4's BaseOS + AppStream don't carry the modern C++ ecosystem
+# packages we need (gRPC, protobuf, abseil-cpp, nlohmann-json,
+# ninja-build). UBI doesn't ship CodeReady Builder either — that's a
+# subscription-only repo. EPEL 9 is the right answer for a non-
+# subscribed UBI build: the rpm is publicly hosted and the packages
+# are freely redistributable. See G-13 in the reconciliation plan.
+RUN dnf install -y --setopt=install_weak_deps=False \
+        https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm \
+    && dnf clean all
+
+# Now install the build deps. c-ares-devel was explicit before; it's a
+# transitive dep of grpc-devel so the explicit line is redundant — and
+# c-ares-devel itself is in CRB (subscription-only on UBI), not EPEL,
+# so the explicit ask was double trouble. Let grpc-devel pull it.
 RUN dnf install -y --setopt=install_weak_deps=False \
         gcc-toolset-14 \
         cmake \
@@ -17,7 +31,6 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         protobuf-devel \
         protobuf-compiler \
         abseil-cpp-devel \
-        c-ares-devel \
         nlohmann-json-devel \
     && dnf clean all
 
@@ -54,7 +67,12 @@ RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
 
 # ---- runtime ----
 FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION}
+# Same EPEL story as the build stage: ubi-minimal doesn't ship grpc /
+# protobuf / abseil-cpp in its repos either. microdnf accepts an URL
+# rpm install just like dnf does.
 RUN microdnf install -y --setopt=install_weak_deps=0 \
+        https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm \
+ && microdnf install -y --setopt=install_weak_deps=0 \
         libstdc++ grpc protobuf abseil-cpp c-ares \
  && microdnf clean all
 
