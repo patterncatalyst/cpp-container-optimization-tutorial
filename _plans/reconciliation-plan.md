@@ -871,6 +871,100 @@ the static library. No reason to pick one.
 
 ---
 
+### G-17 · Conan-bundled automake's `aclocal` needs perl `threads` module on UBI 9 (r35)
+
+**Problem.** A Conan dep that uses autotools at build
+time (libcurl/8.19.0 in our case, but any autotools
+package would fire this) runs `autoreconf --force
+--install`, which invokes the `aclocal` from Conan's
+bundled automake/1.16. `aclocal` exits non-zero with:
+
+    Can't locate threads.pm in @INC ...
+    BEGIN failed--compilation aborted at
+    .../share/automake-1.16/Automake/ChannelDefs.pm
+    line 62.
+    Compilation failed in require at
+    .../share/automake-1.16/Automake/Configure_ac.pm
+    line 29.
+    ...
+    autoreconf: error: aclocal failed with exit
+    status: 2
+
+**Why.** Conan bundles `automake` as a tool_requires
+package and ships the `aclocal` perl scripts. But
+`aclocal`'s perl scripts (Automake/ChannelDefs.pm,
+Configure_ac.pm, etc.) `use threads;` for parallel-
+processing internal channels. The `threads` perl
+module is not part of perl's core — on UBI 9 it
+lives in the `perl-threads` package. Conan ships
+its own automake; it doesn't ship its own perl, so
+the system perl needs `threads` available.
+
+The same pattern as G-15/G-16: UBI 9's perl is
+deliberately minimal, every standard module lives in
+its own RPM, and tools that assume a "full" perl have
+to install dependencies explicitly.
+
+The cascading error chain in the failure output
+makes this look more dramatic than it is — only one
+module is missing; the `BEGIN failed` propagates up
+through three `require` calls because each module in
+the chain depends on the missing one.
+
+**Fix.** Install three perl modules in the
+build-stage dnf:
+
+    perl-threads
+    perl-threads-shared
+    perl-Term-ANSIColor
+
+`perl-threads` is the immediate need.
+`perl-threads-shared` is its companion (the
+`Thread::*` higher-level primitives use shared
+state); included pre-emptively.
+`perl-Term-ANSIColor` is commonly used by autotools'
+error formatting; included to head off a likely
+near-future `Can't locate Term/ANSIColor.pm` failure.
+
+This brings the total count of perl modules in the
+build-stage dnf to fourteen. The list is now
+heterogeneous in purpose:
+
+  - openssl Configure (G-15): FindBin, IPC::Cmd,
+    Data::Dumper, Pod::Html, Pod::Usage, File::Compare,
+    File::Copy, File::Path, Time::Piece, Getopt::Long.
+  - openssl FIPS post-build (G-16): Digest::SHA.
+  - autotools (G-17): threads, threads::shared,
+    Term::ANSIColor.
+
+**Mitigation if more perl modules surface.** Two
+options when (not if) the next from-source dep wants
+a perl module not yet on the list:
+
+  1. Add it to the list, same shape. This is the
+     incremental approach we've been taking; tedious
+     but predictable.
+  2. Switch to `perl-core` — RHEL/UBI 9's metapackage
+     that bundles ~80 perl modules. Heavier image
+     but eliminates the iteration. The build stage
+     gets thrown away by the multi-stage pattern, so
+     the size cost is invisible at runtime. If r36
+     shows another "missing module" round, this is
+     the right pivot.
+
+**Mitigation to skip libcurl entirely.** libcurl is
+the immediate failure point but the demo doesn't
+strictly need it — opentelemetry-cpp pulls libcurl
+for the Zipkin exporter, which we don't use. Setting
+`opentelemetry-cpp/*:with_zipkin=False` in
+`conanfile.txt` *should* skip libcurl. Not done in
+r35 because: (a) it adds a recipe-option-name guess
+that could itself fail, and (b) we want to know that
+autotools is fundamentally working in case some
+other dep needs it later.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -3668,6 +3762,132 @@ be settled now (Configure ✓ + main compile ✓ +
 post-build hash step skipped ✓). Next likely failure
 shifts to a different dep or the post-build signal
 verification.
+
+### 2026-05-10 — r35: G-17 — perl threads module for autotools / libcurl autoreconf
+
+User reran after r34. Major progress, the most so far:
+
+- openssl built clean (G-15 + G-16 fixes worked,
+  `no_fips=True` skipped the FIPS-module post-build
+  step entirely).
+- The build ran for **614 seconds** (over 10 minutes)
+  doing real compilation work. Conan got to **package
+  19 of 20** before failing.
+- Fourteen of the twenty deps built successfully —
+  including the big ones: openssl, gRPC, protobuf,
+  abseil, c-ares, zlib, etc.
+- libcurl/8.19.0 was building when the failure hit.
+  And the failure isn't in libcurl's own code — it's
+  in `autoreconf --force --install`, specifically in
+  Conan's bundled automake/1.16:
+
+      Can't locate threads.pm in @INC ...
+      BEGIN failed--compilation aborted at
+      .../share/automake-1.16/Automake/ChannelDefs.pm
+      line 62.
+      ...
+      autoreconf: error: aclocal failed with exit
+      status: 2
+
+Same root cause as G-15/G-16: UBI 9's perl is
+deliberately minimal, every standard module lives in
+its own RPM. The `threads` perl module that
+automake's `aclocal` uses for its parallel-channel
+infrastructure is in `perl-threads`, separate from
+the perl base. Conan ships its own automake but uses
+the system's perl.
+
+**Fix.** Three additional perl module packages in
+the build-stage `dnf install`:
+
+    perl-threads
+    perl-threads-shared
+    perl-Term-ANSIColor
+
+`perl-threads` is the immediate need.
+`perl-threads-shared` is its companion (the
+`Thread::*` higher-level primitives use shared
+state); included pre-emptively.
+`perl-Term-ANSIColor` is commonly used by autotools'
+error formatting; included to head off a likely
+near-future `Can't locate Term/ANSIColor.pm` cascade.
+
+Total perl modules in the build stage: 14. The list
+is now heterogeneous in purpose — openssl Configure
+needs a different set than openssl FIPS post-build
+needs a different set than autotools/automake needs.
+G-17's entry in the Gotchas section breaks down which
+modules belong to which fix.
+
+**Promoted to G-17** as a separate gotcha from G-15
+(openssl Configure) and G-16 (openssl FIPS post-
+build). Same root pattern (UBI's minimal perl); same
+shape of fix (install the right module package);
+different consumer (autotools instead of openssl).
+Splitting them makes the per-consumer rationale
+documented separately for future readers debugging
+similar issues.
+
+**Mitigation called out in G-17 but not used here.**
+Two options when (not if) the next from-source dep
+wants a perl module not yet on the list:
+
+1. Add it to the list, same shape. Incremental;
+   tedious; predictable. Has been the working
+   strategy for r32 → r33 → r34 → r35.
+2. Switch to `perl-core` — RHEL/UBI 9's metapackage
+   that bundles ~80 perl modules. Heavier image but
+   eliminates iteration. The build stage gets thrown
+   away by multi-stage pattern; size cost is
+   invisible at runtime. If r36 shows yet another
+   missing-module round, this is the right pivot.
+
+**Mitigation to skip libcurl entirely.** libcurl is
+where the failure hit but the demo doesn't strictly
+need it — opentelemetry-cpp pulls libcurl for the
+Zipkin exporter, which we don't use. Setting
+`opentelemetry-cpp/*:with_zipkin=False` in conanfile
+*should* skip libcurl. Not done in r35 because: (a)
+adds a recipe-option-name guess that could itself
+fail, (b) we want to know autotools is fundamentally
+working in case some later dep needs it.
+
+**What this round does NOT do:**
+
+- Doesn't switch to perl-core (held in reserve).
+- Doesn't add `with_zipkin=False` to conanfile
+  (held in reserve).
+- Doesn't change cppstd setting.
+- Doesn't actually run the build.
+
+**Anticipated next failures:**
+
+- **More perl modules.** Reasonably likely if libcurl
+  or another autotools-using dep needs modules
+  beyond what we have. Pivot to `perl-core` if it
+  fires.
+- **gRPC link OOM.** Hasn't fired yet, suggests we
+  have enough RAM for that; cross that off.
+- **libcurl-specific build failure.** If Zipkin's
+  pulling libcurl is unavoidable, this dep will
+  build to completion in r36 (with autotools now
+  working).
+- **OTel-cpp's own from-source build failure.** It's
+  the last package (20 of 20). After all transitive
+  deps build, opentelemetry-cpp itself compiles. C++
+  compile failures here would be on the OTel-cpp
+  side; mitigations include bumping/dropping
+  recipe options.
+- **Original post-build candidates.** Once the
+  Containerfile fully succeeds, signal verification
+  starts and r28's anticipated G-13/G-14/G-15
+  candidates (metric drift, log label drop,
+  dashboard UID) move from theoretical to actual.
+
+The build is making consistent forward progress each
+attempt. r36 either hits the post-build phase or
+addresses whatever the 20-package dep tree throws
+at us next.
 
 ---
 
