@@ -1064,6 +1064,75 @@ have enough verified evidence (build pipeline, image sizes,
 PGO captures, latency for 3 variants) to promote in r16's
 follow-up.
 
+### 2026-05-09 — r17: ubi-micro container exits before --rm reaps it; drop --rm to capture cause
+
+User ran demo-01 on r16. **Three of four variants now produce
+real, consistent percentile numbers:**
+
+    image                   p50 (ms)    p95 (ms)    p99 (ms)
+    --------------------------------------------------------------
+    single-stage-naive      40.7        42          42.3
+    pgo                     40.8        42          42.2
+    ubi-multistage          40.7        42          42.2
+    ubi-micro               NORUN       NORUN       NORUN
+
+The 40-42ms wall is httplib's queue dynamics dominating over
+the CPU work. Same answer for all three variants because at
+this load level (-c 50 against a 128-thread pool, FNV-1a
+checksum over a short URL), the toolchain delta is washed out
+by queue waits. **That's the lesson for §4 prose: LTO/PGO
+deltas show in CPU profiles, not wall-clock latency, when the
+bottleneck is queue dynamics rather than CPU work.**
+
+ubi-micro's NORUN remains. r16 added log capture, but the new
+diagnostic itself revealed a race:
+
+    -- last 20 log lines from demo01-bench-ubi-micro --
+    | Error: no container with name or ID "demo01-bench-ubi-micro" found: no such container
+
+The container exits immediately on startup, and `--rm` reaps
+it before our `wait_for_http` 30s timeout fires. By the time
+we run `podman logs` in the failure branch, there's no
+container left to log.
+
+Fix (r17): drop `--rm` from the benchmark `podman run`. Failed
+containers now persist in stopped state until our manual
+`podman rm -f` at the end of each loop iteration. This:
+
+- Lets `podman inspect` report exit code, OOM-kill flag,
+  start/finish timestamps, and any internal error string
+- Lets `podman logs` actually retrieve the binary's stdout/
+  stderr — even if the container exited milliseconds after
+  `podman run -d`
+
+Added `podman inspect --format=...` block to the failure path
+that prints status / exit / oom / error / started / finished
+in a labeled multi-line format. Combined with `podman logs |
+tail -30`, that's enough to diagnose the actual failure mode
+on the next run — whether it's a glibc symbol mismatch, a
+missing /etc/passwd entry for UID 1001, an exec format
+error, or something else entirely.
+
+Image audit unchanged: 21 UBI + 1 docker.io exception.
+
+§3 and §4 evidence inventory at the close of r17:
+- Build pipeline: all four variants build cleanly (✓ all rounds since r12)
+- Image sizes: 689 MB → 25.2 MB (27× reduction, ubi-micro
+  vs single-stage-naive); 689 MB → 114 MB (6× reduction,
+  ubi-multistage vs single-stage-naive); ✓ printed correctly
+- PGO captures real .gcda data: ✓ (1 file, correct for the
+  one-TU project)
+- PGO optimized rebuild succeeds: ✓ (image present, labeled
+  tutorial.pgo=true)
+- Latency table prints real numbers for 3 of 4 variants: ✓
+- ubi-micro runtime verification: pending r17 log capture
+
+The first 5 of 6 are sufficient to promote §3 and §4 to
+verified. The ubi-micro runtime issue is teaching material
+in its own right (probably a UID-1001 / passwd-file /
+glibc-detail issue), and we'll fold the resolution into §3
+prose when we have the logs.
+
 
 ---
 

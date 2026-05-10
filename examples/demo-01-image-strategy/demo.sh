@@ -163,11 +163,13 @@ printf -- '-%.0s' {1..62}; echo
 PARSE_FAILURES=()
 for tag in "${!IMAGES[@]}"; do
   port="${IMAGES[$tag]}"
-  podman run --rm -d --name "demo01-bench-${tag}" -p "${port}:8080" "${IMG_PREFIX}:${tag}" >/dev/null
-  # 30s wait_for_http: by the time we reach the 4th variant the host
-  # has run several rootless containers in succession; cumulative
-  # cgroup / netns setup overhead makes 20s occasionally too tight,
-  # especially for ubi-micro coming up cold last.
+  # Note: NOT using --rm here. If the container exits immediately
+  # (binary segfaults, missing dep, etc.), --rm reaps it before we
+  # can probe with `podman logs` or `podman inspect`. We clean up
+  # manually at the end of each iteration instead. r16 hit this
+  # for ubi-micro: container exited fast, --rm cleaned up, log
+  # capture got "no such container".
+  podman run -d --name "demo01-bench-${tag}" -p "${port}:8080" "${IMG_PREFIX}:${tag}" >/dev/null
   if wait_for_http "http://127.0.0.1:${port}/healthz" 30; then
     out=$(hey -n 5000 -c 50 "http://127.0.0.1:${port}/" 2>/dev/null || true)
     # Match both `50% in` and `50%% in` — different hey builds escape the
@@ -183,16 +185,25 @@ for tag in "${!IMAGES[@]}"; do
     else
       printf '%-22s  %-10s  %-10s  %-10s\n' "$tag" "${p50}" "${p95}" "${p99}"
     fi
+    podman stop -t 5 "demo01-bench-${tag}" >/dev/null 2>&1 || true
   else
-    # Capture the failed container's logs before --rm cleanup eats them,
-    # so the next reviewer sees WHY it didn't come up. This was added
-    # because ubi-micro hit NORUN on r15 with no insight into why.
+    # Container still exists (no --rm); capture both its state and its
+    # stdout/stderr before the manual rm cleans up.
     echo
-    echo "    -- last 20 log lines from demo01-bench-${tag} --"
-    podman logs "demo01-bench-${tag}" 2>&1 | tail -20 | sed 's/^/    | /' || true
+    echo "    -- container state --"
+    podman inspect "demo01-bench-${tag}" \
+      --format='    status:   {{.State.Status}}
+    exit:     {{.State.ExitCode}}
+    oom:      {{.State.OOMKilled}}
+    error:    {{.State.Error}}
+    started:  {{.State.StartedAt}}
+    finished: {{.State.FinishedAt}}' 2>&1 | sed 's/^/    /' || true
+    echo "    -- last 30 log lines --"
+    podman logs "demo01-bench-${tag}" 2>&1 | tail -30 | sed 's/^/    | /' || true
     printf '%-22s  %-10s  %-10s  %-10s\n' "$tag" "NORUN" "NORUN" "NORUN"
   fi
-  podman stop -t 5 "demo01-bench-${tag}" >/dev/null 2>&1 || true
+  # Manual cleanup since we didn't use --rm.
+  podman rm -f "demo01-bench-${tag}" >/dev/null 2>&1 || true
 done
 
 # Diagnostic: if any variant didn't parse, re-run one of them with full
