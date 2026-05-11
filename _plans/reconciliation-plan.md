@@ -8395,6 +8395,88 @@ are more durable.
   configurations"): Conan rebuilds Google Benchmark
   from source under gnu17. ~30-60s.
 
+### 2026-05-10 — r57: BM_Lookup_VectorLinear at N=262144 hangs — cap at N≤16384
+
+User ran r56's demo-02. Conan resolved with header-only
+Boost (no Boost compile — good); Google Benchmark
+rebuilt under gnu17 (expected); the binary built and
+the baseline phase started. After ~5 minutes the
+baseline still hadn't returned.
+
+Diagnosis: **`BM_Lookup_VectorLinear` at N=262144 is
+O(N²) per state iteration.** The benchmark does 1,000
+lookups, each a linear scan of N entries. At N=262144:
+
+    1000 queries × 262144 entries scanned = 262M
+    comparisons per Google Benchmark `state` iteration
+
+Google Benchmark auto-iterates each case until ~0.5s of
+CPU time accumulates. At 262M comparisons per iteration,
+even a modest desktop takes several seconds per
+iteration, and the framework keeps going until its
+minimum-time threshold is met. The single case ends up
+running for 10+ minutes, blocking the whole baseline
+phase.
+
+The other three lookup benchmarks (unordered_map, map,
+flat_map) are O(log N) or O(1) per lookup, so they run
+in milliseconds at N=262144. The iterate-and-sum on
+the vector is also fine — it's O(N) per state
+iteration, not O(N²).
+
+**Fix.** Split the registration macro:
+
+    REGISTER_BENCH_ALL_SIZES(fn)    // 4 sizes, used by 7 benches
+    REGISTER_BENCH_SMALL_SIZES(fn)  // 3 sizes (no 262144),
+                                    // used by BM_Lookup_VectorLinear only
+
+Asymmetric registration with a comment block explaining
+*why* — the missing N=262144 row for the linear-scan
+lookup case is itself a §6 teaching moment: this is the
+size at which linear scan stops being a realistic
+option. Compressed §6 message.
+
+**What r57 ships:**
+
+1. src/main.cpp: REGISTER_BENCH split into
+   REGISTER_BENCH_ALL_SIZES + REGISTER_BENCH_SMALL_SIZES;
+   BM_Lookup_VectorLinear uses the latter. Updated
+   comment block explaining the asymmetric registration
+   and the lesson it teaches.
+
+**What this round doesn't change:**
+
+- Test script criteria still use BM_Iterate_FlatMap
+  and BM_Iterate_UnorderedMap at N=262144 — both
+  still get the full size range. No test changes.
+- Containerfile, conanfile.py, demo.sh unchanged.
+
+**Anticipated outcomes:**
+
+- **Best case:** baseline phase completes in <2 min
+  total (32 cases minus the dropped O(N²) one, all
+  finishing in seconds), pressured phase similar,
+  test script verifies the two §6 criteria.
+- **Pressured phase hangs on something else:** if
+  any other benchmark is unexpectedly slow under
+  the 128M cap (e.g., unordered_map starts thrashing
+  badly), Google Benchmark may iterate forever the
+  same way. If so, we'd add a `MinTime` or
+  `Iterations` cap to the registrations.
+- **Criterion 1 fails:** would surface as a clear
+  signal in the test output; we'd iterate on the
+  benchmark parameters (Payload size, query count,
+  Sizes).
+
+**Lesson for §6 / §13.** Benchmark scaling matters at
+authoring time, not just at run time. A benchmark
+that's O(N²) in N or in any other parameter the user
+varies needs explicit caps, not just trust in the
+framework's iteration heuristics. Google Benchmark's
+auto-iterate-to-minimum-time is great for stable
+measurements but turns into a timeout-less hang for
+quadratic cases. Worth a §6 / §13 callout.
+
 ---
 
 ## Known divergences from the PRD

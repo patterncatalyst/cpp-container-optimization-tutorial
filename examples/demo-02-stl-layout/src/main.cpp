@@ -238,23 +238,43 @@ static void BM_Iterate_VectorLinear(benchmark::State& state) {
 //  Registration — four sizes spanning small (fits L2) through
 //  large (overflows L3 on a typical desktop, makes the cgroup
 //  pressure phase meaningful).
+//
+//  BM_Lookup_VectorLinear gets asymmetric registration: it's
+//  capped at N≤16384 because its inner loop is O(N) per lookup,
+//  giving the benchmark O(N²) total work (1000 queries × N
+//  entries scanned each). At N=262144 that's 262M comparisons
+//  per Google Benchmark `state` iteration, and the framework
+//  auto-iterates until ~0.5s of CPU time accumulates — easily
+//  10+ minutes for that one case. The iterate-and-sum on the
+//  same vector is still O(N) per iteration and runs at full
+//  size cheaply.
+//
+//  The lesson the missing N=262144 lookup row teaches is itself
+//  worth something: "this is where linear scan stops being a
+//  realistic option." That's the §6 message in compressed form.
 // ────────────────────────────────────────────────────────────────
 
 static constexpr int kSizes[] = {64, 1024, 16384, 262144};
 
-#define REGISTER_BENCH(fn)                                         \
+#define REGISTER_BENCH_ALL_SIZES(fn)                               \
     BENCHMARK(fn)                                                  \
         ->Arg(kSizes[0])->Arg(kSizes[1])                           \
         ->Arg(kSizes[2])->Arg(kSizes[3])                           \
         ->Unit(benchmark::kMicrosecond)
 
-REGISTER_BENCH(BM_Lookup_UnorderedMap);
-REGISTER_BENCH(BM_Lookup_Map);
-REGISTER_BENCH(BM_Lookup_FlatMap);
-REGISTER_BENCH(BM_Lookup_VectorLinear);
-REGISTER_BENCH(BM_Iterate_UnorderedMap);
-REGISTER_BENCH(BM_Iterate_Map);
-REGISTER_BENCH(BM_Iterate_FlatMap);
-REGISTER_BENCH(BM_Iterate_VectorLinear);
+#define REGISTER_BENCH_SMALL_SIZES(fn)                             \
+    BENCHMARK(fn)                                                  \
+        ->Arg(kSizes[0])->Arg(kSizes[1])                           \
+        ->Arg(kSizes[2])                                           \
+        ->Unit(benchmark::kMicrosecond)
+
+REGISTER_BENCH_ALL_SIZES(BM_Lookup_UnorderedMap);
+REGISTER_BENCH_ALL_SIZES(BM_Lookup_Map);
+REGISTER_BENCH_ALL_SIZES(BM_Lookup_FlatMap);
+REGISTER_BENCH_SMALL_SIZES(BM_Lookup_VectorLinear);  // O(N²); skip 262144
+REGISTER_BENCH_ALL_SIZES(BM_Iterate_UnorderedMap);
+REGISTER_BENCH_ALL_SIZES(BM_Iterate_Map);
+REGISTER_BENCH_ALL_SIZES(BM_Iterate_FlatMap);
+REGISTER_BENCH_ALL_SIZES(BM_Iterate_VectorLinear);
 
 BENCHMARK_MAIN();
