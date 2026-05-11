@@ -89,19 +89,21 @@ target_compile_definitions(demo-03-svc PRIVATE
     ASIO_DISABLE_EPOLL
 )
 
-# Same umbrella OTel-cpp library set as demo-04 plus gRPC + protobuf
-# plus liburing for io_uring direct calls. CMAKE_CXX_LINK_EXECUTABLE
-# above guarantees these are wrapped in --start-group/--end-group so
-# the linker resolves them.
+# Same umbrella OTel-cpp target as demo-04 (G-19): Conan's OTel-cpp
+# recipe doesn't expose per-signal `opentelemetry-cpp::api` /
+# `::sdk` / `::trace` / `::metrics` / `::logs` targets. It exposes
+# the all-in-one `opentelemetry-cpp::opentelemetry-cpp` umbrella +
+# undecorated per-component names like `opentelemetry_trace`. The
+# umbrella is the shape demo-04 settled on and is what works.
+# r61 originally listed the per-signal names from upstream's docs
+# and got "target was not found" — same G-19 footgun.
+#
+# CMAKE_CXX_LINK_EXECUTABLE above guarantees the umbrella's transitive
+# archive list is wrapped in --start-group/--end-group so circular
+# deps among gRPC / abseil / proto_grpc / OTel internals resolve
+# (G-23).
 target_link_libraries(demo-03-svc PRIVATE
-    opentelemetry-cpp::api
-    opentelemetry-cpp::sdk
-    opentelemetry-cpp::trace
-    opentelemetry-cpp::metrics
-    opentelemetry-cpp::logs
-    opentelemetry-cpp::otlp_grpc_exporter
-    opentelemetry-cpp::otlp_grpc_metrics_exporter
-    opentelemetry-cpp::otlp_grpc_log_record_exporter
+    opentelemetry-cpp::opentelemetry-cpp
     gRPC::grpc++
     gRPC::grpc++_reflection
     protobuf::libprotobuf

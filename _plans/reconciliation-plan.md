@@ -8991,6 +8991,111 @@ chain (saving rebuilds of identical packages already in
 Conan's cache from demo-04 builds), with asio resolving
 fresh.
 
+### 2026-05-10 — r62: G-19 strikes again — OTel-cpp target names are the umbrella, not per-signal
+
+User ran r61. Conan resolved cleanly (with `--lockfile-partial`
+honoring the inherited demo-04 lockfile — that part worked).
+The build advanced through configure, found liburing 2.5,
+found asio, found all the Conan-managed deps. Then CMake's
+generate step failed:
+
+    CMake Error at CMakeLists.txt:96 (target_link_libraries):
+      Target "demo-03-svc" links to:
+        opentelemetry-cpp::api
+      but the target was not found.
+
+r61's CMakeLists.txt listed six per-signal target names from
+upstream OTel-cpp's documentation:
+
+    opentelemetry-cpp::api
+    opentelemetry-cpp::sdk
+    opentelemetry-cpp::trace
+    opentelemetry-cpp::metrics
+    opentelemetry-cpp::logs
+    opentelemetry-cpp::otlp_grpc_exporter
+    [etc.]
+
+None of these exist as CMake targets. **G-19 from demo-04
+(r39)** documents exactly this: the Conan recipe for OTel-cpp
+normalizes target names. It exposes:
+
+- `opentelemetry-cpp::opentelemetry-cpp` — the umbrella
+  (this is what demo-04 uses, and it works)
+- `opentelemetry_trace`, `opentelemetry_metrics`, etc. —
+  undecorated per-component names
+
+But **not** the `opentelemetry-cpp::trace`-style namespaced
+per-signal targets that the upstream non-Conan build exposes.
+G-19 was discovered in demo-04's r39. I noted it in r61's
+CMakeLists comment ("see G-19") but used the wrong target
+names anyway.
+
+Honest mistake categorization: this isn't a new gotcha; it's
+me failing to apply a known one. The fix is to use the same
+umbrella target name demo-04 uses (`opentelemetry-cpp::opentelemetry-cpp`).
+The `CMAKE_CXX_LINK_EXECUTABLE` --start-group/--end-group
+override (G-23, also inherited from demo-04) handles the
+circular dep resolution between gRPC + abseil + proto_grpc
+that the umbrella's transitive archive list needs.
+
+**Fix.** Replace the per-signal list with the single umbrella:
+
+    target_link_libraries(demo-03-svc PRIVATE
+        opentelemetry-cpp::opentelemetry-cpp
+        gRPC::grpc++
+        gRPC::grpc++_reflection
+        protobuf::libprotobuf
+        asio::asio
+        PkgConfig::URING
+        Threads::Threads
+    )
+
+Updated the comment block to explicitly call out r61's wrong
+choice and why the umbrella is correct, so the next reader
+doesn't make the same mistake.
+
+**Lesson for myself.** Documenting a gotcha doesn't apply it.
+Even with the G-19 comment in place, I wrote code that
+violated it. Cross-reference between gotchas and the code
+that's supposed to follow them is necessary but not
+sufficient — there's still room for "did I actually use the
+right names?" verification.
+
+**What r62 ships:**
+
+1. examples/demo-03-io-uring-grpc/CMakeLists.txt:
+   `target_link_libraries` reduced to the umbrella +
+   non-OTel deps. Comment block explicitly calls out r61's
+   mistake.
+
+**What r62 doesn't change:**
+
+- src/main.cpp: unchanged (the C++ includes for OTel's
+  per-component headers ARE correct — they're API headers,
+  not link targets)
+- Containerfile, conanfile.py, compose.yml, demo.sh:
+  unchanged
+- Test/regenerate scripts: unchanged
+
+**Anticipated next failures (most likely first):**
+
+- **build proceeds, link fails** with some `--start-group`-
+  related issue: would be the equivalent of G-21 (static
+  link order). We inherited the link-executable override
+  from demo-04 (G-23), which is the established fix.
+  Should be OK.
+- **build proceeds, link fails on liburing symbol:** would
+  mean PkgConfig::URING isn't picking up the `-luring`
+  properly. Fix: explicit `target_link_libraries(... uring)`.
+- **build proceeds, link succeeds, runtime fails at
+  io_uring_queue_init with EPERM:** the seccomp gotcha I
+  warned about in r61's anticipated outcomes.
+- **build proceeds, link + runtime work, ghz can't reach
+  demo03-svc:** podman network resolution issue.
+
+Each is a separate diagnose-and-fix; r62 just gets us past
+the CMake target name issue.
+
 ---
 
 ## Known divergences from the PRD
