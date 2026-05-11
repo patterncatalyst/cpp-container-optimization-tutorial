@@ -46,6 +46,17 @@ the same `hey` workload runs against the gRPC service first under
 default networking and then with `--network=host`, and the demo
 prints the p50/p99 delta.
 
+**Note on container security**: io_uring in a container needs both
+seccomp and SELinux configuration. The tutorial compose uses
+`seccomp=unconfined` + `label=disable` for simplicity; the parallel
+`compose.production.yml` shows the audit-grade alternative (custom
+seccomp profile with exactly the three io_uring syscalls added, plus
+a custom SELinux policy module). See
+[`security/README.md`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-03-io-uring-grpc/security)
+in the demo directory for the full audit story, and §14 for the
+EPERM/EACCES error-code rubric that guides which security layer is
+denying any given syscall.
+
 ## For deeper coverage
 
 - Enberg, *Latency*, ch. 5 (the network stack)

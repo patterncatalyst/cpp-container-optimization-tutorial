@@ -9735,6 +9735,199 @@ Or with formal pass/fail:
 
     ./scripts/test-demo-03-io-uring-grpc.sh
 
+### 2026-05-10 — r67: demo-03 VERIFIED + option B shipped (production-grade security alternative)
+
+**Two things happened in this round:**
+
+1. **Demo-03 verified end-to-end.** User ran r66's demo.sh and all
+   three load phases succeeded:
+   - gRPC: 48,480 successful Echo responses at ~4.85K RPS, p99=30.92 ms
+   - io_uring direct echo (:9000): 6,400 reqs, p50=87µs, p99=181µs,
+     274K req/s
+   - Asio io_uring echo (:9001): 6,400 reqs, p50=84µs, p99=110µs,
+     349K req/s
+   - All four servers logged "listening on..." cleanly; no
+     io_uring_queue_init failures
+   - **Item 3 of 5 done** in the post-verification arc.
+   - Interesting finding: Asio's p99 was actually *better* than the
+     direct liburing version (110µs vs 181µs). My naive submit-per-
+     completion loop in the direct version isn't taking advantage
+     of SQE batching the way Asio does. Real material for §9 prose.
+
+2. **User asked the right next question:** "do the selinux and
+   seccomp changes make the code vulnerable? would this pass muster
+   for a security audit?"
+
+   Honest answer: no, the tutorial compose would not pass an audit.
+   `seccomp=unconfined` re-exposes ~50 syscalls including
+   `kexec_load`, `userfaultfd`, `bpf`, `ptrace`, `mount` — the
+   surface that historical CVEs (CVE-2022-0185, CVE-2022-29581,
+   CVE-2023-32233) were exploited through. `label=disable`
+   substitutes `spc_t` for `container_t` and removes the SELinux
+   boundary that contained the runc breakout (CVE-2019-5736).
+
+   The right answer for production: **don't blanket-disable
+   security layers; surgically grant the specific permissions the
+   workload needs.** For io_uring, that means a custom seccomp
+   profile (default + io_uring_setup/enter/register only) and a
+   custom SELinux policy module (grants `container_t` the io_uring
+   permission class).
+
+   User selected **option B**: ship the production-grade alternative
+   as a parallel compose, well-documented. r67 implements that.
+
+**What r67 ships (option B):**
+
+The parallel `compose.production.yml` plus supporting
+infrastructure in `examples/demo-03-io-uring-grpc/security/`:
+
+1. **`security/README.md`** — the audit story.
+   - What the tutorial setup actually removes (with CVE references)
+   - What the production setup does instead, threat-model-by-threat-model
+   - One-time host setup procedure
+   - Verification commands (`podman inspect ...`)
+   - Production gaps the demo still doesn't cover (image signing,
+     non-root user, network policy, runtime security observability)
+   - Why the tutorial default isn't the production default (the
+     pedagogical choice to show the bypass first)
+
+2. **`security/demo03_iouring.te`** + `.fc` — SELinux Type
+   Enforcement module that grants `container_t` the io_uring
+   class permissions (`create`, `override_creds`, `sqpoll`).
+   Surgical permission grant; all other container_t restrictions
+   stay in place.
+
+3. **`security/install-selinux-policy.sh`** — compile the .te
+   into .pp via `make -f /usr/share/selinux/devel/Makefile`,
+   install with `semodule -i`. Defensive checks: requires root,
+   requires SELinux installed, requires `selinux-policy-devel`,
+   requires kernel/policy version that defines the `io_uring`
+   class.
+
+4. **`security/uninstall-selinux-policy.sh`** — clean reverse via
+   `semodule -r`, plus artifact cleanup.
+
+5. **`security/build-seccomp-profile.sh`** — regenerates
+   `seccomp-iouring.json` from the user's local podman default
+   profile (in `/usr/share/containers/seccomp.json` or
+   `/etc/containers/seccomp.json`) + the io_uring overlay. Uses
+   `jq` for JSON manipulation. Idempotent.
+
+6. **`security/seccomp-iouring.json`** — reference snapshot
+   profile. The build script regenerates it locally; this snapshot
+   exists so users can inspect what the production profile looks
+   like before generating their own.
+
+7. **`compose.production.yml`** — the production-grade compose:
+   - `seccomp=${SECCOMP_PROFILE_PATH}` (custom profile via env)
+   - NO `label=disable` (keeps default container_t + relies on
+     the loaded SELinux module)
+   - `no-new-privileges:true`
+   - `cap_drop: [ALL]`
+   - `read_only: true` with `tmpfs: [/tmp:size=64m]`
+   - `mem_limit: 512m`, `pids_limit: 200`
+   - Same image, same ports, same network
+
+8. **`demo.sh --production`** flag — preflight checks for the
+   seccomp profile + SELinux module before bringing up; sets the
+   `SECCOMP_PROFILE_PATH` env var the compose expects.
+
+9. **`scripts/test-demo-03-production.sh`** — verification with
+   *security posture checks added*: confirms the seccomp profile
+   is custom (not unconfined), SELinux process label is
+   `container_t` (not spc_t), capabilities are dropped, root fs
+   is read-only, resource limits are set. Then runs the standard
+   load phases to verify io_uring still works under the tightened
+   posture.
+
+10. **`_docs/14-pitfalls.md`** updated — added two new
+    pitfalls:
+    - "Container security layers and the EPERM/EACCES rubric"
+      with the four-layer table (caps + seccomp + MAC + sysctl)
+      and which error code each returns on deny
+    - "Tutorial-default security vs production security" calling
+      out the don't-blanket-disable principle
+
+11. **`_docs/09-networking-kernel.md`** updated — cross-reference
+    to the security/README.md and the §14 rubric.
+
+12. **`examples/demo-03-io-uring-grpc/README.md`** — new "Security
+    posture — tutorial vs production" section explaining the two
+    compose files and pointing at security/README.md.
+
+**Verification matrix update:**
+
+- §9 (I/O & Networking): **VERIFIED** ✓ (was `drafted, pending demo-03`)
+- §10 (Observability): VERIFIED ✓ (r52)
+- §4 (Container Strategy): VERIFIED ✓ (r20)
+- §5 (Compile-Time Wins): VERIFIED ✓ (r20)
+- §6 (STL & Layout): VERIFIED ✓ (r59)
+- §14 (Common Pitfalls): **expanded** with EPERM/EACCES + tutorial-
+  vs-production security content (still flagged as drafted; the
+  prose for the other pitfall categories isn't fully verified yet)
+
+**Items remaining in the five-item post-verification arc:**
+
+1. ✓ Conan lockfile for demo-04 (r53-r54)
+2. ✓ Demo-02 STL & layout (r55-r60)
+3. ✓ Demo-03 io_uring + async gRPC (r61-r67)
+4. **PPTX slides (full 1.5-3hr deck all 15 sections)** — pending
+5. **§13 prose + fold in §10 prose** — partial (lockfile sidebar
+   done in r53; rest pending). r67 added §14 + §9 content as a
+   side effect of the security writeup; that didn't change item 5's
+   status.
+
+**Lessons promoted to §14 prose:**
+
+- **The errno-to-layer rubric.** EPERM is ambiguous across DAC /
+  seccomp / sysctl; EACCES is unambiguous (SELinux/AppArmor). This
+  is debugging gold for anyone trying to figure out why something
+  works on one host and fails on another.
+- **The don't-blanket-disable principle.** Security layers are
+  designed to compose; bypassing them wholesale is the wrong tool
+  for a problem that has a surgical fix. The seccomp profile
+  builder and the SELinux .te file are concrete examples of the
+  surgical approach.
+- **Pedagogy honestly.** The tutorial doesn't start with the
+  production setup because the production setup has real friction
+  (sudo for the SELinux install, devel package required). Showing
+  the bypass first, demonstrating it works, then showing why it's
+  inadequate and how to do better — that's how production
+  hardening actually unfolds in real engineering teams.
+
+**What r67 doesn't change:**
+
+- src/main.cpp, src/tcp_loadgen.cpp — unchanged
+- Containerfile, CMakeLists.txt, conanfile.py — unchanged
+- compose.yml (the tutorial path) — unchanged
+- demo-04, demo-02 — unchanged
+
+**Anticipated outcomes for the production setup:**
+
+- **Most likely:** user runs `build-seccomp-profile.sh` and
+  `install-selinux-policy.sh`, then `./demo.sh --production`
+  passes. The SELinux module compiles cleanly on Fedora 44 /
+  RHEL 9.4+ where the `io_uring` class is in the policy.
+- **SELinux compile fails:** policy version too old. The install
+  script's preflight catches this and points at the upgrade path.
+- **Seccomp profile fails to load:** path issue (most likely) or
+  malformed JSON (the build script validates, so unlikely). Fall
+  back to inspecting `podman inspect demo03-svc` for the error
+  message.
+- **All checks pass but io_uring still fails:** would indicate
+  a permission gap the SELinux module didn't cover. The
+  `audit2allow` workflow on the host audit log would show which
+  permission is missing.
+
+User reruns:
+
+    ./examples/demo-03-io-uring-grpc/security/build-seccomp-profile.sh
+    sudo ./examples/demo-03-io-uring-grpc/security/install-selinux-policy.sh
+    ./examples/demo-03-io-uring-grpc/demo.sh --production
+
+    # or:
+    ./scripts/test-demo-03-production.sh
+
 ---
 
 ## Known divergences from the PRD

@@ -1,0 +1,109 @@
+# Demo-03 — PRODUCTION-GRADE compose.
+#
+# Same demo binary as compose.yml, but with the security posture
+# tightened back up to (approximately) what a production deployment
+# would expect. The trade-off vs compose.yml:
+#
+#   compose.yml             compose.production.yml
+#   ───────────             ──────────────────────
+#   seccomp=unconfined  →   custom seccomp profile (default + 3 io_uring syscalls)
+#   label=disable       →   default container_t + custom SELinux policy module
+#   default capabilities →  cap_drop: ALL (this app needs no Linux caps)
+#   default fs RW       →   read_only: true with /tmp as tmpfs
+#   unlimited resources →   mem_limit + pids_limit
+#   default privileges  →   no-new-privileges: true
+#
+# Prerequisites (one-time host setup):
+#   1. Generate the seccomp profile from your local podman defaults:
+#        ./security/build-seccomp-profile.sh
+#   2. Install the SELinux policy module (requires root):
+#        sudo ./security/install-selinux-policy.sh
+#
+# Bring up:
+#   SECCOMP_PROFILE_PATH="$(pwd)/security/seccomp-iouring.json" \
+#       podman compose -f compose.production.yml \
+#                      -f ../../observability/compose.yml up --build
+#
+# Or use the helper:
+#   ./demo.sh --production
+#
+# Verification (after bring-up):
+#   podman inspect demo03-svc --format '{{.HostConfig.SecurityOpt}}'
+#   podman inspect demo03-svc --format '{{.HostConfig.CapDrop}}'
+#   podman inspect demo03-svc --format '{{.HostConfig.ReadonlyRootfs}}'
+#
+# See security/README.md for the full audit story.
+
+services:
+  demo-03-svc:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: cpp-tut/demo-03:latest
+    container_name: demo03-svc
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://lgtm:4317"
+      OTEL_SERVICE_NAME: "demo-03-svc"
+      OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=production"
+
+    # ── Security profile ─────────────────────────────────────────────
+    # Each line replaces a separate default-bypass that the tutorial
+    # compose.yml uses. See security/README.md for the threat model
+    # behind each.
+    security_opt:
+      # Custom seccomp profile: default profile + io_uring syscalls.
+      # Path comes from env var so this compose stays portable across
+      # checkouts. demo.sh --production sets it; for direct compose
+      # invocation, export SECCOMP_PROFILE_PATH first.
+      - "seccomp=${SECCOMP_PROFILE_PATH}"
+
+      # Note: NO `label=disable` here. We keep the default container_t
+      # SELinux type. The custom policy module (security/demo03_iouring.te,
+      # installed via security/install-selinux-policy.sh) grants
+      # container_t the io_uring class permissions; nothing else
+      # about container_t changes.
+
+      # Block any setuid/setgid binary in the image from gaining
+      # privileges (no real risk in our image, but defense-in-depth).
+      - "no-new-privileges:true"
+
+    # ── Capabilities ─────────────────────────────────────────────────
+    # The demo binary opens TCP sockets on ports > 1024, calls
+    # io_uring syscalls, and emits OTLP — none of which require any
+    # Linux capability. Drop everything; if io_uring fails to
+    # initialize after this, the capability gate is the cause and
+    # we'd need to add one back (most likely SYS_NICE if SQPOLL is
+    # used, but our demo doesn't use SQPOLL).
+    cap_drop:
+      - ALL
+
+    # ── Filesystem hardening ─────────────────────────────────────────
+    # Container root filesystem is read-only at runtime; any write
+    # attempt fails with EROFS. /tmp is a tmpfs (in-memory) so that
+    # /tmp/* is writable but volatile. The binary itself doesn't write
+    # outside of /tmp (no log files, no cache, no PID file).
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+
+    # ── Resource limits ──────────────────────────────────────────────
+    # Caps to bound the blast radius of any DoS attempt or runaway.
+    # Pick numbers slightly above measured peak for a 32-conn load:
+    # binary measures ~80 MB RSS, ~20 threads peak.
+    mem_limit: 512m
+    pids_limit: 200
+
+    ports:
+      - "127.0.0.1:18403:8080"   # healthz
+      - "127.0.0.1:50051:50051"  # gRPC Echo
+      - "127.0.0.1:9000:9000"    # io_uring TCP echo
+      - "127.0.0.1:9001:9001"    # Asio TCP echo
+    depends_on:
+      - lgtm
+    networks:
+      - obs
+
+networks:
+  obs:
+    name: tutorial-obs
+    external: false

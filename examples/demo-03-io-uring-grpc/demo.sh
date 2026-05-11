@@ -18,6 +18,10 @@
 #   ./demo.sh                  full bring-up + load + summary
 #   ./demo.sh --keep           don't tear down at end
 #   ./demo.sh --clean          tear down only (run after --keep)
+#   ./demo.sh --production     use compose.production.yml (custom seccomp +
+#                              SELinux module + dropped caps + read-only fs).
+#                              Requires one-time host setup; see
+#                              security/README.md.
 
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,17 +30,60 @@ cd "$DIR"
 
 KEEP_UP=0
 CLEAN_ONLY=0
+USE_PRODUCTION=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --keep)  KEEP_UP=1; shift ;;
-        --clean) CLEAN_ONLY=1; shift ;;
-        -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
+        --keep)       KEEP_UP=1; shift ;;
+        --clean)      CLEAN_ONLY=1; shift ;;
+        --production) USE_PRODUCTION=1; shift ;;
+        -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
         *) echo "unknown arg: $1" >&2; exit 2 ;;
     esac
 done
 
 OBS="$REPO_ROOT/observability/compose.yml"
-COMPOSE=(podman compose -f compose.yml -f "$OBS")
+
+if (( USE_PRODUCTION )); then
+    # Verify the one-time host setup is in place before bringing up.
+    # Each check is short; failures point at the corresponding
+    # security/ script.
+    echo "==> Production mode: verifying host setup"
+
+    SECCOMP_PROFILE="$DIR/security/seccomp-iouring.json"
+    if [[ ! -f "$SECCOMP_PROFILE" ]]; then
+        echo "==> ERROR: $SECCOMP_PROFILE not found."
+        echo "    Generate it from your local podman default:"
+        echo "      ./security/build-seccomp-profile.sh"
+        exit 1
+    fi
+    echo "    [ok] seccomp profile present: $SECCOMP_PROFILE"
+
+    if command -v semodule >/dev/null 2>&1; then
+        if semodule -l 2>/dev/null | grep -q '^demo03_iouring'; then
+            echo "    [ok] SELinux module demo03_iouring loaded"
+        else
+            echo "==> ERROR: SELinux module demo03_iouring NOT loaded."
+            echo "    Install (requires root):"
+            echo "      sudo ./security/install-selinux-policy.sh"
+            echo
+            echo "    If your system has SELinux Disabled (getenforce reports"
+            echo "    'Disabled'), you can skip the module install — io_uring"
+            echo "    won't be denied at the MAC layer. But then there's no"
+            echo "    reason to use --production over compose.yml. Run the"
+            echo "    tutorial path instead."
+            exit 1
+        fi
+    else
+        echo "    [warn] semodule not found; skipping SELinux check"
+        echo "    (your system may not have SELinux installed)"
+    fi
+
+    export SECCOMP_PROFILE_PATH="$SECCOMP_PROFILE"
+    COMPOSE=(podman compose -f compose.production.yml -f "$OBS")
+    echo "==> Using compose.production.yml"
+else
+    COMPOSE=(podman compose -f compose.yml -f "$OBS")
+fi
 
 if (( CLEAN_ONLY )); then
     "${COMPOSE[@]}" down -v 2>/dev/null || true

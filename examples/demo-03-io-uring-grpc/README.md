@@ -98,6 +98,45 @@ microsecond overhead. The tutorial point is to know the price.
 - **The cost of abstraction** — the Asio echo is half the code, but
   pays a measurable runtime tax.
 
+## Security posture — tutorial vs production
+
+The compose.yml shipped with this demo uses `seccomp=unconfined` and
+`label=disable` to make io_uring work in the container. **That
+configuration would not pass a security audit.** It's the easy path
+for a demo on a developer laptop.
+
+A parallel **`compose.production.yml`** in this directory shows the
+audit-grade alternative: a custom seccomp profile that's docker's
+default + exactly the three io_uring syscalls, plus a custom SELinux
+policy module that grants `container_t` the `io_uring` permission
+class. Plus capabilities dropped, read-only root filesystem, and
+resource limits.
+
+The C++ source doesn't change between the two; only the surrounding
+container security configuration does.
+
+To run the production variant:
+
+```bash
+# One-time host setup (the seccomp profile uses YOUR local podman default
+# as the base; the SELinux module needs root to install).
+./security/build-seccomp-profile.sh
+sudo ./security/install-selinux-policy.sh
+
+# Then run normally — same load phases, audit-grade security:
+./demo.sh --production
+
+# Or with formal pass/fail criteria + security posture verification:
+../../scripts/test-demo-03-production.sh
+```
+
+See **`security/README.md`** in this directory for the full audit
+story: what the tutorial setup actually removes, what CVEs the
+default profile catches, why a custom seccomp profile is better than
+unconfined, what the SELinux module adds vs label=disable, and what
+production gaps the demo still doesn't cover (image signing, network
+policy, runtime security monitoring, etc.).
+
 ## Linked tutorial sections
 
 - §9 (I/O & Networking): this demo is §9's worked example.

@@ -1,0 +1,64 @@
+## <summary>
+## SELinux policy module for demo-03-svc.
+##
+## Grants the standard container_t SELinux type the additional
+## io_uring permission class needed to run io_uring-based servers
+## inside an otherwise-unmodified container security context.
+##
+## Without this module installed, container_t cannot create io_uring
+## instances on Fedora/RHEL 9+ — io_uring_setup returns -EACCES from
+## the kernel SELinux LSM hook (not from seccomp; SELinux denial is
+## a separate gate).
+##
+## Loading:
+##   make -f /usr/share/selinux/devel/Makefile demo03_iouring.pp
+##   sudo semodule -i demo03_iouring.pp
+##
+## Verifying:
+##   sudo semodule -l | grep demo03_iouring
+##   sudo seinfo -c io_uring
+##
+## Unloading:
+##   sudo semodule -r demo03_iouring
+##
+## Threat model: this module ONLY adds io_uring access. It does not
+## relax any other container_t restriction. Compared to label=disable
+## (which substitutes spc_t for container_t), this is a surgical
+## permission grant that preserves all other MAC enforcement.
+## </summary>
+
+policy_module(demo03_iouring, 1.0)
+
+require {
+    type container_t;
+    class io_uring { create override_creds sqpoll };
+}
+
+########################################
+## io_uring access for container_t.
+##
+## Permissions explained (see io_uring(7) and the SELinux policy
+## reference for the io_uring class introduced in policy v33):
+##
+##   create:           required to call io_uring_setup(2)
+##   override_creds:   required for IORING_OP_OPENAT2 and similar ops
+##                     that act with the credentials of the ring creator
+##                     rather than the issuing thread. Demo doesn't use
+##                     these ops, but Asio's io_uring backend may register
+##                     creds on init — granting it is defense-in-depth
+##                     for Asio.
+##   sqpoll:           required if a ring is registered with IORING_SETUP_SQPOLL
+##                     to spawn a kernel thread that polls SQEs. Our demo
+##                     uses default mode (no SQPOLL), so this isn't strictly
+##                     required — but the cost is zero and the symmetry
+##                     with override_creds keeps the policy simpler.
+##
+## The actual io_uring ring permissions (IORING_OP_* control) are
+## enforced by the kernel beyond SELinux — registering an op like
+## IORING_REGISTER_BUFFERS still requires CAP_SYS_NICE, which our
+## container drops via cap_drop: ALL. SELinux grants the ability to
+## use the io_uring interface; the kernel decides what operations
+## that interface can actually perform.
+########################################
+
+allow container_t self:io_uring { create override_creds sqpoll };

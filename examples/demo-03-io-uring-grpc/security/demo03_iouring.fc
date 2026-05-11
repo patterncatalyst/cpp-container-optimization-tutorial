@@ -1,0 +1,11 @@
+# SELinux File Contexts for demo03_iouring.
+#
+# This module doesn't define any new file types — io_uring is a kernel
+# interface, not a filesystem object — so this file is intentionally
+# empty. It exists because the SELinux build infrastructure
+# (/usr/share/selinux/devel/Makefile) expects a .fc file alongside
+# each .te file.
+#
+# The container engine (podman/docker) handles file labeling at
+# runtime via the standard container_file_t / container_var_lib_t
+# types. Our module doesn't change that.
