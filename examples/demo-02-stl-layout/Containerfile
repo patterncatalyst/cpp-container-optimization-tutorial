@@ -82,4 +82,7 @@ COPY --from=builder /src/build/stl-bench /usr/local/bin/stl-bench
 # script can parse cleanly. Override with `--benchmark_format=console`
 # for human-readable output during interactive use.
 ENTRYPOINT ["/usr/local/bin/stl-bench"]
-CMD ["--benchmark_format=json", "--benchmark_repetitions=3", "--benchmark_min_warmup_time=0.1"]
+CMD ["--benchmark_format=json", \
+     "--benchmark_repetitions=3", \
+     "--benchmark_min_time=0.05s", \
+     "--benchmark_min_warmup_time=0.1"]

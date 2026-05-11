@@ -135,10 +135,15 @@ if [[ -s "$BASELINE_OUT" && -s "$PRESSURED_OUT" ]]; then
     ' "$PRESSURED_OUT" | sort > /tmp/demo-02-pressured.tsv
     join -t'|' /tmp/demo-02-baseline.tsv /tmp/demo-02-pressured.tsv | \
         while IFS='|' read -r name base press; do
-            # run_name is e.g. "BM_Lookup_FlatMap/1024_median"; split on /
-            bench="${name%/*}"
-            size="${name#*/}"
-            size="${size%_median}"
+            # run_name examples:
+            #   "BM_Lookup_FlatMap/1024_median"                       (no modifiers)
+            #   "BM_Lookup_FlatMap/1024/min_time:0.050_median"        (with in-code MinTime)
+            # Extract benchmark name (before first /) and size
+            # (after first /, stripped of everything from any
+            # subsequent / and the trailing _median).
+            bench="${name%%/*}"
+            rest="${name#*/}"
+            size=$(echo "$rest" | sed -E 's|/.*||; s|_median$||')
             ratio=$(awk -v b="$base" -v p="$press" 'BEGIN { if (b > 0) printf "%.2fx", p/b; else print "n/a" }')
             printf "%-38s %10s %12.1f %12.1f   %s\n" \
                    "$bench" "$size" "$base" "$press" "$ratio"

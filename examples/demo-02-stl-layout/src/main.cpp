@@ -293,15 +293,19 @@ static constexpr int kSizes[] = {64, 1024, 16384, 262144};
     BENCHMARK(fn)                                                  \
         ->Arg(kSizes[0])->Arg(kSizes[1])                           \
         ->Arg(kSizes[2])->Arg(kSizes[3])                           \
-        ->Unit(benchmark::kMicrosecond)                            \
-        ->MinTime(0.05)
+        ->Unit(benchmark::kMicrosecond)
 
 #define REGISTER_BENCH_SMALL_SIZES(fn)                             \
     BENCHMARK(fn)                                                  \
         ->Arg(kSizes[0])->Arg(kSizes[1])                           \
         ->Arg(kSizes[2])                                           \
-        ->Unit(benchmark::kMicrosecond)                            \
-        ->MinTime(0.05)
+        ->Unit(benchmark::kMicrosecond)
+
+// MinTime is set via --benchmark_min_time=0.05 in the Containerfile
+// CMD line, not in-code via ->MinTime(0.05). Reason: per-benchmark
+// MinTime() in code suffixes the run_name with "/min_time:0.05",
+// which makes the comparison tables and JSON parsing more awkward.
+// Global CLI flags don't suffix names.
 
 REGISTER_BENCH_ALL_SIZES(BM_Lookup_UnorderedMap);
 REGISTER_BENCH_ALL_SIZES(BM_Lookup_Map);

@@ -50,7 +50,7 @@ on a clean Fedora 44 host; that's what the verification pass turns
 | 3  | RAII & Container Resource Discipline                               | [x]     | drafted with prose (r27)    | r27: ~1700 words; container framing for tight-cgroup leak math; two-feature mechanic (lifetime + unwinding); concrete `unique_fd` 20-line wrapper with leaky-vs-RAII side-by-side; four-resource-class table; three failure modes; honest non-promises (cycles, terminate, OOM-kill, layout); forward refs to §6/§7/§8/§11; lab-tip pointing at a future demo. New diagram `03-raii-discipline` (SVG hand-authored; .excalidraw stub). |
 | 4  | Container Strategy: UBI, scratch, multi-stage builds               | [x]     | verified (r20)              | demo-01 measured: 689 MB single-stage-naive → 114 MB ubi-multistage (6×) → 26.4 MB ubi-micro w/ fully-static -static binary (26×); ubi-micro-glibc-mismatch teaching variant captures the cross-image glibc symbol-version trap live (`GLIBC_2.35 not found`) |
 | 5  | Compile-Time Wins: LTO, PGO, constexpr                             | [x]     | verified (r20)              | demo-01: all four variants build with thin LTO; PGO captures real .gcda data and rebuilds with -fprofile-use; wall-clock latency at -c 50 shows no toolchain delta (40.7-40.8 ms p50 across all variants) — that IS the §5 lesson: PGO/LTO show in CPU profiles, not p50 latency, when queue dynamics dominate |
-| 6  | STL, Layout, and C++20/23 Containers                               | [x]     | unverified                  | Tied to Demo 2; verify GCC 14 supports `flat_set`    |
+| 6  | STL, Layout, and C++20/23 Containers                               | [x]     | **verified (r58, 2.5× contiguous win)** | Demo 2 PASS — flat_map beats unordered_map by 2.5× at N=262K; map by 35× |
 | 7  | Memory Management: Allocators, Huge Pages, cgroups v2, OOM         | [x]     | unverified                  | Expanded 2026-05-09 with cgroup memory.max/high, OOM, malloc_trim, RSS vs working set, LinuxMemoryChecker; tied to Demo 2; verify rootless cgroup limits work |
 | 8  | I/O Latency: io_uring, Async gRPC, SO_REUSEPORT                    | [x]     | unverified                  | Tied to Demo 3; check kernel ≥ 6.0                   |
 | 9  | Networking & Kernel Parameters                                     | [x]     | unverified                  | Tied to Demo 3; veth vs host comparison              |
@@ -8601,6 +8601,144 @@ this in ch. 5 (template design tradeoffs); the
 Latency book (Enberg) covers it in the "data
 structures for hot paths" chapter. Our benchmark now
 demonstrates it end-to-end.
+
+### 2026-05-10 — r59: 🎉 **DEMO-02 PASS — §6 verified — the data tells the cache-locality story**
+
+User ran r58's bulk-construction fix. Both phases
+completed cleanly. The summary table revealed numbers
+that make the §6 lesson textbook-clear:
+
+**Iterate-and-sum at N=262,144 (baseline µs):**
+
+    flat_map (contiguous):       911.7
+    vector + linear (contiguous): 866.1
+    unordered_map (hash, nodes): 2308.9    ← 2.5× slower
+    std::map  (RB tree, nodes): 32511.4    ← 35×  slower
+
+**Lookup at N=262,144 (baseline µs):**
+
+    unordered_map (hash, O(1)):    2.2     ← constant time wins
+    flat_map (binary search):    131.5
+    std::map (RB tree):          126.9
+    [vector linear scan dropped per r57]
+
+The cache-locality story is *visible in the data*:
+- Contiguous layouts (flat_map, vector) tie at ~900 µs
+- Hash table (node-based) is 2.5× slower
+- RB tree (node-based + branchy traversal) is **35×** slower
+- For O(1) lookups, hash table's constant time wins despite
+  the cache miss per probe — at 1000 lookups it's still <2 µs
+
+**Criterion 1** (cache-locality at room temperature):
+flat_map vs unordered_map iterate ratio = **2.53×**.
+Threshold ≥1.5×. ✓ **PASSES cleanly.**
+
+**Criterion 2** (pressure differential): all
+baseline-vs-pressured ratios near 1.00× — the 128M cgroup cap
+wasn't tight enough to differentiate at our working-set sizes
+(largest is ~33 MB raw payload, well under the cap even with
+overhead). Test script's permissive logic logs the hint to try
+`--memory 64m` rather than failing. The §11 angle (noisy
+neighbors) is demonstrable at tighter caps; the v1 demo's
+default cap proves it's stable, not pressured.
+
+**§6 (STL & Layout) flipped to verified** in the
+section matrix: "verified (r58, 2.5× contiguous win)."
+
+---
+
+#### Retrospective: 4 rounds (r55 → r58) plus this polish
+
+Demo-02 verification took **4 build rounds** (r55, r56, r57,
+r58) plus this r59 polish. Significantly tighter than demo-04's
+24-round saga because:
+
+- No native deps that fight UBI 9 + Conan (no openssl, no
+  gRPC, no protobuf, no abseil — none of the demo-04
+  toolchain hazards)
+- No multi-process observability stack to coordinate
+- Pattern recognition from demo-04 — the cppstd two-layer
+  (gnu17 deps / C++23 app) from G-27, the
+  static-link-everything default, the multi-stage UBI 9 +
+  ubi-minimal Containerfile, all transferred directly
+
+The demo-02 round trace:
+
+| Round | What it shipped / fixed | Sub-issue |
+|-------|-------------------------|-----------|
+| r55   | Full demo scaffold      | first ship |
+| r56   | `boost/*:header_only=True` | over-engineered without_X enumeration |
+| r57   | `BM_Lookup_VectorLinear` capped at N≤16384 | (defensive but wrong diagnosis) |
+| r58   | `fill_flat_map` via `ordered_unique_range` | **actual** hang fix |
+| r59   | Cosmetic: MinTime to CLI + test-script jq fix + verified | polish + flip |
+
+The honest takeaway from r57's wrong diagnosis: **a hung
+benchmark surfaces the first O(N²) case in registration
+order, not necessarily the most obvious one.** When
+debugging "the benchmark is hanging," intermediate
+print/log statements (or running with
+`--benchmark_filter='BM_Foo/[0-9]+'`) would have surfaced
+which specific case is hanging. Lesson for §6 prose.
+
+#### What demo-02 ships, as of r59
+
+- **Containerfile** — UBI 9 + gcc-toolset-14 + Conan;
+  cppstd=gnu17 profile for dep builds; multi-stage with
+  ubi-minimal runtime. Same shape as demo-04 but with
+  fewer deps and no override chain needed.
+- **conanfile.py** — `boost/1.86.0` with `header_only=True`
+  + `benchmark/1.9.1`. Three-line `default_options`.
+- **CMakeLists.txt** — per-target `CMAKE_CXX_STANDARD 23`
+  (the G-27 two-layer pattern), LTO on, `-O3 -DNDEBUG`,
+  no `-march=native` to avoid §14 AVX-512 pitfall.
+- **src/main.cpp** — 8 benchmark functions × 4 sizes
+  (with VectorLinear capped at 3 sizes per r57), bulk
+  `fill_flat_map` helper per r58 with comment block on
+  the §6 trap, MinTime via CLI to keep run_names clean.
+- **demo.sh** — orchestrates baseline + pressured runs;
+  robust name parsing in summary table.
+- **scripts/test-demo-02-stl-layout.sh** — pass/fail
+  with two criteria; jq pattern accepts either run_name
+  format.
+- **README.md** — walkthrough + what-to-look-for.
+- **§6 doc** — links to demo-02-stl-layout.
+
+**Build cost on clean cache: ~3-5 min** (header-only
+Boost + benchmark rebuild from source under gnu17).
+**Subsequent runs: <2 min** with cache; benchmark
+itself runs in ~30 s baseline + ~30 s pressured.
+
+---
+
+#### Updated verification matrix
+
+| Status | Sections |
+|---|---|
+| **Drafted + verified** | §4, §5, **§6 ← r59**, **§10 ← r51** |
+| Drafted only | §0-§3, §7-§9, §11-§15 |
+
+Three sections verified end-to-end. Items 3-5 remaining
+(demo-03 async gRPC + io_uring, PPTX deck, §13 prose
+folding §10 in).
+
+#### What r59 ships
+
+1. src/main.cpp: removed `->MinTime(0.05)` from
+   REGISTER_BENCH macros; comment block notes MinTime
+   is now via CLI.
+2. Containerfile: added `--benchmark_min_time=0.05s` to
+   CMD line. Clean run_names without modifier suffix.
+3. demo.sh: robust name parsing — `${name%%/*}` instead
+   of `${name%/*}`, plus sed for safe size extraction.
+   Tolerant of either modifier-suffixed or clean names.
+4. scripts/test-demo-02-stl-layout.sh: jq pattern uses
+   `startswith` with explicit separator, matches both
+   `name_median` and `name/modifier_median` formats.
+5. _plans/reconciliation-plan.md: §6 flipped to verified;
+   retrospective with the round trace and lessons.
+
+**Item 2 of 5 done.** Items 3-5 remain. Item 3 (demo-03
+async gRPC + io_uring) is next.
 
 ---
 
