@@ -44,6 +44,15 @@ if (( CLEAN_ONLY )); then
 fi
 
 cleanup() {
+    # Always capture demo-03-svc logs before tearing down, regardless
+    # of exit status. If the container crashed early, this is the only
+    # way to see WHY. Logs go to stderr so they appear in the failed
+    # build output above the "tearing down" line.
+    echo
+    echo "==> Capturing demo-03-svc logs (last 100 lines) before teardown:"
+    podman logs --tail=100 demo03-svc 2>&1 | sed 's/^/    /' || true
+    echo
+
     if (( KEEP_UP == 0 )); then
         echo "==> tearing down"
         "${COMPOSE[@]}" down -v 2>/dev/null || true
@@ -60,13 +69,28 @@ echo "==> Bringing up stack + service (--build; first run ~30-45 min)"
 "${COMPOSE[@]}" up -d --build
 
 echo "==> Waiting for demo-03-svc healthz to return 200"
+ready=0
 for i in {1..120}; do
     if curl -fsS --max-time 2 "http://127.0.0.1:18403" >/dev/null 2>&1; then
         echo "    demo-03-svc ready"
+        ready=1
+        break
+    fi
+    # If the container has already exited, no point waiting 120s
+    if ! podman ps --filter name=demo03-svc --filter status=running -q | grep -q .; then
+        echo "    demo-03-svc container is NOT running — early exit"
         break
     fi
     sleep 1
 done
+
+if (( ready == 0 )); then
+    echo
+    echo "==> Healthz never responded. Container state:"
+    podman ps -a --filter name=demo03-svc --format '    {{.Names}} {{.Status}}'
+    echo "==> Aborting load phases — see logs from cleanup trap below"
+    exit 1
+fi
 
 # ── Phase 1: gRPC load via ghz ────────────────────────────────────────
 #

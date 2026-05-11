@@ -21,6 +21,14 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://lgtm:4317"
       OTEL_SERVICE_NAME: "demo-03-svc"
       OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=tutorial"
+    # If the io_uring direct-echo server crashes on startup with
+    # `io_uring_queue_init: Operation not permitted` or similar,
+    # podman's default seccomp profile is blocking the `io_uring_setup`
+    # syscall. Uncomment the next two lines to disable seccomp for
+    # demo-03-svc (acceptable for a tutorial; production would write a
+    # custom seccomp profile that allows the io_uring family).
+    # security_opt:
+    #   - "seccomp=unconfined"
     ports:
       - "127.0.0.1:18403:8080"   # healthz
       - "127.0.0.1:50051:50051"  # gRPC Echo

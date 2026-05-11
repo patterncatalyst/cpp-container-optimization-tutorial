@@ -109,61 +109,107 @@ nostd::unique_ptr<api::metrics::Counter<std::uint64_t>>     g_tcp_asio_conns;
 nostd::unique_ptr<api::metrics::Histogram<double>>          g_grpc_latency_ms;
 
 void init_otel_traces(const std::string& otlp_endpoint) {
+    // Demo-04's verified pattern: factory returns std::unique_ptr,
+    // .release() gets the raw pointer, wrap in nostd::shared_ptr<api::T>
+    // for SetTracerProvider. Passing std::move(unique_ptr) directly to
+    // a nostd::shared_ptr constructor doesn't work because nostd's
+    // shared_ptr doesn't have a constructor that accepts std::unique_ptr.
     otlp::OtlpGrpcExporterOptions opts;
     opts.endpoint = otlp_endpoint;
-    auto exporter = otlp::OtlpGrpcExporterFactory::Create(opts);
+    auto exporter  = otlp::OtlpGrpcExporterFactory::Create(opts);
     auto processor = sdk_t::SimpleSpanProcessorFactory::Create(std::move(exporter));
     auto resource  = opentelemetry::v1::sdk::resource::Resource::Create({
         {"service.name", "demo-03-svc"},
         {"deployment.environment", "tutorial"}
     });
-    auto provider = sdk_t::TracerProviderFactory::Create(std::move(processor), resource);
-    api::trace::Provider::SetTracerProvider(
-        nostd::shared_ptr<api::trace::TracerProvider>(std::move(provider)));
+    auto provider_unique =
+        sdk_t::TracerProviderFactory::Create(std::move(processor), resource);
+    nostd::shared_ptr<api::trace::TracerProvider> provider(provider_unique.release());
+    api::trace::Provider::SetTracerProvider(provider);
 }
 
 void init_otel_metrics(const std::string& otlp_endpoint) {
+    // Match demo-04's verified pattern (its init_otel was the
+    // shake-down from rounds r28-r52). Key subtleties:
+    //
+    // 1. Build the SDK MeterProvider as std::shared_ptr<sdk_m::MeterProvider>
+    //    so we have a typed handle to call AddMetricReader on.
+    //    MeterProviderFactory's convenience overload returns the API
+    //    base type which doesn't expose AddMetricReader.
+    //
+    // 2. The api::Provider::SetMeterProvider() entry point takes
+    //    nostd::shared_ptr<api::MeterProvider>, not std::shared_ptr.
+    //    Construct one from the raw pointer of sdk_provider, upcast
+    //    to api::MeterProvider.
+    //
+    // 3. **Manually leak sdk_provider** to a static so the
+    //    std::shared_ptr-managed memory stays alive after this
+    //    function returns. nostd::shared_ptr's aliasing
+    //    constructor doesn't share ownership with std::shared_ptr;
+    //    if we don't keep sdk_provider alive, the global Provider
+    //    ends up holding a dangling pointer the moment this
+    //    function returns. Demo-04 documents this exhaustively.
+
     otlp::OtlpGrpcMetricExporterOptions opts;
     opts.endpoint = otlp_endpoint;
     auto exporter = otlp::OtlpGrpcMetricExporterFactory::Create(opts);
-    sdk_m::PeriodicExportingMetricReaderOptions reader_opts{};
+
+    sdk_m::PeriodicExportingMetricReaderOptions reader_opts;
     reader_opts.export_interval_millis = std::chrono::milliseconds(5000);
     reader_opts.export_timeout_millis  = std::chrono::milliseconds(2000);
     auto reader = sdk_m::PeriodicExportingMetricReaderFactory::Create(
         std::move(exporter), reader_opts);
-    auto resource = opentelemetry::v1::sdk::resource::Resource::Create({
-        {"service.name", "demo-03-svc"}
-    });
-    auto provider = std::shared_ptr<api::metrics::MeterProvider>(
-        new sdk_m::MeterProvider(
-            std::make_unique<sdk_m::ViewRegistry>(),
-            resource));
-    static_cast<sdk_m::MeterProvider*>(provider.get())
-        ->AddMetricReader(std::move(reader));
-    api::metrics::Provider::SetMeterProvider(provider);
 
-    auto meter = provider->GetMeter("demo-03-svc");
+    auto resource = opentelemetry::v1::sdk::resource::Resource::Create({
+        {"service.name", "demo-03-svc"},
+        {"deployment.environment", "tutorial"}
+    });
+
+    auto views = std::unique_ptr<sdk_m::ViewRegistry>(new sdk_m::ViewRegistry());
+    auto sdk_provider = std::shared_ptr<sdk_m::MeterProvider>(
+        new sdk_m::MeterProvider(std::move(views), resource));
+    sdk_provider->AddMetricReader(
+        std::shared_ptr<sdk_m::MetricReader>(std::move(reader)));
+
+    // Upcast to nostd::shared_ptr<api::MeterProvider>.
+    nostd::shared_ptr<api::metrics::MeterProvider> api_provider(
+        static_cast<api::metrics::MeterProvider*>(sdk_provider.get()));
+    // Keep sdk_provider alive past this scope by leaking to a static.
+    static auto leak [[maybe_unused]] = sdk_provider;
+    api::metrics::Provider::SetMeterProvider(api_provider);
+
+    // Now we can grab a Meter and create instruments. These return
+    // nostd::unique_ptr per OTel-cpp 1.14's nostd:: pointer family
+    // (G-63 in demo-03's round trace, not a G-series gotcha but a
+    // related code-style issue).
+    auto meter = api::metrics::Provider::GetMeterProvider()
+                     ->GetMeter("demo-03-svc");
     g_grpc_requests = meter->CreateUInt64Counter(
         "demo3.grpc.requests", "Total gRPC Echo requests handled");
     g_tcp_iouring_conns = meter->CreateUInt64Counter(
-        "demo3.tcp.iouring.connections", "Total connections handled by io_uring echo");
+        "demo3.tcp.iouring.connections",
+        "Total connections handled by io_uring echo");
     g_tcp_asio_conns = meter->CreateUInt64Counter(
-        "demo3.tcp.asio.connections", "Total connections handled by Asio echo");
+        "demo3.tcp.asio.connections",
+        "Total connections handled by Asio echo");
     g_grpc_latency_ms = meter->CreateDoubleHistogram(
-        "demo3.grpc.latency", "gRPC Echo end-to-end latency in milliseconds", "ms");
+        "demo3.grpc.latency",
+        "gRPC Echo end-to-end latency in milliseconds", "ms");
 }
 
 void init_otel_logs(const std::string& otlp_endpoint) {
+    // Same .release() + nostd::shared_ptr<api::T> pattern as traces.
     otlp::OtlpGrpcLogRecordExporterOptions opts;
     opts.endpoint = otlp_endpoint;
-    auto exporter = otlp::OtlpGrpcLogRecordExporterFactory::Create(opts);
+    auto exporter  = otlp::OtlpGrpcLogRecordExporterFactory::Create(opts);
     auto processor = sdk_l::SimpleLogRecordProcessorFactory::Create(std::move(exporter));
-    auto resource = opentelemetry::v1::sdk::resource::Resource::Create({
+    auto resource  = opentelemetry::v1::sdk::resource::Resource::Create({
         {"service.name", "demo-03-svc"}
     });
-    auto provider = sdk_l::LoggerProviderFactory::Create(std::move(processor), resource);
-    api::logs::Provider::SetLoggerProvider(
-        nostd::shared_ptr<api::logs::LoggerProvider>(std::move(provider)));
+    auto provider_unique =
+        sdk_l::LoggerProviderFactory::Create(std::move(processor), resource);
+    nostd::shared_ptr<api::logs::LoggerProvider> provider(provider_unique.release());
+    api::logs::Provider::SetLoggerProvider(provider);
 }
 
 void init_otel(const std::string& otlp_endpoint) {
@@ -219,16 +265,23 @@ public:
     }
 };
 
-void run_grpc_server(const std::string&         listen_address,
-                     std::atomic<bool>&         shutdown,
+void run_grpc_server(const std::string&             listen_address,
+                     std::atomic<bool>&             shutdown,
                      std::unique_ptr<grpc::Server>& out_server) {
     EchoServiceImpl service;
     grpc::ServerBuilder builder;
     builder.AddListeningPort(listen_address, grpc::InsecureServerCredentials());
     builder.RegisterService(&service);
     out_server = builder.BuildAndStart();
+    if (!out_server) {
+        std::cerr << "[grpc]    BuildAndStart() returned null — could not "
+                  << "bind " << listen_address
+                  << " (port in use? permission issue?)\n";
+        return;
+    }
     std::cerr << "[grpc]    listening on " << listen_address << "\n";
     out_server->Wait();
+    std::cerr << "[grpc]    Wait() returned, server shutting down\n";
     (void)shutdown;
 }
 

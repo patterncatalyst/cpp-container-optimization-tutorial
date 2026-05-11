@@ -9218,6 +9218,194 @@ have prevented it. Adding to the §3/§13 "lessons learned"
 list rather than the G-series gotcha catalog because it's
 a code-style issue rather than a toolchain trap.
 
+### 2026-05-10 — r64: demo-03 container segfaults under load — dangling `MeterProvider` after init returns
+
+User ran r63. **Compile + link succeeded.** Image built in
+12.8s. Container started cleanly. Then everything went
+sideways:
+
+    ==> Waiting for demo-03-svc healthz to return 200
+    [healthz succeeded — output transitions straight to Phase 1
+     without the "container NOT running" error path firing]
+    ==> Phase 1 — gRPC Echo load via ghz (10s, 50 concurrent)
+    [ghz reports 1,077,103 requests all failing:
+     rpc error: code = Unavailable
+     ... lookup demo03-svc on 10.89.1.1:53: no such host]
+    ==> Phase 2 — io_uring direct echo (:9000) load
+    Error: can only create exec sessions on running containers:
+           container state improper
+
+**Critical timing read.** Healthz succeeded → container was
+alive at probe time. Then ghz launched and ran for 10
+seconds, hitting :50051 over and over. By the time Phase 2
+started its `podman exec`, the container had **died** (state
+improper). The DNS failures from ghz are then the secondary
+symptom — once the container exits, aardvark-dns
+deregisters its name from the `tutorial-obs` network.
+
+**So the container survived startup but died under load.**
+That timing is incompatible with most of the candidates from
+r61's anticipated-outcomes list:
+
+- `io_uring_queue_init` EPERM would fail at startup, before
+  healthz — not the issue here
+- gRPC `BuildAndStart()` returning null would also fail at
+  startup — not the issue
+- OTel collector connectivity issues would manifest as
+  warnings, not crashes
+
+**What can crash specifically once traffic arrives?** The
+metric Counter `Add(1)` call. And the most plausible reason
+that crashes: my MeterProvider pattern in r61/r63 doesn't
+keep the `std::shared_ptr<sdk_m::MeterProvider>` alive past
+the init function's scope.
+
+**The actual bug.** My init_otel_metrics did:
+
+    auto provider = std::shared_ptr<api::metrics::MeterProvider>(
+        new sdk_m::MeterProvider(views, resource));
+    static_cast<sdk_m::MeterProvider*>(provider.get())
+        ->AddMetricReader(std::move(reader));
+    api::metrics::Provider::SetMeterProvider(provider);
+
+Two problems:
+
+1. `SetMeterProvider()` takes
+   `nostd::shared_ptr<api::metrics::MeterProvider>`, not
+   `std::shared_ptr`. If this compiled at all, it must
+   have been via some implicit conversion that's
+   semantically broken — the global Provider holds a
+   `nostd::shared_ptr` that doesn't share ownership with
+   the function-local `std::shared_ptr`.
+2. When `init_otel_metrics` returns, the local
+   `std::shared_ptr<sdk_m::MeterProvider>` is destroyed →
+   the underlying SDK MeterProvider is freed → the global
+   Provider's `nostd::shared_ptr` (or whatever ends up
+   there) now references freed memory → the `meter`
+   captured by Counter objects is dangling → first
+   `g_grpc_requests->Add(1)` from the gRPC handler segfaults.
+
+This matches the timing exactly. Healthz handler doesn't
+touch metrics, so it works. gRPC Echo handler calls
+`g_grpc_requests->Add(1)`, the container segfaults, exits,
+DNS deregisters, podman exec fails.
+
+**Demo-04's pattern** (the one verified end-to-end through
+24 rounds) does:
+
+    auto sdk_provider = std::shared_ptr<sdk_m::MeterProvider>(
+        new sdk_m::MeterProvider(std::move(views), resource));
+    sdk_provider->AddMetricReader(
+        std::shared_ptr<sdk_m::MetricReader>(std::move(reader)));
+
+    nostd::shared_ptr<api::metrics::MeterProvider> api_provider(
+        static_cast<api::metrics::MeterProvider*>(sdk_provider.get()));
+    // **Manually leak sdk_provider** so the std::shared_ptr-managed
+    // memory stays alive after this scope exits.
+    static auto leak [[maybe_unused]] = sdk_provider;
+    api::metrics::Provider::SetMeterProvider(api_provider);
+
+The manual leak is the load-bearing piece. Without it, the
+nostd::shared_ptr dangles after init returns. Demo-04
+documents this exhaustively in a comment block. r61 didn't
+copy that pattern; r64 does.
+
+**The trace/log init also had a subtler issue.** My code did:
+
+    auto provider = sdk_t::TracerProviderFactory::Create(...);
+    api::trace::Provider::SetTracerProvider(
+        nostd::shared_ptr<api::trace::TracerProvider>(std::move(provider)));
+
+That `nostd::shared_ptr` constructor doesn't accept
+`std::unique_ptr<T>&&`. Demo-04 uses `.release()`:
+
+    auto provider_unique = sdk_t::TracerProviderFactory::Create(...);
+    nostd::shared_ptr<api::trace::TracerProvider> provider(
+        provider_unique.release());
+    api::trace::Provider::SetTracerProvider(provider);
+
+This may have compiled with a warning or via some unintended
+implicit conversion in my version, but the semantics are
+wrong — `nostd::shared_ptr` and `std::unique_ptr` don't
+compose. Fixed for both traces and logs.
+
+**Defensive gRPC null check.** Added explicit `nullptr` check
+on `grpc::ServerBuilder::BuildAndStart()`. If it ever returns
+null in the future (port conflict, address issue), we log
+cleanly instead of dereferencing in `out_server->Wait()`.
+
+**What r64 ships:**
+
+1. `src/main.cpp`:
+   - `init_otel_traces`: switched to `.release()` →
+     `nostd::shared_ptr` constructor (matches demo-04)
+   - `init_otel_metrics`: full rewrite to demo-04's verified
+     pattern — `std::shared_ptr<sdk_m::MeterProvider>`,
+     `static auto leak` for sdk_provider lifetime,
+     `nostd::shared_ptr<api::T>` upcast for the global
+     registry. Substantial comment block explaining the
+     three subtleties.
+   - `init_otel_logs`: same `.release()` fix as traces
+   - `run_grpc_server`: null check on `BuildAndStart()`,
+     logs cleanly + early-return instead of segfaulting on
+     null deref
+
+**What r64 doesn't change:**
+
+- The demo.sh fail-on-healthz logic is already correct (the
+  stale r64 entry assumed it wasn't; re-reading the user's
+  output shows healthz actually succeeded — the diagnostics
+  there are working)
+- Containerfile, conanfile.py, CMakeLists.txt, compose.yml:
+  unchanged
+- io_uring code, Asio code, tcp_loadgen.cpp: unchanged
+- Test/regenerate scripts: unchanged
+
+**Lesson for §3 (RAII) / §13 (Reproducibility) prose.**
+**Singletons-via-raw-pointer-in-shared_ptr requires explicit
+lifetime management.** OTel-cpp's API uses `nostd::shared_ptr`
+to be ABI-stable across stdlib versions, but it doesn't
+share ownership with std types. When you build an SDK
+provider with `std::shared_ptr` (because the SDK type has
+methods you need) and then register it via a `nostd::`
+API, you have to keep the std reference alive yourself —
+the nostd registration won't do it for you. The "manual
+leak to static" pattern is the documented workaround in
+the OTel-cpp examples; it's the kind of API quirk that's
+obvious in retrospect and easy to miss the first time.
+
+This is closely related to G-29 (incomplete-type unique_ptr)
+in spirit: the C++ type system shows you part of the
+problem, the rest is left to the programmer's awareness of
+the library's lifetime contract.
+
+**Anticipated outcomes:**
+
+- **Best case:** rebuild, container survives the gRPC load,
+  Phase 2 + 3 reach `tcp-loadgen` via podman exec, signals
+  arrive in LGTM. Demo-03 verifies cleanly.
+- **Container still crashes on first metric Add:** would
+  mean the MeterProvider pattern isn't the issue. Next
+  suspects: histogram-specific bug, or some other code
+  path I haven't audited. Logs (now reliably captured by
+  the demo.sh's existing cleanup trap) would show the
+  segfault location.
+- **Container survives gRPC load but crashes on Asio /
+  io_uring traffic:** would point at the io_uring loop or
+  Asio session code. Same diagnostic path.
+- **All three load phases succeed, signals don't reach
+  LGTM:** the original "is the wiring right" question.
+  Tractable from there.
+
+User reruns:
+
+    ./examples/demo-03-io-uring-grpc/demo.sh
+
+Or with formal pass/fail:
+
+    ./scripts/test-demo-03-io-uring-grpc.sh
+
+
 ---
 
 ## Known divergences from the PRD
