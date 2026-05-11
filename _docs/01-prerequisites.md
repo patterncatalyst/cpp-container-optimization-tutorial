@@ -353,7 +353,7 @@ The repo lays out as:
 ├── _plans/                    # reconciliation plan
 ├── examples/                  # six runnable demos
 │   ├── demo-01-image-strategy/
-│   ├── demo-02-memory-and-stl/
+│   ├── demo-02-stl-layout/
 │   └── ...
 ├── observability/             # Grafana/Prom/Mimir/Tempo/Loki stack
 ├── scripts/                   # helpers + per-demo test scripts

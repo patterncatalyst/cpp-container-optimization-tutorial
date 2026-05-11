@@ -55,7 +55,7 @@ See [PRD.md](PRD.md) §3 for the complete non-goals list.
 │   └── images/              ← screenshots, hero
 ├── examples/                ← runnable demos (excluded from site build)
 │   ├── demo-01-image-strategy/
-│   ├── demo-02-memory-and-stl/
+│   ├── demo-02-stl-layout/
 │   ├── demo-03-io-uring-grpc/
 │   ├── demo-04-observability/
 │   ├── demo-05-isolation/
@@ -74,7 +74,7 @@ that the aggregator `scripts/test-all-demos.sh` runs in CI.
 | # | Demo                                                           | Topics                                                                  |
 |---|----------------------------------------------------------------|-------------------------------------------------------------------------|
 | 1 | [`demo-01-image-strategy`](examples/demo-01-image-strategy/)   | UBI vs scratch, multi-stage, LTO, PGO, ABI labels                       |
-| 2 | [`demo-02-memory-and-stl`](examples/demo-02-memory-and-stl/)   | C++23 `flat_set`, PMR allocator, huge pages, cgroup memory limits       |
+| 2 | [`demo-02-stl-layout`](examples/demo-02-stl-layout/)   | `flat_map` vs `unordered_map` vs `std::vector` linear scan; Google Benchmark; cgroup memory pressure |
 | 3 | [`demo-03-io-uring-grpc`](examples/demo-03-io-uring-grpc/)     | `io_uring` echo + async gRPC + `SO_REUSEPORT`, `hey` load gen           |
 | 4 | [`demo-04-observability`](examples/demo-04-observability/)     | The full Grafana stack + OTel-instrumented C++ + `bpftrace` probes      |
 | 5 | [`demo-05-isolation`](examples/demo-05-isolation/)             | Two-tenant noisy neighbor: cpu.weight, io.weight, cpuset, NUMA          |

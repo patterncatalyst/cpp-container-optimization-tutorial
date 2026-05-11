@@ -45,7 +45,7 @@ By the end of this section you can:
 
 ## Demo
 
-[`examples/demo-02-memory-and-stl/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-02-memory-and-stl)
+[`examples/demo-02-stl-layout/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-02-stl-layout)
 benchmarks the same hot loop with `std::map`, `std::unordered_map`,
 sorted `std::vector`, and `std::flat_map`, on representative key
 distributions. The output is a CSV; the demo's

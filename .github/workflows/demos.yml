@@ -47,7 +47,7 @@ jobs:
         run: bash scripts/test-demo-01-image-strategy.sh
 
       - name: Run demo-02 smoke test
-        run: bash scripts/test-demo-02-memory-and-stl.sh
+        run: bash scripts/test-demo-02-stl-layout.sh
 
       - name: Run demo-06 smoke test
         run: bash scripts/test-demo-06-quality-pipeline.sh

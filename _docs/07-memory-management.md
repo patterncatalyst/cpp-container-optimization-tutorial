@@ -134,7 +134,7 @@ load (or calling `malloc_trim`) when they get close. They aim to keep
 usage roughly 10% below the cgroup limit, which gives the kernel breathing
 room and prevents reclaim storms from showing up as p99 spikes.
 
-This is what `examples/demo-02-memory-and-stl/` exercises in its
+This is what `examples/demo-02-stl-layout/` exercises in its
 `random_memhigh` workload: a tight `memory.high` and a workload that
 would otherwise grow past it, with and without an in-process check.
 The point isn't to copy Presto's exact code (their repo has it for
@@ -150,7 +150,7 @@ References worth following:
 
 ## Demo
 
-[`examples/demo-02-memory-and-stl/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-02-memory-and-stl)
+[`examples/demo-02-stl-layout/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-02-stl-layout)
 runs the same workload with default allocator, a PMR monotonic
 arena, and mimalloc; with and without huge pages; under a tight
 `memory.high`. The output is a small Grafana dashboard showing

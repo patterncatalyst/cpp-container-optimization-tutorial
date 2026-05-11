@@ -1,0 +1,85 @@
+# Demo-02 — STL & layout benchmark.
+#
+# Builds a Google Benchmark binary that compares std::unordered_map
+# / std::map / boost::container::flat_map / std::vector<pair> on
+# lookup and iterate operations across four sizes. The same image
+# gets run twice by demo.sh — once unconstrained, once under a
+# cgroup memory cap — to demonstrate how data layout determines
+# cache locality under memory pressure (§6 lesson).
+#
+# Why UBI 9 + gcc-toolset-14: same base as demo-04, same toolset.
+# This is the project's standard build environment, see §0 / §1.
+#
+# Conan dep set (boost, benchmark) is simpler than demo-04's
+# (gRPC, OTel-cpp, protobuf, abseil) — no overrides needed, no
+# lockfile needed for v1. If recipe revision drift bites later
+# (G-25), we'd convert the same way demo-04 did.
+
+FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
+
+# Same dnf set as demo-04 — perl modules listed because Conan's
+# from-source builds of openssl/zlib/etc. need them, even though
+# this demo doesn't use OpenSSL directly. Conservative inclusion
+# saves a future round if some transitive dep pulls them in.
+# (G-13, G-15, G-17 in the reconciliation plan have the long story.)
+RUN dnf install -y --quiet --setopt=install_weak_deps=False \
+        gcc-toolset-14 \
+        cmake ninja-build git python3-pip \
+        perl-FindBin perl-IPC-Cmd perl-Data-Dumper perl-Pod-Html \
+        perl-Pod-Usage perl-File-Compare perl-File-Copy perl-File-Path \
+        perl-Time-Piece perl-Getopt-Long perl-Digest-SHA \
+        perl-threads perl-threads-shared perl-Thread-Queue \
+        perl-Term-ANSIColor \
+        which \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf/*
+
+# Activate gcc-toolset-14 for all subsequent RUN commands.
+ENV PATH="/opt/rh/gcc-toolset-14/root/usr/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
+
+RUN pip install --quiet "conan~=2.0"
+
+# Profile detection + cppstd=gnu17 for dep builds. Our app's
+# CMakeLists.txt sets CMAKE_CXX_STANDARD 23 at the target level
+# so the benchmark itself uses C++23 features — same two-layer
+# pattern demo-04 settled on (G-27).
+RUN conan profile detect --force && \
+    sed -i 's|^compiler.cppstd=.*|compiler.cppstd=gnu17|' \
+        /root/.conan2/profiles/default
+
+WORKDIR /src
+
+COPY conanfile.py ./
+RUN conan install . --output-folder=build/conan \
+                    -s build_type=Release \
+                    --build=missing
+
+COPY src/ ./src/
+COPY CMakeLists.txt ./
+
+RUN cmake -S . -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_TOOLCHAIN_FILE=build/conan/conan_toolchain.cmake \
+    && cmake --build build -j"$(nproc)" \
+    && strip --strip-all build/stl-bench
+
+# ════════════════════════════════════════════════════════════════════════
+# Runtime stage — ubi-minimal. The benchmark binary is statically
+# linked against boost (header-only here) and benchmark (we asked
+# Conan for static libs). The only runtime dep is libstdc++.
+# ════════════════════════════════════════════════════════════════════════
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
+
+RUN microdnf install -y --setopt=install_weak_deps=0 \
+        libstdc++ \
+    && microdnf clean all \
+    && rm -rf /var/cache/yum
+
+COPY --from=builder /src/build/stl-bench /usr/local/bin/stl-bench
+
+# Default to running with JSON output to stdout so demo.sh / test
+# script can parse cleanly. Override with `--benchmark_format=console`
+# for human-readable output during interactive use.
+ENTRYPOINT ["/usr/local/bin/stl-bench"]
+CMD ["--benchmark_format=json", "--benchmark_repetitions=3", "--benchmark_min_warmup_time=0.1"]

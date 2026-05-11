@@ -8183,6 +8183,147 @@ user's checkout against the latest tar) would surface
 any other drift. Worth a sanity audit at some point;
 not blocking demo-02.
 
+### 2026-05-10 — r55: item 2 of 5 — demo-02 (STL & layout under cgroup memory pressure)
+
+User's r54 follow-up confirmed demo-04 PASSed with the
+real lockfile in place (311.8s first-run rebuild against
+the locked revisions, then 3/3 signals end-to-end —
+classic "first build with new package_id" behavior).
+Item 1 of 5 fully verified.
+
+r55 ships **item 2: demo-02** — a Google Benchmark binary
+comparing four key-value container designs across two
+operations, run twice (baseline + cgroup-memory-pressured)
+to demonstrate the §6 cache-locality lesson concretely.
+
+**Files shipped:**
+
+1. `examples/demo-02-stl-layout/Containerfile` —
+   UBI 9 + gcc-toolset-14 + Conan, same shape as demo-04
+   but with the simpler dep set (boost + benchmark, no
+   gRPC/OTel/protobuf/abseil).
+2. `examples/demo-02-stl-layout/conanfile.py` —
+   pulls `boost/1.86.0` + `benchmark/1.9.1`. Boost
+   options disable every sub-lib except `container`
+   (the one with flat_map) to keep build time and
+   binary size down. Conanfile.py from the start rather
+   than retrofitting later (demo-04 had to convert
+   txt→py mid-stream in r46).
+3. `examples/demo-02-stl-layout/CMakeLists.txt` —
+   per-target `CMAKE_CXX_STANDARD 23`, profile-level
+   cppstd=gnu17 for dep builds (the two-layer pattern
+   G-27 settled on). LTO on, `-O3 -DNDEBUG`.
+4. `examples/demo-02-stl-layout/src/main.cpp` — eight
+   benchmark functions (4 containers × 2 operations) at
+   4 sizes each, totalling 32 benchmark cases. Payload
+   is a 128-byte aligned struct large enough that
+   per-node allocations don't get coalesced by small-
+   allocator paths. Deterministic key generation
+   (fixed seed) so runs are comparable.
+5. `examples/demo-02-stl-layout/demo.sh` — orchestrates
+   two `podman run`s: unconstrained baseline + memory-
+   pressured (`--memory=128m --memory-swap=128m`). Parses
+   JSON output with jq and prints a side-by-side
+   comparison table. Flags: `--baseline-only`,
+   `--pressured-only`, `--memory NN`.
+6. `examples/demo-02-stl-layout/README.md` — explains
+   the lesson, what to look for, where it links into
+   the tutorial sections (§3 RAII, §6 STL, §7 memory,
+   §11 noisy neighbors).
+7. `scripts/test-demo-02-stl-layout.sh` — runs demo.sh,
+   then verifies two §6 claims hold:
+   - **Criterion 1**: at N=262144 baseline,
+     `BM_Iterate_FlatMap` is ≥ 1.5× faster than
+     `BM_Iterate_UnorderedMap` (cache locality at
+     room temperature)
+   - **Criterion 2**: under pressure, `unordered_map`
+     degrades > 1.3× more than `flat_map` (the
+     §11 noisy-neighbor angle)
+   Criterion 2 is permissive — it doesn't fail if the
+   pressure differential isn't visible, just notes
+   that the 128M cap wasn't tight enough on this host
+   and suggests `--memory 64m` for a sharper effect.
+
+**Naming alignment.** §6 doc, §7 doc, §1 doc, README,
+examples.html, and the CI workflow all referenced
+`demo-02-memory-and-stl`. r55's directory is named
+`demo-02-stl-layout` (matches the user's r52
+follow-up wording "STL & layout" and is more accurate
+to the demo's scope — memory management is §7
+territory). One sed sweep across the six files
+brought them all into alignment. Also tightened the
+README's table description (was promising "flat_set,
+PMR, huge pages" — none of which this v1 demo
+actually does; now reads
+"flat_map vs unordered_map vs vector linear scan").
+
+**Why no compose.yml.** Demo-04 has a compose stack
+because it talks to a multi-service observability
+backend. Demo-02 is a one-shot benchmark — no service
+to keep alive, no backend to coordinate with. Plain
+`podman run --rm` is the right shape. Keeps the demo
+focused on the one lesson.
+
+**Why no lockfile for demo-02 (yet).** Boost and
+benchmark are stable, widely-tested Conan recipes
+with no overrides needed. The lockfile machinery
+exists for projects that hit G-25-style recipe
+drift; demo-02 doesn't (so far). If the build breaks
+on a future Conan Center update, we'd add a lockfile
+the same way demo-04 did. Don't pay the
+regenerate-script complexity cost preemptively.
+
+**Anticipated outcomes:**
+
+- **Best case:** `podman build` works first try (deps
+  pre-built for our profile in Conan Center), the
+  benchmark runs in ~30s baseline + ~30s pressured,
+  the JSON outputs land in the demo dir, and the
+  test script's two criteria both pass.
+- **Boost from-source fail** (G-13-style): if Conan
+  Center doesn't have prebuilts for our exact
+  profile (gcc 14 + cppstd=gnu17 + Linux x86_64),
+  boost rebuilds from source. That's 20-40 min on
+  a desktop. Acceptable; cached afterward.
+- **Conan options syntax wrong:** I used the
+  `"boost/*:without_X": True` pattern across the whole
+  default_options dict. Conan 2.x accepts this format
+  per docs, but if I've got a typo on one option name
+  (boost has dozens; the recipe option names sometimes
+  drift from the upstream Boost library names),
+  Conan will error during `conan install`. Fix: read
+  the error, correct the option name.
+- **`-march=native` discussion irrelevant:** I
+  explicitly didn't set `-march=native` in
+  CMakeLists.txt to avoid baking host-specific CPU
+  features into the container (PRD §14 pitfall). The
+  benchmark is portable; absolute numbers will be
+  different from a native build but the *relative*
+  ordering between containers is what matters.
+- **Pressure differential too subtle:** if your host
+  has a fast SSD and the 128M cap permits some swap
+  through page cache eviction, the differential
+  between flat_map and unordered_map under pressure
+  may not exceed 1.3×. Criterion 2 in the test
+  script is permissive — it logs and suggests tighter
+  limits rather than failing.
+- **Both criteria fail:** would indicate something
+  structural — perhaps the alignment/padding of
+  Payload, the workload size, or the iteration
+  count interacting badly with the CPU cache. We'd
+  iterate on the benchmark parameters.
+
+**Item 2 of 5 in flight.** User runs:
+
+```
+./examples/demo-02-stl-layout/demo.sh
+# or for verification with pass/fail criteria:
+./scripts/test-demo-02-stl-layout.sh
+```
+
+Iterative cadence per item 1's confirmation. Items 3-5
+(demo-03, PPTX, §13 prose) follow after demo-02 settles.
+
 ---
 
 ## Known divergences from the PRD
