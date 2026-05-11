@@ -223,7 +223,7 @@ under `scripts/test-<demo>.sh` for CI verification.
 | # | Name                | Topic mapping                                                                                                                  | Runs via                                |
 |---|---------------------|--------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------|
 | 1 | image-strategy      | UBI vs UBI-micro, multi-stage, LTO, PGO, ABI labels — §3, §4, §12                                                                | `podman build` + `podman run`           |
-| 2 | memory-and-stl      | `std::vector` vs C++23 `flat_set`, PMR, mimalloc swap, huge pages, cgroup memory.high — §5, §6                                 | `podman run` with cgroup limits         |
+| 2 | stl-layout          | `std::vector` vs `boost::container::flat_map` vs `std::unordered_map` cache-locality benchmark with cgroup memory pressure — §6 (PMR/huge pages/mimalloc moved to §7 prose since demo-02's scope tightened to STL-only — see _plans/reconciliation-plan.md r55) | `podman run` with cgroup limits         |
 | 3 | io-uring-grpc       | io_uring TCP echo + async gRPC service with `SO_REUSEPORT`; `hey` for load — §7, §8                                            | `podman compose up` (2 services)        |
 | 4 | observability       | The full stack: Grafana + Prometheus + Tempo + Loki + Mimir; OTel-instrumented C++ service; `perf record` + `bpftrace` probes  | `podman compose up` (full stack)        |
 | 5 | isolation           | Noisy neighbor: two C++ services contending for CPU + memory + I/O; `--cpuset-cpus`, `cpu.weight`, NUMA pinning, veth latency  | `podman compose up` (2 tenants + load)  |
@@ -419,9 +419,9 @@ substitution.
 | Skeleton scaffolded; \_config.yml, layouts, includes branded    | 2-3 hours        | [ ]   |
 | §1 prerequisites drafted and verified on fresh Fedora 44        | 3-4 hours        | [ ]   |
 | Demo 1 (image-strategy) working end-to-end                      | 6-8 hours        | [ ]   |
-| Demo 2 (memory-and-stl) working end-to-end                      | 8-10 hours       | [ ]   |
-| Demo 3 (io-uring-grpc) working end-to-end                       | 10-14 hours      | [ ]   |
-| Demo 4 (observability) compose stack up + OTel C++ wired        | 12-16 hours      | [ ]   |
+| Demo 2 (stl-layout) working end-to-end                          | 8-10 hours       | [x]   |
+| Demo 3 (io-uring-grpc) working end-to-end                       | 10-14 hours      | [x]   |
+| Demo 4 (observability) compose stack up + OTel C++ wired        | 12-16 hours      | [x]   |
 | Demo 5 (isolation) two-tenant scenario reproducible             | 8-10 hours       | [ ]   |
 | Demo 6 (quality-pipeline) including abidiff and gdbserver       | 10-12 hours      | [ ]   |
 | All §3-§14 sections drafted (zero-draft)                        | 30-40 hours      | [ ]   |

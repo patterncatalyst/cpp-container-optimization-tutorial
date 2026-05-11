@@ -68,9 +68,9 @@ on a clean Fedora 44 host; that's what the verification pass turns
 | #  | Demo name           | `demo.sh` builds | `test-demo-NN.sh` passes | Last verified on             | Notes                                                   |
 |----|---------------------|------------------|--------------------------|------------------------------|---------------------------------------------------------|
 | 1  | image-strategy      | [x]              | [x]                      | 2026-05-09 (r20)             | UBI multistage / ubi-micro (-static) / single-stage-naive / pgo + ubi-micro-glibc-mismatch teaching variant; image sizes 689 MB → 26.4 MB (26× reduction); 4 working variants p50 = 40.7-40.8 ms; teaching variant cleanly captures GLIBC_2.35 trap |
-| 2  | memory-and-stl      | [ ]              | [ ]                      | —                            | PMR allocator + cgroup memory.high + huge pages         |
-| 3  | io-uring-grpc       | [ ]              | [ ]                      | —                            | 2-service compose; `hey` load gen                       |
-| 4  | observability       | [ ]              | [ ]                      | —                            | Full Grafana+Prom+Tempo+Loki+Mimir stack                |
+| 2  | stl-layout          | [x]              | [x]                      | 2026-05-10 (r59)             | `boost::container::flat_map` vs `std::unordered_map` vs `std::vector` linear scan; cache-locality win at N=262K: contiguous 911µs vs node-based 2,309µs (2.5×); renamed from memory-and-stl in r55 — PMR/huge pages moved to §7 prose |
+| 3  | io-uring-grpc       | [x]              | [x]                      | 2026-05-10 (r67)             | 3 servers in one binary (gRPC callback API + direct liburing + Asio io_uring); load: gRPC 4.85K RPS p99=30.92ms, io_uring 274K req/s p99=181µs, Asio 349K req/s p99=110µs; ships compose.production.yml with custom seccomp + custom SELinux module |
+| 4  | observability       | [x]              | [x]                      | 2026-05-10 (r52)             | Full LGTM stack (Grafana+Loki+Tempo+Mimir bundled in otel-lgtm:0.8.1); OTel-cpp traces+metrics+logs all reach the stack; Conan lockfile pinned in r53-r54 for reproducibility |
 | 5  | isolation           | [ ]              | [ ]                      | —                            | 2-tenant noisy neighbor; cgroup weights                 |
 | 6  | quality-pipeline    | [ ]              | [ ]                      | —                            | cppcheck + clang-tidy + gtest + abidiff + gdbserver     |
 
