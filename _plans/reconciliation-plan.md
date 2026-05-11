@@ -8740,6 +8740,77 @@ folding §10 in).
 **Item 2 of 5 done.** Items 3-5 remain. Item 3 (demo-03
 async gRPC + io_uring) is next.
 
+### 2026-05-10 — r60: postscript fix — test script jq matched the wrong JSON field
+
+User reran on r59. demo.sh's summary table rendered
+cleanly (no more `min_time:0.050` cruft in the size
+column) — r59's CMD-line MinTime + name-parse fix
+both worked.
+
+But running the *test* script (which the user did to
+verify the formal pass/fail criteria) failed:
+
+    [fail]  Couldn't extract baseline iterate times for N=262144
+
+Cause: Google Benchmark's aggregate JSON entries have
+TWO name fields, not one, and my r59 fix to the test
+script's jq pattern picked the wrong one:
+
+    name:           "BM_Foo/N_median"      ← has aggregate suffix
+    run_name:       "BM_Foo/N"             ← NO suffix
+    aggregate_name: "median"               ← separate field
+
+My pattern was `run_name == ($b + "/" + $n + "_median")`,
+which can never match because run_name doesn't include
+the suffix. The data was right there; my lookup looked
+for it in the wrong place.
+
+(The demo.sh table works fine — it uses `aggregate_name`
+filter + `run_name` emit. Just the test script's
+lookup pattern was off by one field.)
+
+**Fix.** Match on `run_name` *without* the suffix, plus
+the `aggregate_name == "median"` filter that's already
+there. Plus the modifier-segment fallback (`/min_time:T`)
+in case in-code MinTime gets re-added later:
+
+    .benchmarks
+    | map(select(.aggregate_name == "median"
+                 and ((.run_name == ($b + "/" + $n))
+                      or (.run_name | startswith($b + "/" + $n + "/")))))
+
+**What r60 ships:**
+
+1. scripts/test-demo-02-stl-layout.sh: jq pattern fixed
+   to match `run_name` directly (no _median); comment
+   block explaining Google Benchmark's two-field name
+   structure so the next person editing this isn't
+   tempted by the same confusion.
+
+**§6 is still verified** — r59's flip stands. The demo.sh
+output already showed the 2.5× contiguous win at N=262K;
+the test script was failing on a parsing bug, not on
+data. r60 just makes the script agree with reality.
+
+**Note on r57 — wrong diagnosis × 2.** Counting up:
+- r57: capped BM_Lookup_VectorLinear (defensible but
+  not the actual hang)
+- r58: the real hang fix (flat_map setup O(N²))
+- r59: cosmetic MinTime CLI move + name-parse update
+- r60: this — jq pattern actually matches the data
+
+Three rounds of "make the assertion match the
+mechanics." Not great but bounded — demo-02 still
+got verified in fewer rounds than demo-04, just with
+a couple more iterations on the test script than I'd
+have liked. Lesson for the §6/§13 prose: **assertions
+about benchmark output need to be written against
+the actual JSON schema, not against a guess.** Worth
+showing the JSON shape in the prose so readers don't
+make the same wrong-field mistake.
+
+**Item 2 of 5 STILL done.** Item 3 (demo-03) next.
+
 ---
 
 ## Known divergences from the PRD

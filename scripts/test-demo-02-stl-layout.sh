@@ -37,18 +37,21 @@ if [[ ! -s "$BASELINE" || ! -s "$PRESSURED" ]]; then
 fi
 
 # jq lookup helper: median real_time for a (bench_name, N) pair.
-# Google Benchmark's run_name format varies depending on whether
-# per-benchmark MinTime() is set in code: with it, names look like
-# "BM_Foo/1024/min_time:0.050_median"; without it,
-# "BM_Foo/1024_median". The startswith pattern accepts both —
-# we just need the bench name + size, followed by either "_median"
-# (no modifier) or "/" (modifier present).
+#
+# Google Benchmark's JSON structure for aggregate rows:
+#   name:           "BM_Foo/N_median"            (includes aggregate suffix)
+#   run_name:       "BM_Foo/N"                   (does NOT include _median)
+#   aggregate_name: "median"                     (separate field)
+#
+# Match on run_name + aggregate_name. The run_name may also gain
+# a "/min_time:T" segment if a per-benchmark MinTime() is set in
+# code; accept that too with a startswith fallback.
 get_time() {
     local file="$1" bench="$2" size="$3"
     jq -r --arg b "$bench" --arg n "$size" '
         .benchmarks
         | map(select(.aggregate_name == "median"
-                     and ((.run_name == ($b + "/" + $n + "_median"))
+                     and ((.run_name == ($b + "/" + $n))
                           or (.run_name | startswith($b + "/" + $n + "/")))))
         | .[0].real_time // empty
     ' "$file"
