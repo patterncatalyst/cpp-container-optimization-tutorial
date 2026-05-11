@@ -9096,6 +9096,128 @@ right names?" verification.
 Each is a separate diagnose-and-fix; r62 just gets us past
 the CMake target name issue.
 
+### 2026-05-10 — r63: nostd::unique_ptr ≠ std::shared_ptr — fix metric global types
+
+User ran r62. CMake configure passed (G-19 umbrella target
+fix worked). The build advanced into actual compilation:
+opentelemetry-cpp 1.14.2 link symbols all resolved, asio
+found, liburing 2.5 detected, generated protobuf+grpc code
+compiled. Then main.cpp's compile failed with four
+identical errors at lines 135, 137, 139, 141:
+
+    error: no match for 'operator='
+      (operand types are
+        'std::shared_ptr<opentelemetry::v1::metrics::Counter<...>>'
+       and
+        'opentelemetry::v1::nostd::unique_ptr<opentelemetry::v1::metrics::Counter<...>>')
+
+**Cause.** `meter->CreateUInt64Counter()` and
+`CreateDoubleHistogram()` return **`nostd::unique_ptr<...>`**,
+not `std::unique_ptr` and definitely not `std::shared_ptr`.
+OTel-cpp ships its own pointer family (`nostd::*`) in the
+api/v1 namespace because the API is compiled into the
+library archive once and must work across consumers with
+different stdlib versions / `_GLIBCXX_USE_CXX11_ABI` settings.
+`std::shared_ptr` can't accept `nostd::unique_ptr` directly —
+no implicit conversion path exists.
+
+I declared the metric globals as `std::shared_ptr` in r61
+out of habit without checking the actual return type.
+
+**Why globals at all (since demo-04 uses `auto` locals).**
+Demo-04's HTTP server runs in a single thread, so locals
+inside `main()` are sufficient. Demo-03 has three server
+threads (gRPC + io_uring + Asio) plus the gRPC callback API's
+internal thread pool, each of which needs access to the
+counters and histogram. Globals are the simplest way; the
+underlying Counter/Histogram are documented thread-safe for
+concurrent `Add()`/`Record()` calls.
+
+**Fix.** Change the global declarations to match the actual
+return type:
+
+    nostd::unique_ptr<api::metrics::Counter<std::uint64_t>>  g_grpc_requests;
+    nostd::unique_ptr<api::metrics::Counter<std::uint64_t>>  g_tcp_iouring_conns;
+    nostd::unique_ptr<api::metrics::Counter<std::uint64_t>>  g_tcp_asio_conns;
+    nostd::unique_ptr<api::metrics::Histogram<double>>       g_grpc_latency_ms;
+
+`nostd::unique_ptr` mimics `std::unique_ptr`'s API surface
+(`operator bool`, `operator->`, move-assign) so the access
+pattern at use sites doesn't change.
+
+**Destruction-order safety.** Globals destruct in reverse
+construction order *after* `main()` returns, while OTel SDK
+provider singletons are managed via internal statics with
+their own atexit-driven teardown. Ordering between these
+two destruction phases is implementation-defined. To
+prevent any teardown-order race (Counter destructing
+after its Meter has already gone away), I added explicit
+`.reset()` calls at the end of `main()` so the metric
+destructors run inside `main()`'s scope where the provider
+is guaranteed valid:
+
+    // Before main returns:
+    g_grpc_requests.reset();
+    g_tcp_iouring_conns.reset();
+    g_tcp_asio_conns.reset();
+    g_grpc_latency_ms.reset();
+
+A safer alternative would be to make these locals in
+`main()` and pass references through. Globals + explicit
+reset is simpler for a tutorial demo and demonstrates the
+"watch your singleton teardown" concern explicitly — a
+mini-lesson for §3 (RAII) and §13 (Reproducibility) prose.
+
+**Discoverability lesson.** When using a library that ships
+its own pointer types for ABI stability, the type of
+variables that hold its return values *must* match. `auto`
+is the universal solution (demo-04 uses it everywhere);
+explicit declarations require checking the actual API. Both
+work; the explicit case requires more discipline.
+
+**What r63 ships:**
+
+1. `src/main.cpp`:
+   - Metric global types `std::shared_ptr` → `nostd::unique_ptr`
+     with comment block explaining why
+   - Explicit `.reset()` calls before `main()` returns with
+     comment block on destruction-order safety
+
+**What r63 doesn't change:**
+
+- Containerfile, conanfile.py, CMakeLists.txt, compose.yml,
+  demo.sh, test/regenerate scripts — all unchanged
+- The gRPC service code, io_uring loop, Asio loop — all
+  unchanged
+- The OTel init pattern itself — unchanged
+
+**Anticipated outcomes:**
+
+- **Best case:** main.cpp compiles, link runs, binary builds.
+  Demo-03 starts up at the next step. Then we find out
+  whether io_uring/seccomp or some other runtime gotcha
+  surfaces.
+- **Other OTel API mismatches in init code:** possible.
+  The init_otel_metrics() function uses
+  `static_cast<sdk_m::MeterProvider*>(provider.get())
+   ->AddMetricReader(std::move(reader))` which is a slightly
+  awkward pattern from OTel-cpp 1.14's pre-factory-API era.
+  If MeterProvider's interface has any subtleties (e.g.,
+  requires `MeterProviderFactory` in 1.14.2 specifically),
+  we'd see a different compile error from this block.
+- **Successful compile, link error:** would now fall back
+  to the gRPC/abseil/protobuf umbrella's transitive symbols.
+  G-23's `CMAKE_CXX_LINK_EXECUTABLE` override should handle
+  it; if it doesn't, we'd diagnose from the specific
+  undefined symbol.
+
+Honest categorization: **this is a pre-flight mistake I
+should have caught.** Using `auto` like demo-04 does (or
+checking the return type before declaring globals) would
+have prevented it. Adding to the §3/§13 "lessons learned"
+list rather than the G-series gotcha catalog because it's
+a code-style issue rather than a toolchain trap.
+
 ---
 
 ## Known divergences from the PRD

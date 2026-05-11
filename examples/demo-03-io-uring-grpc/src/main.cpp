@@ -91,10 +91,22 @@ using demo03::Echo;
 
 namespace {
 
-std::shared_ptr<api::metrics::Counter<std::uint64_t>>     g_grpc_requests;
-std::shared_ptr<api::metrics::Counter<std::uint64_t>>     g_tcp_iouring_conns;
-std::shared_ptr<api::metrics::Counter<std::uint64_t>>     g_tcp_asio_conns;
-std::shared_ptr<api::metrics::Histogram<double>>          g_grpc_latency_ms;
+// Why nostd::unique_ptr not std::shared_ptr:
+// `meter->CreateUInt64Counter()` and `CreateDoubleHistogram()`
+// return `nostd::unique_ptr<...>`, not `std::unique_ptr` or
+// `std::shared_ptr`. OTel-cpp ships its own pointer family
+// (`nostd::`) in the api/v1 namespace to keep ABI stable across
+// stdlib versions and -D_GLIBCXX_USE_CXX11_ABI variants. A
+// `std::shared_ptr` can't accept the `nostd::unique_ptr` directly
+// (no implicit conversion path). We're storing these as globals
+// written once at init and read concurrently from server threads;
+// that's fine with `nostd::unique_ptr` since the underlying
+// Counter/Histogram are documented thread-safe for concurrent
+// Add()/Record() calls.
+nostd::unique_ptr<api::metrics::Counter<std::uint64_t>>     g_grpc_requests;
+nostd::unique_ptr<api::metrics::Counter<std::uint64_t>>     g_tcp_iouring_conns;
+nostd::unique_ptr<api::metrics::Counter<std::uint64_t>>     g_tcp_asio_conns;
+nostd::unique_ptr<api::metrics::Histogram<double>>          g_grpc_latency_ms;
 
 void init_otel_traces(const std::string& otlp_endpoint) {
     otlp::OtlpGrpcExporterOptions opts;
@@ -539,6 +551,21 @@ int main() {
     t_iouring.join();
     t_asio.join();
     t_health.join();
+
+    // Reset metric globals BEFORE main returns so Counter/Histogram
+    // destruct while the OTel provider singletons are still valid.
+    // Globals destruct in reverse construction order *after* main
+    // returns, and the SDK Provider singletons are managed via
+    // internal SDK statics with their own atexit-driven teardown;
+    // ordering between the two destruction phases is not guaranteed.
+    // Resetting here puts the Counter/Histogram destructors inside
+    // main()'s scope where the provider is guaranteed to still
+    // exist.
+    g_grpc_requests.reset();
+    g_tcp_iouring_conns.reset();
+    g_tcp_asio_conns.reset();
+    g_grpc_latency_ms.reset();
+
     std::cerr << "[main]    clean shutdown\n";
     return 0;
 }
