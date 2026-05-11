@@ -21,14 +21,33 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://lgtm:4317"
       OTEL_SERVICE_NAME: "demo-03-svc"
       OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=tutorial"
-    # If the io_uring direct-echo server crashes on startup with
-    # `io_uring_queue_init: Operation not permitted` or similar,
-    # podman's default seccomp profile is blocking the `io_uring_setup`
-    # syscall. Uncomment the next two lines to disable seccomp for
-    # demo-03-svc (acceptable for a tutorial; production would write a
-    # custom seccomp profile that allows the io_uring family).
-    # security_opt:
-    #   - "seccomp=unconfined"
+    # io_uring requires the kernel `io_uring_setup`, `io_uring_enter`,
+    # and `io_uring_register` syscalls. Podman's (and Docker's) default
+    # seccomp profile **blocks these syscalls** because io_uring can be
+    # used to bypass capability checks via registered buffers — it's
+    # been a CVE-prone surface (see CVE-2022-29582, etc.). For a
+    # tutorial demo that's explicitly demonstrating io_uring, we
+    # disable seccomp entirely.
+    #
+    # Symptom if you remove this and rebuild: the binary starts but
+    # the Asio io_uring backend throws std::system_error with
+    # "io_uring_queue_init: Function not implemented" and the process
+    # terminates. The direct liburing echo silently fails too (returns
+    # -ENOSYS). See r64 logs in _plans/reconciliation-plan.md.
+    #
+    # For production:
+    #   - Use a custom seccomp profile that adds io_uring_setup /
+    #     io_uring_enter / io_uring_register to the allowed list,
+    #     keeping the rest of the default policy intact. The kernel's
+    #     own `IORING_OP_*` permissions then enforce what each ring
+    #     can do.
+    #   - Or use a rootful container with the default profile relaxed.
+    #   - Or accept the broader attack surface as a deliberate trade
+    #     for io_uring's performance.
+    #
+    # See G-32 in _plans/reconciliation-plan.md for the long version.
+    security_opt:
+      - "seccomp=unconfined"
     ports:
       - "127.0.0.1:18403:8080"   # healthz
       - "127.0.0.1:50051:50051"  # gRPC Echo

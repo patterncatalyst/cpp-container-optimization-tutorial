@@ -367,8 +367,18 @@ void run(std::uint16_t port, std::atomic<bool>& shutdown) {
     }
 
     io_uring ring;
-    if (io_uring_queue_init(QUEUE_DEPTH, &ring, 0) < 0) {
-        perror("[iouring] io_uring_queue_init"); ::close(listen_fd); return;
+    // liburing returns negative -errno as the return value; it does
+    // NOT set the global `errno` itself. Calling perror() reads errno
+    // which is 0 at this point, so it prints "Success" — misleading.
+    // Use strerror(-ret) on the returned value instead.
+    if (int ret = io_uring_queue_init(QUEUE_DEPTH, &ring, 0); ret < 0) {
+        std::cerr << "[iouring] io_uring_queue_init failed: "
+                  << std::strerror(-ret) << " (return value " << ret << ")\n";
+        std::cerr << "[iouring] hint: if errno is ENOSYS / 'Function not implemented', "
+                  << "podman's seccomp profile is blocking io_uring syscalls. "
+                  << "Set security_opt: seccomp=unconfined in compose.yml (G-32).\n";
+        ::close(listen_fd);
+        return;
     }
 
     std::cerr << "[iouring] listening on :" << port << " (direct liburing)\n";
@@ -486,45 +496,69 @@ private:
 };
 
 void run(std::uint16_t port, std::atomic<bool>& shutdown) {
-    asio::io_context ctx;
-    asio::ip::tcp::acceptor acceptor(
-        ctx, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port));
-    acceptor.set_option(asio::ip::tcp::no_delay(true));
-    acceptor.set_option(asio::socket_base::reuse_address(true));
+    // Wrap the entire function in try/catch. Asio's io_uring backend
+    // throws std::system_error if io_uring is unavailable at runtime
+    // (e.g., podman's default seccomp profile blocks io_uring_setup,
+    // or the kernel doesn't support io_uring at all). Without this
+    // catch, the exception propagates out of the thread function,
+    // unwinds to thread destruction, and triggers std::terminate
+    // because uncaught exceptions in detached/joinable threads are
+    // fatal in C++. Catching here lets the other servers (gRPC,
+    // direct iouring, healthz) keep running while we report and
+    // exit cleanly.
+    try {
+        asio::io_context ctx;
+        asio::ip::tcp::acceptor acceptor(
+            ctx, asio::ip::tcp::endpoint(asio::ip::tcp::v4(), port));
+        acceptor.set_option(asio::ip::tcp::no_delay(true));
+        acceptor.set_option(asio::socket_base::reuse_address(true));
 
-    std::cerr << "[asio]    listening on :" << port << " (Asio io_uring backend)\n";
+        std::cerr << "[asio]    listening on :" << port
+                  << " (Asio io_uring backend)\n";
 
-    std::function<void()> accept;
-    accept = [&]() {
-        acceptor.async_accept(
-            [&](std::error_code ec, asio::ip::tcp::socket sock) {
-                if (!ec) {
-                    if (g_tcp_asio_conns) g_tcp_asio_conns->Add(1);
-                    std::make_shared<Session>(std::move(sock))->start();
+        std::function<void()> accept;
+        accept = [&]() {
+            acceptor.async_accept(
+                [&](std::error_code ec, asio::ip::tcp::socket sock) {
+                    if (!ec) {
+                        if (g_tcp_asio_conns) g_tcp_asio_conns->Add(1);
+                        std::make_shared<Session>(std::move(sock))->start();
+                    }
+                    if (!shutdown.load(std::memory_order_acquire)) accept();
+                });
+        };
+        accept();
+
+        // Run until shutdown; periodically check the flag by posting a
+        // no-op work item every 250ms via a steady_timer.
+        asio::steady_timer ticker(ctx);
+        std::function<void()> tick;
+        tick = [&]() {
+            ticker.expires_after(std::chrono::milliseconds(250));
+            ticker.async_wait([&](std::error_code) {
+                if (shutdown.load(std::memory_order_acquire)) {
+                    ctx.stop();
+                } else {
+                    tick();
                 }
-                if (!shutdown.load(std::memory_order_acquire)) accept();
             });
-    };
-    accept();
+        };
+        tick();
 
-    // Run until shutdown; periodically check the flag by posting a
-    // no-op work item every 250ms via a steady_timer.
-    asio::steady_timer ticker(ctx);
-    std::function<void()> tick;
-    tick = [&]() {
-        ticker.expires_after(std::chrono::milliseconds(250));
-        ticker.async_wait([&](std::error_code) {
-            if (shutdown.load(std::memory_order_acquire)) {
-                ctx.stop();
-            } else {
-                tick();
-            }
-        });
-    };
-    tick();
-
-    ctx.run();
-    std::cerr << "[asio]    shutdown\n";
+        ctx.run();
+        std::cerr << "[asio]    shutdown\n";
+    } catch (const std::system_error& e) {
+        std::cerr << "[asio]    std::system_error: " << e.what()
+                  << " (code " << e.code().value() << ")\n";
+        std::cerr << "[asio]    hint: if this is 'Function not implemented' "
+                  << "(ENOSYS), Asio's io_uring backend can't initialize. "
+                  << "Set security_opt: seccomp=unconfined in compose.yml "
+                  << "(G-32 in the plan).\n";
+        std::cerr << "[asio]    thread exiting; other servers continue\n";
+    } catch (const std::exception& e) {
+        std::cerr << "[asio]    unexpected exception: " << e.what() << "\n";
+        std::cerr << "[asio]    thread exiting; other servers continue\n";
+    }
 }
 
 }  // namespace asio_echo

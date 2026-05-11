@@ -2843,6 +2843,121 @@ git commit -m "chore(demo-04): seed Conan lockfile"
 
 ---
 
+### G-32 · io_uring + container seccomp: podman/docker default profiles block `io_uring_setup`; liburing return-value convention vs `perror` (r65)
+
+**Problem.** Demo-03 brings up cleanly past OTel init, the
+health listener starts, then the binary terminates with:
+
+    [iouring] io_uring_queue_init: Success
+    terminate called after throwing an instance of 'std::system_error'
+      what():  io_uring_queue_init: Function not implemented
+
+Two distinct issues compounded in one symptom.
+
+**Issue 1: podman's default seccomp profile blocks io_uring
+syscalls.** The kernel calls `io_uring_setup`,
+`io_uring_enter`, and `io_uring_register` are denied by the
+default profile because io_uring's registered-buffer
+mechanism is a CVE-prone surface (CVE-2022-29582 etc.).
+When code inside the container calls these, the syscall
+returns `-ENOSYS` (or `-EPERM`, depending on the seccomp
+action: SCMP_ACT_ERRNO vs SCMP_ACT_KILL_PROCESS).
+
+The direct liburing call in our iouring_echo loop returned
+`-ENOSYS`. My error handler at the time printed "Success"
+because of issue 2, then exited the iouring thread cleanly.
+
+Asio's io_uring backend, which initializes its ring lazily
+on `io_context::run()`, hit the same `-ENOSYS` and threw
+`std::system_error`. Nothing caught it; `terminate()`
+called; process exited with code 139.
+
+**Issue 2: `liburing` returns `-errno` as its function return
+value but does NOT set the global `errno`.** This is
+documented in `liburing(7)` but easy to miss. My code did:
+
+    if (io_uring_queue_init(...) < 0) {
+        perror("[iouring] io_uring_queue_init");
+        return;
+    }
+
+`perror` reads `errno`, which was 0 at this point (no syscall
+in this thread had set it). So it printed "[iouring]
+io_uring_queue_init: Success" — utterly misleading.
+
+The fix is to capture the return value and pass `-ret` to
+`strerror`:
+
+    if (int ret = io_uring_queue_init(...); ret < 0) {
+        std::cerr << "[iouring] io_uring_queue_init failed: "
+                  << std::strerror(-ret) << "\n";
+        return;
+    }
+
+**Fix.**
+
+1. **compose.yml: opt out of seccomp for the demo.**
+   Tutorial-appropriate; production would write a custom
+   seccomp profile.
+
+       services:
+         demo-03-svc:
+           security_opt:
+             - "seccomp=unconfined"
+
+   The compose.yml comment documents the production
+   alternative (custom profile whitelisting the three
+   io_uring syscalls, then relying on the kernel's own
+   `IORING_OP_*` permissions to enforce per-op restrictions).
+
+2. **iouring error reporting: use the return value, not
+   errno.** `std::strerror(-ret)` instead of `perror()`.
+   Added a hint message pointing at G-32 if the error is
+   ENOSYS.
+
+3. **Asio io_context: try/catch around `ctx.run()`.** The
+   exception is logged clearly with a hint about the
+   seccomp profile. The Asio thread exits cleanly without
+   taking down the binary; the gRPC and direct iouring
+   servers (or healthz alone if both io_uring backends are
+   blocked) keep running. Useful even with seccomp fixed,
+   because a kernel without io_uring support (RHEL 8, older
+   distros) would surface the same failure mode.
+
+**Production seccomp profile for io_uring.** If you don't
+want to drop seccomp entirely, a minimal custom profile
+adds three syscalls to docker's default:
+
+    {
+      "defaultAction": "SCMP_ACT_ERRNO",
+      "syscalls": [
+        // ... all the syscalls from default profile ...
+        {
+          "names": ["io_uring_setup", "io_uring_enter", "io_uring_register"],
+          "action": "SCMP_ACT_ALLOW"
+        }
+      ]
+    }
+
+Then load via `--security-opt seccomp=/path/to/profile.json`.
+The kernel's own `IORING_OP_*` permission model then enforces
+what individual ring operations can do (e.g., a ring registered
+without `IORING_REGISTER_BUFFERS` capability can't do
+zero-copy reads).
+
+**Discoverability.** Both halves of this issue showed up in
+the failure logs, but only the second half (the Asio
+exception) was the actual fatal cause. The first half (the
+misleading perror output) led me astray: at first I thought
+io_uring init had succeeded for the direct case. Lesson:
+**always check return values of library functions whose
+docs document return-value error conventions** (`liburing`,
+some POSIX threading APIs, system call wrappers, etc.)
+instead of pattern-matching `errno`-based reporting from
+libc.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -9405,6 +9520,127 @@ Or with formal pass/fail:
 
     ./scripts/test-demo-03-io-uring-grpc.sh
 
+### 2026-05-10 — r65: G-32 promoted — io_uring + container seccomp; correct error reporting; catch Asio exception
+
+User ran r64. **Major progress.** OTel initialized cleanly
+(MeterProvider fix worked, no segfault on Counter Add anymore).
+Health listener started. Then logs revealed the actual root
+cause of the original failure:
+
+    [init]    OTLP endpoint: http://lgtm:4317
+    [init]    OTel initialized
+    [health]  listening on :8080
+    [iouring] io_uring_queue_init: Success     ← misleading
+    terminate called after throwing an instance of 'std::system_error'
+      what():  io_uring_queue_init: Function not implemented
+
+Two distinct issues compounded:
+
+**1. podman's default seccomp profile blocks io_uring syscalls.**
+This was the "highest likelihood first-build gotcha" listed in
+r61's anticipated outcomes. Now confirmed. The `io_uring_setup`,
+`io_uring_enter`, `io_uring_register` syscalls are denied by the
+default seccomp profile because io_uring's registered-buffer
+mechanism is a CVE-prone surface (CVE-2022-29582 etc.).
+
+When code inside the container calls these, the syscall returns
+`-ENOSYS`. The direct liburing call in iouring_echo returned
+`-ENOSYS`. The Asio io_uring backend, initializing lazily on
+`io_context::run()`, also hit `-ENOSYS` and threw
+`std::system_error`. Nothing caught it; terminate(); exit 139.
+
+**2. liburing returns `-errno` as its function return value but
+does NOT set the global `errno`.** My code called perror() to
+report the error, which reads errno (= 0), printing "Success".
+Misleading; cost me ~30 minutes of guessing at r64 time.
+
+**Fixes shipped in r65:**
+
+1. **compose.yml: `security_opt: [seccomp=unconfined]`** with
+   detailed comment explaining the tutorial vs production
+   trade-offs. The seccomp block was already present
+   commented-out from an earlier round (someone — possibly an
+   earlier scaffold round — anticipated this exact issue);
+   r65 uncomments it and expands the rationale.
+
+2. **iouring error reporting.** Capture the return value and
+   pass `-ret` to `std::strerror`:
+
+       if (int ret = io_uring_queue_init(...); ret < 0) {
+           std::cerr << "[iouring] io_uring_queue_init failed: "
+                     << std::strerror(-ret) << " (return value "
+                     << ret << ")\n";
+           std::cerr << "[iouring] hint: if errno is ENOSYS / "
+                     << "'Function not implemented', podman's "
+                     << "seccomp profile is blocking io_uring "
+                     << "syscalls. Set security_opt: "
+                     << "seccomp=unconfined in compose.yml "
+                     << "(G-32).\n";
+           ::close(listen_fd);
+           return;
+       }
+
+3. **Asio try/catch.** Wrap the entire `asio_echo::run()`
+   body in try/catch for std::system_error and std::exception.
+   On exception, log the error and a G-32 pointer, then return
+   from the thread cleanly. Other servers (gRPC, direct iouring
+   if available, healthz) keep running.
+
+**G-32 promoted to the catalog.** Two lessons rolled together:
+
+- podman/docker default seccomp blocks io_uring; production
+  needs a custom profile, tutorial uses seccomp=unconfined
+- library functions with explicit "we return -errno, we don't
+  set errno" conventions need return-value-based error reporting,
+  not errno-based perror
+
+The catalog entry includes a sketch of a production seccomp
+profile (default + io_uring_setup/enter/register on the allow
+list).
+
+**What r65 ships:**
+
+1. `examples/demo-03-io-uring-grpc/compose.yml`: uncomment +
+   expand seccomp=unconfined block
+2. `examples/demo-03-io-uring-grpc/src/main.cpp`:
+   - iouring init: `std::strerror(-ret)` instead of `perror()`
+   - asio_echo::run(): wrap in try/catch with hint message
+3. `_plans/reconciliation-plan.md`: G-32 catalog entry, r65 round entry
+
+**What r65 doesn't change:**
+
+- src/tcp_loadgen.cpp, Containerfile, conanfile.py, CMakeLists.txt
+- demo.sh, README.md
+- gRPC service, io_uring loop body, Asio session pattern
+- test/regenerate scripts
+
+**Anticipated outcomes:**
+
+- **Best case (most likely):** rebuild, container survives,
+  all three load phases run, signals reach LGTM, demo-03
+  verifies. The two blocking issues (MeterProvider in r64,
+  seccomp in r65) were the only real problems; the rest of
+  the demo code is straightforward.
+- **Container survives the gRPC + iouring + asio loads, but
+  signals don't reach LGTM:** would mean the OTel pipeline
+  has a wiring issue specific to demo-03's metric names or
+  resource attributes. Diagnose from Mimir/Tempo query
+  responses.
+- **One of the TCP servers binds-fails:** unlikely since
+  demo-04 has the same ports unused, but could happen if
+  there's a port conflict on the host.
+- **Container survives but performance is wildly off:** a
+  diagnosis exercise rather than a blocker. The
+  side-by-side comparison should still show interesting
+  differences even at low absolute throughput.
+
+User reruns:
+
+    ./examples/demo-03-io-uring-grpc/demo.sh
+
+Or with formal pass/fail:
+
+    ./scripts/test-demo-03-io-uring-grpc.sh
 
 ---
 
