@@ -1,27 +1,37 @@
-# Two-server harness for demo-03.
-# Bring up with:
-#   podman compose -f compose.yml up --build
+# Demo-03 brings up:
+#   - demo-03-svc (this dir): three servers in one binary
+#       :50051 gRPC Echo (callback API)
+#       :9000  io_uring TCP echo (direct liburing)
+#       :9001  Asio TCP echo (Asio io_uring backend)
+#   - the shared LGTM observability stack (../../observability/compose.yml)
 #
-# The networking variant is selected with PODMAN_NETWORK=host or by
-# leaving it unset (default rootless network). demo.sh handles this.
+# Bring up:
+#   podman compose -f compose.yml -f ../../observability/compose.yml up --build
+# Tear down:
+#   ./demo.sh --clean
 
 services:
-  echo-uring:
+  demo-03-svc:
     build:
       context: .
       dockerfile: Containerfile
-      target: echo-uring
-    image: cpp-tut/demo-03:echo-uring
-    container_name: demo03-echo-uring
+    image: cpp-tut/demo-03:latest
+    container_name: demo03-svc
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://lgtm:4317"
+      OTEL_SERVICE_NAME: "demo-03-svc"
+      OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=tutorial"
     ports:
-      - "18301:8080"
+      - "127.0.0.1:18403:8080"   # healthz
+      - "127.0.0.1:50051:50051"  # gRPC Echo
+      - "127.0.0.1:9000:9000"    # io_uring TCP echo
+      - "127.0.0.1:9001:9001"    # Asio TCP echo
+    depends_on:
+      - lgtm
+    networks:
+      - obs
 
-  grpc-async:
-    build:
-      context: .
-      dockerfile: Containerfile
-      target: grpc-async
-    image: cpp-tut/demo-03:grpc-async
-    container_name: demo03-grpc-async
-    ports:
-      - "18302:50051"
+networks:
+  obs:
+    name: tutorial-obs
+    external: false

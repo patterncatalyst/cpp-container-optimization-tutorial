@@ -1,0 +1,27 @@
+// demo-03 — minimal Echo gRPC service.
+//
+// Used by the async gRPC callback-API server in main.cpp. Payload is
+// raw bytes so we can size-tune from the load generator.
+
+syntax = "proto3";
+
+package demo03;
+
+service Echo {
+  // Echo returns the request payload verbatim plus a server-side
+  // receive timestamp (Unix nanos). The client can compute one-way
+  // latency from request_send_time_nanos minus receive_time_nanos
+  // (with clock-skew caveats — for benchmark purposes we treat
+  // server time as authoritative for arrival).
+  rpc Echo(EchoRequest) returns (EchoResponse);
+}
+
+message EchoRequest {
+  bytes payload = 1;
+  int64 client_send_unix_nanos = 2;
+}
+
+message EchoResponse {
+  bytes payload = 1;
+  int64 server_receive_unix_nanos = 2;
+}

@@ -1,59 +1,116 @@
-# Build both server variants from a shared toolchain stage.
+# Demo-03 — async gRPC + io_uring (direct liburing + Asio backend).
 #
-# Build:
-#   podman build --target echo-uring   -t cpp-tut/demo-03:echo-uring .
-#   podman build --target grpc-async   -t cpp-tut/demo-03:grpc-async .
+# Three servers in one binary:
+#   - gRPC Echo on :50051  (callback API, async)
+#   - io_uring TCP echo on :9000  (direct liburing)
+#   - Asio TCP echo on :9001  (Asio's io_uring backend)
+#
+# Inherits demo-04's UBI 9 + gcc-toolset-14 + Conan profile-gnu17
+# pattern. Inherits demo-04's exact OTel/gRPC override chain via
+# conanfile.py (see G-22..G-30 in the reconciliation plan for why
+# each version is pinned where it is).
+#
+# Additions over demo-04's Containerfile:
+#   - liburing-devel (UBI 9 AppStream package) for direct io_uring
+#     calls in the io_uring echo server
+#   - ASIO_HAS_IO_URING compile flag wired in CMakeLists.txt
+#
+# First-build cost: similar to demo-04 (~30-45 min on a clean cache
+# because the OTel/gRPC chain rebuilds from source under our
+# overridden profile). Cached builds: 2-3 min.
 
-ARG UBI_VERSION=9.4
+FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
 
-FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build
-
-# UBI w/o entitlement: silence subscription-manager.
-# Free UBI repos in ubi.repo are unaffected — dnf install works normally.
-RUN rm -f /etc/yum.repos.d/redhat.repo && \
-    sed -i 's/^enabled=1/enabled=0/' \
-        /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
-
-RUN dnf install -y --setopt=install_weak_deps=False \
+# Same dnf set as demo-04 + liburing-devel for io_uring direct calls.
+# liburing isn't on Conan Center; UBI 9 AppStream is the right
+# source. Kernel-level io_uring is supported since RHEL 9.0
+# (kernel 5.14+).
+RUN dnf install -y --quiet --setopt=install_weak_deps=False \
         gcc-toolset-14 \
-        cmake \
-        ninja-build \
-        liburing \
+        cmake ninja-build git python3-pip \
         liburing-devel \
-        grpc-devel \
-        grpc-plugins \
-        protobuf-devel \
-        protobuf-compiler \
-        git \
-    && dnf clean all
+        perl-FindBin perl-IPC-Cmd perl-Data-Dumper perl-Pod-Html \
+        perl-Pod-Usage perl-File-Compare perl-File-Copy perl-File-Path \
+        perl-Time-Piece perl-Getopt-Long perl-Digest-SHA \
+        perl-threads perl-threads-shared perl-Thread-Queue \
+        perl-Term-ANSIColor \
+        which \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf/*
 
-ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
-ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64
+ENV PATH="/opt/rh/gcc-toolset-14/root/usr/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
+
+RUN pip install --quiet "conan~=2.0"
+
+# Profile detection + cppstd=gnu17 for dep builds. Our app target
+# uses C++23 via CMakeLists; same two-layer pattern as demo-04 (G-27).
+RUN conan profile detect --force && \
+    sed -i 's|^compiler.cppstd=.*|compiler.cppstd=gnu17|' \
+        /root/.conan2/profiles/default
 
 WORKDIR /src
-COPY src/ ./src/
+
+# Conan install with optional lockfile (G-31 pattern from demo-04).
+# If conan.lock is committed and non-empty, use it for reproducible
+# resolution with --lockfile-partial so that new deps (asio) that
+# aren't in demo-04's locked set can resolve fresh. If empty
+# placeholder, remove and resolve fresh entirely.
+#
+# To seed demo-03's lockfile from demo-04's verified state:
+#   cp examples/demo-04-observability/conan.lock \
+#      examples/demo-03-io-uring-grpc/conan.lock
+# Then commit and rebuild. The shared OTel/gRPC chain is locked;
+# asio resolves fresh.
+COPY conanfile.py conan.lock ./
+RUN if [ -s conan.lock ]; then \
+        echo "==> Using committed conan.lock with --lockfile-partial"; \
+        conan install . --output-folder=build/conan \
+                        -s build_type=Release \
+                        --lockfile=conan.lock \
+                        --lockfile-partial \
+                        --build=missing ; \
+    else \
+        echo "==> conan.lock is empty placeholder; resolving graph fresh"; \
+        echo "==> Run scripts/regenerate-demo-03-lockfile.sh to lock the graph"; \
+        rm -f conan.lock ; \
+        conan install . --output-folder=build/conan \
+                        -s build_type=Release \
+                        --build=missing ; \
+    fi
+
+COPY src/   ./src/
+COPY proto/ ./proto/
 COPY CMakeLists.txt ./
 
-RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
- && cmake --build build -j"$(nproc)" \
- && strip --strip-all build/echo-uring build/grpc-async-server
+RUN cmake -S . -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_TOOLCHAIN_FILE=build/conan/conan_toolchain.cmake \
+    && cmake --build build -j"$(nproc)" \
+    && strip --strip-all build/demo-03-svc \
+    && strip --strip-all build/tcp-loadgen
 
-# ---- runtime: echo-uring ----
-FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION} AS echo-uring
-RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ liburing \
- && microdnf clean all
-COPY --from=build /src/build/echo-uring /app/echo-uring
-LABEL tutorial.demo="03-io-uring-grpc" tutorial.variant="echo-uring"
-EXPOSE 8080
-USER 1001:1001
-ENTRYPOINT ["/app/echo-uring"]
+# ════════════════════════════════════════════════════════════════════════
+# Runtime stage — ubi-minimal with libstdc++ and liburing.
+# Same shape as demo-04. liburing.so.2 is needed because liburing is
+# linked dynamically (Conan-managed gRPC chain is static, but system
+# libraries from dnf-installed packages are dynamic).
+# ════════════════════════════════════════════════════════════════════════
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
 
-# ---- runtime: grpc-async ----
-FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION} AS grpc-async
-RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ grpc protobuf \
- && microdnf clean all
-COPY --from=build /src/build/grpc-async-server /app/grpc-async-server
-LABEL tutorial.demo="03-io-uring-grpc" tutorial.variant="grpc-async"
-EXPOSE 50051
-USER 1001:1001
-ENTRYPOINT ["/app/grpc-async-server"]
+RUN microdnf install -y --setopt=install_weak_deps=0 \
+        libstdc++ \
+        liburing \
+    && microdnf clean all \
+    && rm -rf /var/cache/yum
+
+COPY --from=builder /src/build/demo-03-svc /usr/local/bin/demo-03-svc
+COPY --from=builder /src/build/tcp-loadgen /usr/local/bin/tcp-loadgen
+
+# Three ports exposed by demo-03-svc:
+#   :50051 — gRPC Echo service (callback API)
+#   :9000  — io_uring TCP echo (direct liburing)
+#   :9001  — Asio TCP echo (Asio io_uring backend)
+EXPOSE 50051 9000 9001
+
+ENTRYPOINT ["/usr/local/bin/demo-03-svc"]

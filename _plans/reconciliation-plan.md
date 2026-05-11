@@ -8811,6 +8811,186 @@ make the same wrong-field mistake.
 
 **Item 2 of 5 STILL done.** Item 3 (demo-03) next.
 
+### 2026-05-10 — r61: item 3 of 5 — demo-03 first ship (async gRPC + io_uring direct + Asio io_uring)
+
+User confirmed both design questions:
+- **Q1**: Both io_uring abstraction levels (direct liburing + Asio
+  io_uring backend) — for the side-by-side comparison.
+- **Q2**: Callback-API async gRPC + separate io_uring TCP echo
+  for clean separation.
+- **Q3**: Wired into LGTM stack with its own metrics/traces panel.
+- **Conan strategy**: Inherit demo-04's chain exactly + copy
+  demo-04's lockfile with --lockfile-partial.
+- **OTel pattern**: Reuse demo-04's init pattern fully.
+
+r61 ships the full first-cut demo-03. Heavy scope: 9 source files
+plus 2 supporting scripts. Larger than demo-02's r55 first ship,
+similar in scope to demo-04's original r09 scaffolding.
+
+**Design pivot: standalone `asio`, not `boost::asio`.** User
+selected "Boost.Asio io_uring backend" for Q1, but the Conan
+build is dramatically simpler with standalone `asio`
+(`asio/1.32.0` on Conan Center): same library, no
+`boost::system` / `boost::thread` / `boost::date_time`
+baggage. The io_uring switch is `ASIO_HAS_IO_URING` instead of
+the `BOOST_` prefix. Same code, same behavior, smaller dep
+surface. Documented this in the README so it's an explicit
+flippable decision rather than a silent substitution.
+
+**Files shipped:**
+
+1. `examples/demo-03-io-uring-grpc/proto/echo.proto` — minimal
+   Echo service: bytes payload + client_send_unix_nanos + server
+   receive_unix_nanos. Same shape as a benchmark protocol.
+2. `examples/demo-03-io-uring-grpc/conanfile.py` — inherits
+   demo-04's override chain exactly (`grpc/1.54.3` +
+   `protobuf/3.21.12` + `abseil/20230125.3` + `opentelemetry-cpp/1.14.2`)
+   and adds `asio/1.32.0`. Same default_options (no zipkin, no
+   prometheus, OTLP gRPC enabled, OpenSSL FIPS disabled).
+3. `examples/demo-03-io-uring-grpc/CMakeLists.txt` — protobuf
+   code-gen via custom command (G-19 workaround), the same
+   `CMAKE_CXX_LINK_EXECUTABLE` --start-group/--end-group override
+   from demo-04 (G-23), `ASIO_STANDALONE` and `ASIO_HAS_IO_URING`
+   target_compile_definitions, pkg-config for liburing.
+4. `examples/demo-03-io-uring-grpc/Containerfile` — UBI 9 +
+   gcc-toolset-14 + Conan, identical to demo-04 except adds
+   `liburing-devel` from UBI 9 AppStream. Lockfile branch with
+   `--lockfile-partial` (allows new deps like asio to resolve
+   freshly while the inherited demo-04 chain stays pinned).
+   Three exposed ports (50051, 9000, 9001).
+5. `examples/demo-03-io-uring-grpc/src/main.cpp` — ~430 lines.
+   Five sections clearly delimited:
+   - OTel init (same shape as demo-04, with G-29 processor.h
+     includes upfront so we don't rediscover that gotcha)
+   - gRPC Echo service via `ServerUnaryReactor` (callback API)
+   - io_uring direct echo loop on :9000 — single-threaded
+     reactor pattern with `io_uring_get_sqe` / `io_uring_submit`
+     / `io_uring_wait_cqe`, hand-rolled state machine
+     encoding op type in user_data
+   - Asio echo with `ASIO_HAS_IO_URING` on :9001 — standard
+     `enable_shared_from_this` session pattern, ~30 lines vs
+     ~80 for the direct version
+   - main() wiring with SIGTERM handling and a tiny health
+     server on :8080
+   Three counters and one histogram exposed via OTel:
+   `demo3.grpc.requests`, `demo3.grpc.latency`,
+   `demo3.tcp.iouring.connections`, `demo3.tcp.asio.connections`.
+6. `examples/demo-03-io-uring-grpc/src/tcp_loadgen.cpp` —
+   ~150-line TCP load generator: opens N parallel connections,
+   sends/recvs M payloads per connection, computes
+   min/p50/p99/max latency + throughput, emits single-line JSON
+   for jq parsing.
+7. `examples/demo-03-io-uring-grpc/compose.yml` — joins
+   `tutorial-obs` network; exposes 50051, 9000, 9001, 18403
+   (healthz) to host.
+8. `examples/demo-03-io-uring-grpc/demo.sh` — bring-up,
+   healthz wait, three load phases (ghz via container for gRPC;
+   `podman exec` of `tcp-loadgen` for io_uring + Asio), summary
+   table comparing the two TCP echo backends.
+9. `examples/demo-03-io-uring-grpc/README.md` — architecture,
+   run instructions, the standalone-asio justification, the
+   lockfile-inheritance pattern, the three §9 lessons.
+10. `examples/demo-03-io-uring-grpc/conan.lock` — empty
+    placeholder; user copies demo-04's real lockfile or runs
+    the regenerate script.
+11. `scripts/test-demo-03-io-uring-grpc.sh` — full E2E
+    verification mirroring test-demo-04's shape: bring-up,
+    readiness polling (G-30 lessons applied), three load
+    phases, signal probes in Mimir + Tempo. Pass criteria:
+    healthz responds, all three loads complete >100 reqs,
+    three counter metrics present in Mimir, traces present
+    in Tempo for service.name=demo-03-svc.
+12. `scripts/regenerate-demo-03-lockfile.sh` — parallel to
+    demo-04's. Same defensive guard for stale conanfile.txt
+    (G-31).
+
+**Anticipated outcomes** (most likely failure categories,
+ranked):
+
+- **`asio/1.32.0` recipe missing or option-name drift:**
+  asio has been on Conan Center since 2018 with stable
+  recipes; this version exists. Risk: low. If Conan errors
+  with "missing recipe revision", swap to whatever the
+  current latest is.
+- **`liburing-devel` package issue:** UBI 9 AppStream has
+  it; should install cleanly. Risk: low.
+- **`ASIO_HAS_IO_URING` requires runtime kernel support:**
+  Asio's io_uring backend checks `IORING_*` syscall
+  availability at runtime; on a kernel without io_uring,
+  it falls back to epoll. Our target (Fedora 44, kernel 6.x)
+  has io_uring; the demo will silently work. Risk: none.
+- **gRPC callback API requires generated `_callback.h`
+  headers:** gRPC's protoc plugin generates callback service
+  base classes automatically when the gRPC version supports
+  it. Risk: very low for 1.54.3 (callback API is stable).
+- **`grpc::ServerUnaryReactor` shutdown semantics:** the
+  reactor's `Finish()` must be called exactly once per RPC.
+  Our `Echo` handler does this correctly. Risk: low.
+- **The new demo3.* metric names need to survive the
+  Mimir/Prometheus naming sanitization:** OTel metrics with
+  dots become underscores in Prometheus query syntax
+  (`demo3.grpc.requests` → `demo3_grpc_requests_total`).
+  The test script queries for the suffixed forms. Risk:
+  low — same pattern as demo-04 worked.
+- **OTel-cpp 1.14.2 vs gRPC callback API incompat:** the
+  OTel chain we use was tested with gRPC 1.54.3 sync RPCs
+  in demo-04. The callback API is a newer-but-still-stable
+  feature in gRPC. The OTel-cpp interception happens at
+  the gRPC wire level, agnostic to sync vs async. Risk: low.
+- **`io_uring_get_sqe` returns NULL when queue full:** our
+  loop submits an SQE per CQE handled, so queue pressure
+  shouldn't build. But we don't check the return value
+  defensively. Risk: low under tutorial load; a real
+  production server would need backpressure.
+- **`SO_REUSEPORT` permission inside rootless podman:**
+  this socket option is generally allowed without
+  privileges. If podman's seccomp profile blocks it,
+  user would see `bind: permission denied`. Risk: low.
+
+**Possible new gotchas this round will surface:**
+
+- io_uring + container interaction. If kernel's seccomp
+  default denies `io_uring_setup`, the direct liburing
+  server would fail at `io_uring_queue_init` with EPERM.
+  Mitigation: document `--security-opt seccomp=unconfined`
+  or build a custom seccomp profile allowing io_uring
+  syscalls. This is the most likely first-build gotcha.
+- ASIO's io_uring fallback chain. If something's off,
+  Asio silently falls back to epoll. Demo would still
+  run; the comparison lesson would be muddied. Mitigation:
+  inspect logs for "io_uring enabled" at startup, or add
+  an explicit runtime check.
+- `ghz` container reachability through the tutorial-obs
+  network. The container needs to resolve `demo03-svc`
+  by name and reach 50051. Risk: low if podman's network
+  setup matches demo-04 (which works).
+
+**Item 3 of 5 in flight.** User runs:
+
+```
+./examples/demo-03-io-uring-grpc/demo.sh
+# or with pass/fail criteria:
+./scripts/test-demo-03-io-uring-grpc.sh
+```
+
+First build is ~30-45 min (OTel/gRPC chain rebuilds under our
+override profile). Cached builds: 2-3 min.
+
+**Lockfile seeding (recommended).** Before the first build,
+copy demo-04's verified lockfile:
+
+```
+cp examples/demo-04-observability/conan.lock \
+   examples/demo-03-io-uring-grpc/conan.lock
+git add examples/demo-03-io-uring-grpc/conan.lock
+git commit -m "chore(demo-03): inherit demo-04 lockfile"
+```
+
+This gives demo-03 the same recipe revisions for the shared
+chain (saving rebuilds of identical packages already in
+Conan's cache from demo-04 builds), with asio resolving
+fresh.
+
 ---
 
 ## Known divergences from the PRD
