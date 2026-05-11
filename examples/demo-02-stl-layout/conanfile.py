@@ -30,45 +30,19 @@ class Demo02Conan(ConanFile):
         # Static-link everything for a portable runtime image.
         "*/*:shared": False,
 
-        # Boost is huge by default. We need exactly one
-        # header-only library (boost::container::flat_map) plus
-        # whatever it transitively brings (intrusive containers,
-        # type traits, mp11). Disable everything else so the
-        # build is fast and the binary stays small.
-        "boost/*:without_atomic":       True,
-        "boost/*:without_chrono":       True,
-        "boost/*:without_cobalt":       True,
-        "boost/*:without_context":      True,
-        "boost/*:without_contract":     True,
-        "boost/*:without_coroutine":    True,
-        "boost/*:without_date_time":    True,
-        "boost/*:without_exception":    True,
-        "boost/*:without_fiber":        True,
-        "boost/*:without_filesystem":   True,
-        "boost/*:without_graph":        True,
-        "boost/*:without_graph_parallel": True,
-        "boost/*:without_iostreams":    True,
-        "boost/*:without_json":         True,
-        "boost/*:without_locale":       True,
-        "boost/*:without_log":          True,
-        "boost/*:without_math":         True,
-        "boost/*:without_mpi":          True,
-        "boost/*:without_nowide":       True,
-        "boost/*:without_program_options": True,
-        "boost/*:without_python":       True,
-        "boost/*:without_random":       True,
-        "boost/*:without_regex":        True,
-        "boost/*:without_serialization": True,
-        "boost/*:without_stacktrace":   True,
-        "boost/*:without_system":       True,
-        "boost/*:without_test":         True,
-        "boost/*:without_thread":       True,
-        "boost/*:without_timer":        True,
-        "boost/*:without_type_erasure": True,
-        "boost/*:without_url":          True,
-        "boost/*:without_wave":         True,
-        # Note: we don't disable `container` because that's the
-        # whole point of this demo. Header-only by default.
+        # Boost: header-only. All this demo needs from Boost is
+        # `boost::container::flat_map`, which is a template-only
+        # facility in <boost/container/flat_map.hpp>. Setting
+        # `header_only=True` tells Conan to skip building any of
+        # Boost's compiled libraries (atomic, filesystem, system,
+        # process, log, regex, …) — neither building them nor
+        # validating their internal cross-dependencies. r55 tried
+        # to enumerate ~30 `without_X: True` opt-outs manually and
+        # hit a validation error because Boost's `process` library
+        # was still enabled-by-default and required `filesystem`
+        # and `system`, both of which I'd disabled. Header-only
+        # mode sidesteps all of that.
+        "boost/*:header_only": True,
     }
 
     def requirements(self):

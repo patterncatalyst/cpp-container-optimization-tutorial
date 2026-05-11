@@ -8324,6 +8324,77 @@ regenerate-script complexity cost preemptively.
 Iterative cadence per item 1's confirmation. Items 3-5
 (demo-03, PPTX, §13 prose) follow after demo-02 settles.
 
+### 2026-05-10 — r56: Boost `header_only=True` instead of enumerating without_X opt-outs
+
+User ran r55's demo-02. Conan resolved the graph but
+then failed validation:
+
+    ERROR: There are invalid packages:
+    boost/1.86.0: Invalid: process requires
+    ['filesystem', 'system']: filesystem is disabled
+
+r55's conanfile.py enumerated ~30 `without_X: True`
+options to slim Boost down — but missed `without_process`.
+The Boost recipe validates that *if* `process` is
+enabled (default), its dependencies (`filesystem`,
+`system`) must also be enabled. Both of those *were*
+in my disable list, so the validation tripped.
+
+The fix isn't to add `without_process` to the
+enumeration. It's to step up one abstraction layer:
+**all this demo needs from Boost is
+`boost::container::flat_map`, which is header-only.**
+The Boost recipe has a `header_only=True` option that
+makes Conan skip building any compiled library and
+skip validating their internal cross-dependencies.
+
+Replaced the ~30-line `without_X` block with three lines:
+
+    default_options = {
+        "*/*:shared": False,
+        "boost/*:header_only": True,
+    }
+
+Same effective result, no option-name surface area, faster
+graph resolution, no recipe-version drift risk on option
+names (Boost recipes occasionally rename options between
+versions). It's the right shape for any demo that uses
+only Boost's header-only components.
+
+**Lesson worth surfacing for §13.** The
+"enumerate-everything-I-don't-want" approach is fragile —
+miss one entry and validation explodes; the recipe can
+add new options between versions; the option names can
+drift. Single-flag escape hatches like `header_only=True`
+are more durable.
+
+**What r56 ships:**
+
+1. conanfile.py: `default_options` collapsed from ~32
+   entries to 2; new comment block explaining why
+   header-only is the right shape here.
+
+**Anticipated outcomes:**
+
+- **Best case:** Conan resolves with header-only Boost
+  (much faster — no Boost build at all), the rest of
+  the install proceeds normally, the benchmark
+  binary builds, demo.sh runs both phases, test
+  script verifies the two §6 criteria.
+- **header_only=True changes binary identity, triggers
+  rebuilds:** Conan's package_id calculation depends
+  on options. With header_only=True the boost package_id
+  changes from anything r55 cached; existing build cache
+  is invalid. First run will re-resolve from Conan
+  Center but shouldn't trigger any from-source builds
+  (header-only Boost has a pre-built recipe-only
+  package).
+- **benchmark/1.9.1 doesn't have a prebuild for our
+  gnu17 profile** (visible in the r55 output: "Main
+  binary package missing, Checking 7 compatible
+  configurations"): Conan rebuilds Google Benchmark
+  from source under gnu17. ~30-60s.
+
 ---
 
 ## Known divergences from the PRD
