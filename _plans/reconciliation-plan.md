@@ -2683,6 +2683,166 @@ honest than pretending everything is binary.
 
 ---
 
+### G-31 · Two-bug round on the lockfile rollout: Conan auto-detects `conan.lock`, and `tar -x` doesn't delete files removed in a newer release (r54)
+
+**Problem.** r53 shipped a lockfile scaffold for demo-04
+with an empty `conan.lock` placeholder and a defensive
+"if `[ -s conan.lock ]`" branch in the Containerfile.
+The first user-side rollout surfaced two distinct
+problems in a single run:
+
+1. **The regenerate script failed inside the podman
+   container** with:
+
+       ERROR: Ambiguous command, both conanfile.py and
+       conanfile.txt exist
+
+   But our repo's r46 commit explicitly deleted
+   `conanfile.txt` (converted to `conanfile.py` for
+   `override=True` support). The user's repo had both
+   files in the working tree.
+
+2. **The Containerfile's `else` branch (empty
+   placeholder) failed during `conan install`** with:
+
+       ERROR: Error parsing lockfile '/src/conan.lock':
+       Expecting value: line 1 column 1 (char 0)
+
+   The else branch was supposed to not use the lockfile,
+   but Conan still tried to parse it.
+
+**Why (1) — the tar-overlay gotcha.** Our shipping
+mechanism is `tar -czf cpp-container-tutorial-rNN.tar.gz`
++ the user runs `tar xzf ... --strip-components=1 -C .`
+to extract over their existing checkout. **This is
+overlay, not sync.** `tar -x` adds files and overwrites
+existing ones; it does not delete files that aren't in
+the archive.
+
+r46's commit (`fix(demo-04): convert conanfile.txt →
+conanfile.py with override=True`) deleted `conanfile.txt`
+from the repo. r46's tar therefore didn't contain
+`conanfile.txt`. When the user extracted r46's tar over
+r45a's checkout (which had `conanfile.txt`), the file
+wasn't deleted — it was simply not touched. The user's
+working tree retained the old file.
+
+Then `git add -A && git commit` did add the new
+`conanfile.py` but didn't notice the old
+`conanfile.txt` because it was still on disk. The
+user's repo silently grew the redundant file.
+
+This has probably been latent since r46 and only
+surfaced now because Conan's CLI is the first tool to
+actively reject the combination.
+
+**Why (2) — Conan auto-detects conan.lock.** Conan
+2.x checks for a file named `conan.lock` in the current
+working directory at install time, **regardless of
+whether `--lockfile` was passed**. If the file exists,
+Conan tries to parse it as a lockfile. An empty file
+fails JSON parsing → install aborts.
+
+Our `else` branch ran `conan install` without
+`--lockfile`, but the empty placeholder was still in
+the cwd, and Conan's auto-detection found it.
+
+**Fix.**
+
+For (1): defensive guard in the regenerate script that
+detects the duplicate and refuses to proceed with a
+helpful error pointing at the manual cleanup:
+
+    if [[ -f "$DEMO_DIR/conanfile.txt" ]]; then
+        log_err "Both conanfile.py and conanfile.txt exist..."
+        log_err "  Remove it permanently:"
+        log_err "    git rm examples/demo-04-observability/conanfile.txt"
+        log_err "    git commit -m 'chore(demo-04): drop stale conanfile.txt'"
+        exit 1
+    fi
+
+We *don't* silently delete the user's file. They may
+have local changes; the right move is to make them
+explicit about the cleanup.
+
+For (2): the Containerfile's `else` branch removes the
+empty placeholder before `conan install` runs:
+
+    else \
+        echo "==> conan.lock is empty placeholder..."; \
+        rm -f conan.lock ; \
+        conan install . --output-folder=build/conan ...
+
+Now Conan's auto-detect finds nothing and proceeds
+normally.
+
+**Discoverability lessons:**
+
+- **`tar -x` is an overlay, not a sync.** When
+  shipping diff-like archives, file deletions don't
+  propagate. The receiver has to either use `rsync
+  --delete`, manually `git rm`, or accept that the
+  shipping mechanism silently drifts. For a tutorial
+  that ships .tar.gz patches across many rounds,
+  this is a recurring hazard.
+- **Conan 2.x has cwd-sensitive default behavior.**
+  Files named `conan.lock`, `conanfile.py`,
+  `conanfile.txt` in the cwd are picked up
+  automatically by most subcommands. This is usually
+  what you want but bites when you have stale or
+  placeholder files.
+- **An "if file exists and is non-empty" check in a
+  Containerfile doesn't fully control downstream
+  tools.** Our `[ -s conan.lock ]` correctly chose the
+  else branch, but Conan still found the file by name
+  because of its own auto-detect. The Containerfile
+  needs to actively *remove* the unwanted file before
+  invoking the tool, not just decide not to pass it.
+
+**Tutorial value.** Two lessons that probably belong
+in different chapters:
+
+- The tar-overlay gotcha is a §13 (Reproducibility)
+  topic — yet another illustration of "your shipping
+  mechanism has invariants the receiver doesn't know
+  about." Pair with the version-pin discussion: just
+  as a `[requires]` line doesn't capture revision, a
+  tar archive doesn't capture deletions.
+- The Conan auto-detect behavior is §13 too, or §0
+  (Prerequisites) — the kind of "things that surprise
+  you when you first use Conan 2.x" caveat that
+  belongs in a Quick Tips list.
+
+**What r54 ships:**
+
+1. Containerfile's else branch removes empty
+   `conan.lock` before `conan install` runs.
+2. Regenerate script detects stray `conanfile.txt`
+   and refuses with an actionable error.
+3. G-31 promoted in plan with both sub-issues.
+
+**User's next steps:**
+
+```bash
+# 1. Clean up the stray conanfile.txt (one-time)
+git rm examples/demo-04-observability/conanfile.txt
+git commit -m "chore(demo-04): drop stale conanfile.txt"
+
+# 2. Re-run the regenerate script (should now succeed)
+./scripts/regenerate-demo-04-lockfile.sh
+
+# 3. Commit the real lockfile
+git add examples/demo-04-observability/conan.lock
+git commit -m "chore(demo-04): seed Conan lockfile"
+
+# 4. Rerun verification — Containerfile should pick up
+#    the lockfile this time and print the
+#    "Using committed conan.lock" message
+./scripts/test-demo-04-observability.sh
+```
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -7918,6 +8078,110 @@ message from the Containerfile.
 
 **Item 1 of 5 done.** Item 2 (demo-02) is next on the
 queue.
+
+### 2026-05-10 — r54: G-31 fix — Conan auto-detect + tar-overlay gotcha bit on the lockfile rollout
+
+User ran r53's `regenerate-demo-04-lockfile.sh` and the
+subsequent test-demo-04. Two distinct failures surfaced:
+
+1. **Regenerate script failed:** `ERROR: Ambiguous
+   command, both conanfile.py and conanfile.txt exist`
+   — even though r46 explicitly deleted conanfile.txt
+   from our repo. Root cause: tar-overlay. r46's tar
+   didn't contain conanfile.txt, but `tar -x` adds
+   files; it doesn't delete files. User's checkout
+   retained the stale file from r45a. `git add -A`
+   doesn't notice files that weren't tar-deleted, so
+   the file silently lived in their repo for 7+
+   rounds.
+2. **Containerfile's else branch failed:**
+   `Error parsing lockfile '/src/conan.lock'` — Conan
+   2.x auto-detects `conan.lock` in cwd regardless of
+   whether `--lockfile` was passed. Our empty
+   placeholder fails JSON parse.
+
+**Both fixed in r54.**
+
+For the tar-overlay: regenerate script now detects the
+stray conanfile.txt and refuses with an actionable
+error pointing the user at `git rm`. We deliberately
+don't silently delete — the user may have local
+changes; explicit cleanup is safer.
+
+For the auto-detect: Containerfile's else branch
+removes the empty placeholder before `conan install`
+runs (`rm -f conan.lock`). Conan's auto-detect then
+finds nothing and proceeds normally.
+
+**Promoted to G-31** with both lessons:
+
+- **tar-overlay isn't sync** — file deletions in a
+  newer tar don't propagate to receivers who extract
+  over an existing tree. For the tutorial's
+  multi-round shipping pattern, this is a recurring
+  hazard. Document so future readers know.
+- **Conan 2.x has cwd-sensitive auto-detection** —
+  `conan.lock`, `conanfile.py`, `conanfile.txt` are
+  picked up by name. An "if file is non-empty" check
+  in a Containerfile doesn't fully control the tool;
+  you have to actively remove unwanted files.
+
+Both lessons belong in §13 (Reproducibility) — the
+tar-overlay one as a sidebar on "what your shipping
+mechanism captures" (alongside the version-pin
+discussion); the Conan one in the "common Conan 2.x
+surprises" Quick Tips list.
+
+**What r54 ships:**
+
+1. `examples/demo-04-observability/Containerfile`:
+   else branch removes empty conan.lock placeholder
+   before `conan install`.
+2. `scripts/regenerate-demo-04-lockfile.sh`:
+   defensive check for stray conanfile.txt with an
+   actionable error message.
+3. G-31 promoted in plan covering both sub-issues.
+4. r54 round entry.
+
+**User's next steps for activating the lockfile:**
+
+```bash
+# 1. Clean up the stray conanfile.txt
+git rm examples/demo-04-observability/conanfile.txt
+git commit -m "chore(demo-04): drop stale conanfile.txt"
+
+# 2. Rerun the regenerate script
+./scripts/regenerate-demo-04-lockfile.sh
+
+# 3. Commit the real lockfile
+git add examples/demo-04-observability/conan.lock
+git commit -m "chore(demo-04): seed Conan lockfile"
+
+# 4. Rerun verification — Containerfile should
+#    now log "Using committed conan.lock"
+./scripts/test-demo-04-observability.sh
+```
+
+**Anticipated outcomes (assuming user does the cleanup):**
+
+- **Best case:** all four steps succeed, item 1 of 5
+  is genuinely complete, we move to item 2.
+- **Regenerate script fails for an unrelated reason:**
+  diagnose from output. Most likely candidates:
+  podman rootless config, SELinux on the volume mount
+  (we use `:Z`), or some Conan version skew.
+- **Lockfile generates but next test-demo-04 fails:**
+  would mean the lockfile-pinned revisions don't have
+  pre-builts for our exact profile. `--build=missing`
+  should rescue but might trigger a long from-source
+  rebuild.
+
+**Latent question:** is conanfile.txt the ONLY stale
+file the tar-overlay left behind, or are there others?
+A `git rm`-then-`git add -A` cycle (or just diffing the
+user's checkout against the latest tar) would surface
+any other drift. Worth a sanity audit at some point;
+not blocking demo-02.
 
 ---
 

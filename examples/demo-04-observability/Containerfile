@@ -102,6 +102,11 @@ RUN if [ -s conan.lock ]; then \
     else \
         echo "==> conan.lock is empty placeholder; resolving graph fresh"; \
         echo "==> Run scripts/regenerate-demo-04-lockfile.sh to lock the graph"; \
+        # Remove the empty placeholder before `conan install` runs:
+        # Conan 2.x auto-detects `conan.lock` in the working directory
+        # and tries to parse it even when --lockfile isn't passed. An
+        # empty file fails JSON parsing and aborts the install. (G-31)
+        rm -f conan.lock ; \
         conan install . --output-folder=build/conan \
                         -s build_type=Release \
                         --build=missing ; \

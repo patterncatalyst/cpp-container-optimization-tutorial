@@ -47,6 +47,25 @@ if [[ ! -f "$DEMO_DIR/conanfile.py" ]]; then
     exit 1
 fi
 
+# Defensive cleanup: if conanfile.txt is sitting next to conanfile.py
+# (likely a tar-overlay leftover from an earlier round — G-31), Conan
+# refuses to proceed with "Ambiguous command, both conanfile.py and
+# conanfile.txt exist." We treat this as a user-config problem and
+# tell them how to fix it permanently, rather than silently deleting
+# the file they may not know they have.
+if [[ -f "$DEMO_DIR/conanfile.txt" ]]; then
+    log_err "Both conanfile.py and conanfile.txt exist in $DEMO_DIR"
+    log_err "  Conan would refuse to operate. The conanfile.txt is a"
+    log_err "  leftover from an earlier tar overlay (see G-31 in the"
+    log_err "  reconciliation plan). Remove it permanently:"
+    log_err ""
+    log_err "    git rm examples/demo-04-observability/conanfile.txt"
+    log_err "    git commit -m 'chore(demo-04): drop stale conanfile.txt'"
+    log_err ""
+    log_err "  Then rerun this script."
+    exit 1
+fi
+
 # The image we use here must match the Containerfile's first stage
 # closely enough that the resolved graph is the same one production
 # builds will see. Mirror UBI 9 + gcc-toolset-14 + Conan 2 + the
