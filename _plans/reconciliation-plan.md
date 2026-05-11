@@ -8477,6 +8477,131 @@ auto-iterate-to-minimum-time is great for stable
 measurements but turns into a timeout-less hang for
 quadratic cases. Worth a §6 / §13 callout.
 
+### 2026-05-10 — r58: corrected diagnosis — flat_map setup is the real O(N²); operator[] inserts shift the underlying sorted vector
+
+**r57's diagnosis was wrong.** User ran r57's
+`BM_Lookup_VectorLinear` cap. The benchmark still hung
+after 3 minutes. The actual culprit is **earlier in
+the registration order**: `BM_Lookup_FlatMap` at
+N=262144 hangs in *setup*, before any lookup runs.
+
+**Real culprit: flat_map's `operator[]` insert.**
+flat_map stores entries in a sorted contiguous vector.
+Each `m[k] = v` does:
+1. lower_bound binary search to find insert position
+   (O(log N))
+2. shift all subsequent elements right by sizeof(value_type)
+   (O(N - position) — average O(N/2))
+
+For N random keys this is O(N²) total. At N=262144 with
+a 128-byte payload, that's ~1e13 byte-copy operations,
+or roughly 17 minutes per fill call on a 10 GB/s memory
+bus. Google Benchmark calls each function multiple
+times for calibration + 3 repetitions, so the case
+never returns.
+
+Registration order:
+
+    BM_Lookup_UnorderedMap     ← fast at all sizes
+    BM_Lookup_Map              ← fast at all sizes
+    BM_Lookup_FlatMap          ← HANGS at N=262144 (setup is O(N²))
+    BM_Lookup_VectorLinear     ← never reached; r57's cap was wrong
+
+r57's fix was placed on the wrong benchmark. The
+linear-lookup case *would* be slow at large N (the
+math from r57 still applies), but we never reach it
+because flat_map's setup hangs first. r57 is therefore
+still correct as a defensive cap, just not what was
+actually blocking r56's run.
+
+**Real fix.** Use Boost.Container's bulk construction
+pattern instead of operator[]:
+
+    void fill_flat_map(bc::flat_map<int, Payload>& m,
+                       const std::vector<int>& keys) {
+        std::vector<std::pair<int, Payload>> buf;
+        buf.reserve(keys.size());
+        for (int k : keys) buf.emplace_back(k, make_payload(k));
+        std::sort(buf.begin(), buf.end(), key_less);
+        m = bc::flat_map<int, Payload>(
+            bc::ordered_unique_range, buf.begin(), buf.end());
+    }
+
+The `ordered_unique_range` constructor tag tells
+Boost.Container the input is already sorted and unique,
+which lets it move the storage in O(N). Our keys are a
+permutation of [0, N) so uniqueness is guaranteed by
+construction.
+
+Total fill cost goes from O(N²) to O(N log N) (the
+sort step). At N=262144 that's ~5M comparisons +
+fast memcpy — well under a second.
+
+**This is a §6 jewel.** flat_map is fast to *query*
+(binary search on a contiguous range, great cache
+locality) but slow to *grow* (shift on each insert).
+Real production code that uses flat_map does bulk
+construction once, then queries many times. The
+benchmarks now reflect that pattern, and the lesson
+gets a comment block at the top of the file.
+
+**Defense in depth.** Added `->MinTime(0.05)` to both
+REGISTER_BENCH macros. Google Benchmark normally
+auto-iterates until ~0.5s of CPU time accumulates per
+case. 0.05s cuts that 10×, bounding total time even
+if some future change introduces another slow case.
+Median across 3 reps still gives stable signal.
+
+**What r58 ships:**
+
+1. src/main.cpp: new `fill_flat_map` helper using
+   bulk construction; updated BM_Lookup_FlatMap and
+   BM_Iterate_FlatMap to call it; substantial comment
+   block explaining the trap (the §6 lesson).
+2. Registration macros: `MinTime(0.05)` defense.
+3. Round entry candidly correcting r57's diagnosis.
+
+**What this round doesn't change:**
+
+- Containerfile, conanfile.py, demo.sh, test script,
+  all unchanged.
+- r57's REGISTER_BENCH_SMALL_SIZES for
+  BM_Lookup_VectorLinear stays — it's still
+  defensively correct (linear scan at 262144 IS
+  O(N²) per state iteration); it just wasn't the
+  thing blocking r56's run.
+
+**Anticipated outcomes:**
+
+- **Best case:** baseline phase completes in <60s
+  (every fill is now O(N log N) and MinTime caps
+  per-rep iteration), pressured phase similar,
+  test script verifies §6 criteria.
+- **Some other unforeseen slowness:** the MinTime
+  cap bounds total time, so a "hang" should now
+  surface as merely "longer than expected" — we'd
+  see the partial output.
+- **Criterion 1 fails:** would mean flat_map's
+  iterate is NOT faster than unordered_map's at
+  N=262144. Possible if the bulk-built flat_map
+  has different alignment than a grown one. Tweak
+  by inspecting the comparison table.
+- **`bc::ordered_unique_range` doesn't exist in
+  Boost 1.86's flat_map:** very unlikely — the
+  constructor tag has been in Boost.Container
+  since 1.61. Would surface as a compile error.
+
+**Honest correction for the gotcha catalog.** This
+isn't quite a G-level gotcha (it's not a
+container/toolchain issue, it's a benchmark-authoring
+issue), but the pattern is worth surfacing in §6
+prose: **containers with cache-friendly query layout
+trade off insert performance.** Iglberger covers
+this in ch. 5 (template design tradeoffs); the
+Latency book (Enberg) covers it in the "data
+structures for hot paths" chapter. Our benchmark now
+demonstrates it end-to-end.
+
 ---
 
 ## Known divergences from the PRD

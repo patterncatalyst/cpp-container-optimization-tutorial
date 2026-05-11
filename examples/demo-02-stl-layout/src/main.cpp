@@ -77,6 +77,41 @@ void fill_map(Map& m, const std::vector<int>& keys) {
     for (int k : keys) m[k] = make_payload(k);
 }
 
+// flat_map needs a different fill strategy. Its operator[] is O(N)
+// per insert because the underlying sorted vector has to shift
+// elements to make room — so a naive m[k]=v loop for N random keys
+// is O(N²). At N=262144 with a 128-byte payload this is roughly
+// 1e13 byte-copy operations, which is *minutes per fill call* on
+// a modern desktop. Google Benchmark calls each function multiple
+// times for calibration + reps, so the case never returns.
+//
+// The right way to bulk-populate flat_map is:
+//   1. build a std::vector<pair> in any order
+//   2. sort it
+//   3. construct flat_map(ordered_unique_range, begin, end)
+//      — Boost.Container guarantees O(N) when this tag is used
+//
+// This is a §6 lesson in itself: containers with cache-friendly
+// layout often pay for it at insert time. flat_map is fast to
+// QUERY (binary search on a contiguous range) but slow to GROW
+// (each insert shifts). Real code that uses flat_map does bulk
+// construction once, then queries many times. The benchmarks
+// below reflect that pattern.
+void fill_flat_map(bc::flat_map<int, Payload>& m,
+                   const std::vector<int>& keys) {
+    std::vector<std::pair<int, Payload>> buf;
+    buf.reserve(keys.size());
+    for (int k : keys) buf.emplace_back(k, make_payload(k));
+    std::sort(buf.begin(), buf.end(),
+              [](const auto& l, const auto& r) { return l.first < r.first; });
+    // ordered_unique_range tells Boost.Container the input is
+    // already sorted and unique → O(N) construction, no per-element
+    // shifting. Our keys are a permutation of [0, N) so uniqueness
+    // is guaranteed by construction.
+    m = bc::flat_map<int, Payload>(
+        bc::ordered_unique_range, buf.begin(), buf.end());
+}
+
 // Populate a vector of pairs by appending in key order then sorting
 // (mirrors how you'd build one in real code).
 void fill_vec(std::vector<std::pair<int, Payload>>& v,
@@ -141,8 +176,7 @@ static void BM_Lookup_FlatMap(benchmark::State& state) {
     const int n = static_cast<int>(state.range(0));
     auto keys = make_keys(n);
     bc::flat_map<int, Payload> m;
-    m.reserve(static_cast<std::size_t>(n));
-    fill_map(m, keys);
+    fill_flat_map(m, keys);  // O(N log N) via bulk construction
     auto queries = make_query_keys(keys, kQueries);
     for (auto _ : state) {
         std::uint64_t sink = 0;
@@ -211,8 +245,7 @@ static void BM_Iterate_FlatMap(benchmark::State& state) {
     const int n = static_cast<int>(state.range(0));
     auto keys = make_keys(n);
     bc::flat_map<int, Payload> m;
-    m.reserve(static_cast<std::size_t>(n));
-    fill_map(m, keys);
+    fill_flat_map(m, keys);  // O(N log N) via bulk construction
     for (auto _ : state) {
         std::uint64_t sink = 0;
         for (const auto& [k, v] : m) sink += v.a;
@@ -260,13 +293,15 @@ static constexpr int kSizes[] = {64, 1024, 16384, 262144};
     BENCHMARK(fn)                                                  \
         ->Arg(kSizes[0])->Arg(kSizes[1])                           \
         ->Arg(kSizes[2])->Arg(kSizes[3])                           \
-        ->Unit(benchmark::kMicrosecond)
+        ->Unit(benchmark::kMicrosecond)                            \
+        ->MinTime(0.05)
 
 #define REGISTER_BENCH_SMALL_SIZES(fn)                             \
     BENCHMARK(fn)                                                  \
         ->Arg(kSizes[0])->Arg(kSizes[1])                           \
         ->Arg(kSizes[2])                                           \
-        ->Unit(benchmark::kMicrosecond)
+        ->Unit(benchmark::kMicrosecond)                            \
+        ->MinTime(0.05)
 
 REGISTER_BENCH_ALL_SIZES(BM_Lookup_UnorderedMap);
 REGISTER_BENCH_ALL_SIZES(BM_Lookup_Map);
