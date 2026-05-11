@@ -91,10 +91,22 @@ void recv_all(int fd, char* buf, int n) {
     }
 }
 
+// Concurrent workers writing to std::cerr can interleave individual
+// operator<< calls into a single line, producing garbled output like
+//   "loadgen: connect failed to 127.0.0.1:loadgen: connect failed to "
+// (seen in r65). std::cerr is thread-safe but only at the granularity
+// of one operator<< call, not one logical line. Format the line into
+// a string first, then write it under a mutex so each line is atomic.
+static std::mutex g_stderr_mu;
+void log_err(const std::string& msg) {
+    std::lock_guard<std::mutex> lk(g_stderr_mu);
+    std::cerr << msg << "\n";
+}
+
 void worker(const Args& a, std::vector<std::int64_t>& out_latencies_us) {
     int fd = connect_to(a.host, a.port);
     if (fd < 0) {
-        std::cerr << "loadgen: connect failed to " << a.host << ":" << a.port << "\n";
+        log_err("loadgen: connect failed to " + a.host + ":" + std::to_string(a.port));
         return;
     }
     std::vector<char> tx(static_cast<std::size_t>(a.payload_bytes), 'X');

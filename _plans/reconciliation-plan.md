@@ -2843,38 +2843,45 @@ git commit -m "chore(demo-04): seed Conan lockfile"
 
 ---
 
-### G-32 · io_uring + container seccomp: podman/docker default profiles block `io_uring_setup`; liburing return-value convention vs `perror` (r65)
+### G-32 · io_uring + container security: TWO independent gates (seccomp + SELinux), liburing return-value convention vs `perror` (r65-r66)
 
-**Problem.** Demo-03 brings up cleanly past OTel init, the
-health listener starts, then the binary terminates with:
+**Problem.** Container security on RHEL/Fedora gates io_uring
+at **two independent layers**. Disabling one without the other
+keeps io_uring blocked:
 
-    [iouring] io_uring_queue_init: Success
-    terminate called after throwing an instance of 'std::system_error'
-      what():  io_uring_queue_init: Function not implemented
+| Layer | Default action | Return value on denial | Bypass |
+|-------|----------------|------------------------|--------|
+| seccomp | block io_uring_{setup,enter,register} | `-EPERM` (errno 1) | `security_opt: seccomp=unconfined` |
+| SELinux | `container_t` denies io_uring | `-EACCES` (errno 13) | `security_opt: label=disable` |
 
-Two distinct issues compounded in one symptom.
+(A third layer, the `kernel.io_uring_disabled` sysctl introduced
+in Linux 6.6, also returns `-EPERM` and requires a host-side
+change to bypass — not relevant for the tutorial because Fedora
+ships with the default `0` value, but worth knowing about.)
 
-**Issue 1: podman's default seccomp profile blocks io_uring
-syscalls.** The kernel calls `io_uring_setup`,
-`io_uring_enter`, and `io_uring_register` are denied by the
-default profile because io_uring's registered-buffer
-mechanism is a CVE-prone surface (CVE-2022-29582 etc.).
-When code inside the container calls these, the syscall
-returns `-ENOSYS` (or `-EPERM`, depending on the seccomp
-action: SCMP_ACT_ERRNO vs SCMP_ACT_KILL_PROCESS).
+**Round trace.** This gotcha was discovered in two stages:
 
-The direct liburing call in our iouring_echo loop returned
-`-ENOSYS`. My error handler at the time printed "Success"
-because of issue 2, then exited the iouring thread cleanly.
+- **r64 logs** revealed `io_uring_queue_init: Function not implemented`.
+  The Asio io_uring backend threw `std::system_error` and
+  terminated the binary. Initially blamed on seccomp (the
+  default profile does block io_uring); the fix in r65 was
+  `seccomp=unconfined`.
 
-Asio's io_uring backend, which initializes its ring lazily
-on `io_context::run()`, hit the same `-ENOSYS` and threw
-`std::system_error`. Nothing caught it; `terminate()`
-called; process exited with code 139.
+- **r65 logs** showed io_uring still failing, but now with a
+  different errno: `Permission denied (return value -13)`.
+  `-EACCES` is **not** what seccomp returns (`-EPERM`), so the
+  diagnosis shifted. Fedora's SELinux `container_t` policy
+  denies io_uring syscalls and returns `-EACCES`. Fix in r66:
+  add `label=disable` alongside `seccomp=unconfined`.
 
-**Issue 2: `liburing` returns `-errno` as its function return
-value but does NOT set the global `errno`.** This is
-documented in `liburing(7)` but easy to miss. My code did:
+The lesson: **error codes encode the layer**. Different
+security mechanisms return different errnos for similar
+denials. `EPERM` → check capability / seccomp / sysctl;
+`EACCES` → check SELinux / AppArmor / DAC.
+
+**Issue 2: liburing returns `-errno` as its function return
+value but does NOT set the global `errno`.** Documented in
+`liburing(7)` but easy to miss. Original r64 code did:
 
     if (io_uring_queue_init(...) < 0) {
         perror("[iouring] io_uring_queue_init");
@@ -2883,10 +2890,10 @@ documented in `liburing(7)` but easy to miss. My code did:
 
 `perror` reads `errno`, which was 0 at this point (no syscall
 in this thread had set it). So it printed "[iouring]
-io_uring_queue_init: Success" — utterly misleading.
+io_uring_queue_init: Success" — utterly misleading. Cost
+~30 minutes of guessing at r64 diagnosis time.
 
-The fix is to capture the return value and pass `-ret` to
-`strerror`:
+The fix: capture the return value, pass `-ret` to `strerror`:
 
     if (int ret = io_uring_queue_init(...); ret < 0) {
         std::cerr << "[iouring] io_uring_queue_init failed: "
@@ -2894,67 +2901,42 @@ The fix is to capture the return value and pass `-ret` to
         return;
     }
 
-**Fix.**
+**Fix.** Both `seccomp=unconfined` AND `label=disable` in
+compose.yml:
 
-1. **compose.yml: opt out of seccomp for the demo.**
-   Tutorial-appropriate; production would write a custom
-   seccomp profile.
+    services:
+      demo-03-svc:
+        security_opt:
+          - "seccomp=unconfined"
+          - "label=disable"
 
-       services:
-         demo-03-svc:
-           security_opt:
-             - "seccomp=unconfined"
+Plus the iouring error-reporting fix described above, and a
+try/catch around the Asio `io_context::run()` to keep the
+exception from terminating the binary when io_uring is
+unavailable (e.g., older kernels without io_uring support).
 
-   The compose.yml comment documents the production
-   alternative (custom profile whitelisting the three
-   io_uring syscalls, then relying on the kernel's own
-   `IORING_OP_*` permissions to enforce per-op restrictions).
+**Production io_uring with container security.**
+- **Custom seccomp profile**: add io_uring_setup, io_uring_enter,
+  io_uring_register to docker's default profile whitelist.
+- **Custom SELinux policy module**: grant `container_t` the
+  io_uring syscall class via a local policy module. The kernel's
+  own `IORING_OP_*` permissions then enforce per-op restrictions.
+- **Or a rootful container** with relaxed seccomp + an SELinux
+  type that has io_uring access (e.g., `spc_t`). Broader attack
+  surface; trade-off for io_uring's performance.
 
-2. **iouring error reporting: use the return value, not
-   errno.** `std::strerror(-ret)` instead of `perror()`.
-   Added a hint message pointing at G-32 if the error is
-   ENOSYS.
+**Discoverability for §15 (Common Pitfalls) prose.**
 
-3. **Asio io_context: try/catch around `ctx.run()`.** The
-   exception is logged clearly with a hint about the
-   seccomp profile. The Asio thread exits cleanly without
-   taking down the binary; the gRPC and direct iouring
-   servers (or healthz alone if both io_uring backends are
-   blocked) keep running. Useful even with seccomp fixed,
-   because a kernel without io_uring support (RHEL 8, older
-   distros) would surface the same failure mode.
-
-**Production seccomp profile for io_uring.** If you don't
-want to drop seccomp entirely, a minimal custom profile
-adds three syscalls to docker's default:
-
-    {
-      "defaultAction": "SCMP_ACT_ERRNO",
-      "syscalls": [
-        // ... all the syscalls from default profile ...
-        {
-          "names": ["io_uring_setup", "io_uring_enter", "io_uring_register"],
-          "action": "SCMP_ACT_ALLOW"
-        }
-      ]
-    }
-
-Then load via `--security-opt seccomp=/path/to/profile.json`.
-The kernel's own `IORING_OP_*` permission model then enforces
-what individual ring operations can do (e.g., a ring registered
-without `IORING_REGISTER_BUFFERS` capability can't do
-zero-copy reads).
-
-**Discoverability.** Both halves of this issue showed up in
-the failure logs, but only the second half (the Asio
-exception) was the actual fatal cause. The first half (the
-misleading perror output) led me astray: at first I thought
-io_uring init had succeeded for the direct case. Lesson:
-**always check return values of library functions whose
-docs document return-value error conventions** (`liburing`,
-some POSIX threading APIs, system call wrappers, etc.)
-instead of pattern-matching `errno`-based reporting from
-libc.
+1. **Always check return values of library functions whose docs
+   document return-value error conventions.** liburing, some
+   POSIX threading APIs, system call wrappers — `errno` is not
+   always set.
+2. **Errno encodes the security layer that denied you.** `EPERM`
+   and `EACCES` are not interchangeable in production debugging.
+3. **Container security is multi-layered.** Disabling one layer
+   doesn't disable the others. Production code should expect
+   io_uring to fail and degrade gracefully — exactly what the
+   Asio try/catch in demo-03 demonstrates.
 
 ---
 
@@ -9633,6 +9615,117 @@ list).
   diagnosis exercise rather than a blocker. The
   side-by-side comparison should still show interesting
   differences even at low absolute throughput.
+
+User reruns:
+
+    ./examples/demo-03-io-uring-grpc/demo.sh
+
+Or with formal pass/fail:
+
+    ./scripts/test-demo-03-io-uring-grpc.sh
+
+### 2026-05-10 — r66: SELinux gates io_uring too (not just seccomp); fix loadgen stderr interleaving
+
+User ran r65. **Big progress:**
+
+- ✅ MeterProvider fix held; OTel initialized cleanly
+- ✅ Container survived; no crash
+- ✅ gRPC served **49,329 successful Echoes** at ~5K RPS,
+  p99=29.73 ms over 10 seconds of ghz load (50 concurrent)
+- ✅ Asio try/catch caught the io_uring init failure
+  cleanly; gRPC kept running
+- ✅ My iouring error reporting fix worked — no more
+  misleading "Success" from perror()
+
+But io_uring is still blocked, with a different errno:
+
+    [iouring] io_uring_queue_init failed:
+        Permission denied (return value -13)
+
+`-13` is `EACCES`. r65 assumed seccomp (which returns
+`-EPERM` = errno 1). EACCES means a **different security
+layer** is denying io_uring. Three candidates:
+
+1. SELinux's `container_t` policy
+2. AppArmor (not present on Fedora by default)
+3. `kernel.io_uring_disabled = 1` sysctl returning EPERM
+   (but EACCES, not EPERM, rules this out)
+
+The likely culprit: **SELinux on Fedora 44**. Fedora ships
+SELinux enforcing by default. The `container_t` policy
+denies io_uring syscalls from container processes, and the
+deny path returns EACCES. The seccomp bypass from r65
+doesn't help because SELinux is a separate gate.
+
+**Container security has TWO independent gates on io_uring,
+not one.** This is the corrected G-32:
+
+| Layer | Error on deny | Bypass |
+|-------|---------------|--------|
+| seccomp | EPERM (1) | `security_opt: seccomp=unconfined` |
+| SELinux | EACCES (13) | `security_opt: label=disable` |
+
+Both must be bypassed for io_uring to work in a tutorial
+container on Fedora/RHEL. r65 fixed the first; r66 fixes
+the second.
+
+**The errno encodes the layer.** This is a useful debugging
+principle worth surfacing in §15 (Common Pitfalls) prose:
+EPERM and EACCES are not interchangeable. EPERM →
+capability/seccomp/sysctl issue. EACCES → SELinux/AppArmor/DAC
+issue.
+
+**Secondary bug: tcp_loadgen stderr interleaving.** 32 worker
+threads writing `std::cerr << "loadgen: connect failed to "
+<< a.host << ":" << a.port << "\\n"` produced garbled output:
+
+    loadgen: 127.0.0.1:9000 conns=32 reqs/conn=200 payload=256
+    loadgen: connect failed to 127.0.0.1:loadgen: connect failed to loadgen: connect failed to ...
+
+`std::cerr` is thread-safe per operator<< call but not per
+logical line. The fix: format the line into a string first,
+then write it under a mutex. Added `g_stderr_mu` and a
+`log_err()` helper.
+
+**What r66 ships:**
+
+1. `examples/demo-03-io-uring-grpc/compose.yml`: add
+   `label=disable` alongside `seccomp=unconfined`. Comment
+   expanded to document both layers and the EPERM vs EACCES
+   distinction.
+
+2. `examples/demo-03-io-uring-grpc/src/tcp_loadgen.cpp`:
+   `g_stderr_mu` mutex + `log_err()` helper for atomic
+   error-line writes. Each connect failure now produces
+   exactly one well-formed line.
+
+3. `_plans/reconciliation-plan.md`: G-32 entry rewritten as
+   the two-gate version; r66 round entry.
+
+**What r66 doesn't change:**
+
+- src/main.cpp (gRPC, io_uring loop, Asio session, OTel init)
+- Containerfile, CMakeLists.txt, conanfile.py
+- demo.sh, README.md
+- test/regenerate scripts
+
+**Anticipated outcomes:**
+
+- **Best case:** with `label=disable` added, SELinux stops
+  denying io_uring. Both io_uring backends initialize. All
+  three load phases run. Signals reach LGTM. demo-03
+  verifies.
+- **Still EACCES:** would mean SELinux isn't the culprit,
+  or `label=disable` doesn't actually disable the relevant
+  enforcement. Next suspect: AppArmor (though Fedora
+  doesn't ship with it by default), or a corporate hardening
+  profile.
+- **EPERM after r66:** would mean the SELinux fix worked but
+  exposed a remaining seccomp issue we hadn't seen — perhaps
+  a syscall used by Asio's io_uring backend beyond just
+  io_uring_setup.
+- **io_uring works but performance is wildly off:** diagnose
+  later; not a verification blocker.
 
 User reruns:
 
