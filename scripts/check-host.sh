@@ -95,7 +95,7 @@ if [[ -r "$DELEGATE_PATH" ]]; then
     else
         record fail "rootless cgroup delegation" \
             "${DELEGATE:-empty}" \
-            "Needs cpu, cpuset, memory, io. See §1 step 7 for the systemd Delegate= drop-in."
+            "Needs cpu, cpuset, memory, io. Run: scripts/cgroup-delegation.sh enable"
     fi
 else
     record fail "rootless cgroup delegation" \

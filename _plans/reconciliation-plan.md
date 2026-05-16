@@ -14056,6 +14056,135 @@ Fedora 44 install. Comment corrected in r98.
 full four-scenario story, OR proceed to Round C / D / E and
 revisit cgroup delegation when convenient. Both are reasonable.
 
+### 2026-05-16 — r99: cgroup-delegation.sh helper + documentation update
+
+User asked: "what will this do to my machine?" referring to the
+systemd drop-in commands from r98. Then: "i would like it
+documented and scripts created for it." Productizing the one-time
+host setup so the user doesn't have to memorize systemd
+incantations and so future readers have a clean self-service path.
+
+**Three deliverables in r99:**
+
+1. **`scripts/cgroup-delegation.sh`** — single helper script with
+   four subcommands (`check`, `enable`, `disable`, `verify`).
+   Read-only commands (check/verify/help) run as the invoking
+   user; state-changing commands (enable/disable) self-elevate
+   via sudo. Idempotent — re-running enable when already enabled
+   is a no-op with informative messaging. Safe — detects manual
+   customization of the drop-in and refuses to clobber without
+   manual intervention.
+
+   The script encodes G-40's lesson in code form: rootless
+   podman + cpuset/cpu controllers need explicit systemd
+   delegation; default user-slice config only delegates
+   memory+pids. The script writes /etc/systemd/system/user@.
+   service.d/delegate.conf with `Delegate=cpu cpuset io memory
+   pids` and runs daemon-reload. Does NOT auto-run
+   `loginctl terminate-user` since that kills all the user's
+   sessions; prints instructions for the user to re-login on
+   their own schedule.
+
+2. **`examples/demo-05-isolation/README.md`** — replaced the
+   verbatim systemd commands (from r98) with a "use the script"
+   section that lists the four subcommands plus a Quick Path.
+   The "What the script does" subsection still includes the
+   underlying systemd drop-in content for users who want to
+   understand or do it by hand.
+
+3. **`_docs/01-prerequisites.md`** §7 — same treatment for the
+   tutorial's prerequisites section. The expected output line
+   for `check-host.sh` (around line 380 in the doc) was also
+   wrong — listed "cpu io memory pids" but missing cpuset.
+   Corrected to "cpu cpuset io memory pids" matching the r98
+   check-host.sh fix. Troubleshooting section also updated to
+   reference the new script for "Permission denied" / "controller
+   cpuset is not available" errors.
+
+**Script design choices worth noting:**
+
+- **Subcommand pattern** rather than separate scripts. One file,
+  one mental model, one consistent helper invocation. The
+  alternative (three flat scripts: enable-cgroup-delegation.sh,
+  disable-cgroup-delegation.sh, check-cgroup-delegation.sh)
+  would have been more scripts to remember and would scatter
+  shared logic. Subcommands keep it together.
+- **Default is `check`** so just typing the script name does
+  the safe, informative thing. Following the principle of
+  least surprise.
+- **Self-elevating via sudo** instead of demanding the user
+  prefix `sudo` themselves. The pattern is `exec sudo --
+  "$0" "$@"` to re-exec the script as root, preserving argv.
+  This pattern is well-established (Docker's installer does
+  the same thing) and avoids the confusing case where
+  `script enable` runs as user, partial state, then errors.
+- **Three drop-in states** detected:
+  - 0: file exists with canonical content (we wrote it)
+  - 1: file doesn't exist
+  - 2: file exists with different content (manual customization)
+  - 3: file exists with functionally equivalent content
+       (different formatting but same Delegate= controllers)
+  States 0 and 3 are accepted for enable; state 2 is refused.
+  State 2 + disable also refused.
+- **Re-login NOT automated.** The aggressive
+  `loginctl terminate-user` is mentioned in the post-enable
+  instructions as option 3 of 3, with a warning that it kills
+  all sessions. Most users will pick option 1 (GUI re-login) or
+  option 2 (reboot at their convenience). Auto-running it would
+  surprise users.
+- **`verify` subcommand** for terse pass/fail. Suitable for use
+  in test-host.sh-style aggregators or in CI; returns 0/1 with
+  a single log line.
+
+**Documentation touches summary:**
+
+- demo-05 README: 1 section rewritten (delegation), references
+  the script for all common operations
+- _docs/01-prerequisites.md: §7 rewritten to lead with the
+  script, retain manual instructions as fallback; example
+  output corrected; troubleshooting updated
+- demo.sh warning message: now references the script path
+- check-host.sh failure-fix message: now references the script
+
+**Files changed in r99 (5):**
+
+- `scripts/cgroup-delegation.sh`: NEW (437 lines)
+- `examples/demo-05-isolation/README.md`: delegation section
+  rewritten to point at the helper
+- `examples/demo-05-isolation/demo.sh`: warning text updated to
+  reference the helper
+- `scripts/check-host.sh`: failure-fix line updated
+- `_docs/01-prerequisites.md`: §7 cgroup delegation section
+  rewritten; example output corrected; troubleshooting updated
+- `_plans/reconciliation-plan.md`: this r99 entry
+
+**No code/image changes.** Pure tooling + docs. The script is
+exercised by a smoke-test of `help` subcommand (verified
+working). The state-changing subcommands (`enable`, `disable`)
+require root + systemd which can't be exercised in the build
+sandbox; they will be tested by the user on their real Fedora 44
+machine.
+
+**Status after r99:**
+
+The cgroup-delegation experience now has a clean self-service
+path. User can:
+
+- `scripts/cgroup-delegation.sh check` to see current state
+- `scripts/cgroup-delegation.sh enable` to install the drop-in
+- Log out and back in (or reboot)
+- `scripts/cgroup-delegation.sh verify` to confirm
+- Then `cd examples/demo-05-isolation && ./demo.sh` runs all
+  four scenarios
+
+If user decides delegation is too invasive, they can run
+`scripts/cgroup-delegation.sh disable` later to revert cleanly.
+demo-05 continues to work with skip-messages either way.
+
+The path-forward decision from r98 (enable delegation vs proceed
+to Round C / D / E) is unchanged; this round just productizes
+one of the two paths and makes it self-serve.
+
 ---
 
 ## Known divergences from the PRD

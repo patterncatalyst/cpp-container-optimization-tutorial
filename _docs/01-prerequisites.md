@@ -239,9 +239,19 @@ debug obscure errors for two hours":
 cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.subtree_control
 ```
 
-You should see `cpu io memory pids` (or a superset). If you see
-nothing, or only some of those, the delegation isn't enabled.
-Fix on Fedora 44:
+You should see `cpu cpuset io memory pids` (or a superset). If you see
+nothing, or only some of those, the delegation isn't enabled. The
+shipped tutorial has a helper script that automates this:
+
+```bash
+# from the repo root
+./scripts/cgroup-delegation.sh check     # show current state
+./scripts/cgroup-delegation.sh enable    # install drop-in (uses sudo)
+# log out and back in (or reboot) for it to activate
+./scripts/cgroup-delegation.sh verify    # confirm
+```
+
+If you'd rather do it by hand (the script is doing exactly this):
 
 ```bash
 sudo mkdir -p /etc/systemd/system/user@.service.d
@@ -249,11 +259,24 @@ cat <<'EOF' | sudo tee /etc/systemd/system/user@.service.d/delegate.conf
 [Service]
 Delegate=cpu cpuset io memory pids
 EOF
-sudo systemctl daemon-reexec
+sudo systemctl daemon-reload
 # log out and back in, or reboot for the user manager to pick this up
 ```
 
-Re-run the `cat` command to verify.
+The most important controllers for our demos:
+
+- **`cpu`** — needed for `--cpu-weight` (demo 5 weighted scenario)
+- **`cpuset`** — needed for `--cpuset-cpus` (demo 5 pinned scenario).
+  An earlier version of this guide claimed cpuset worked without
+  delegation; **that turned out to be wrong on Fedora 44** with
+  podman 5.x — the `--cpuset-cpus` flag triggers a "controller
+  cpuset is not available" error from crun without delegation.
+- **`memory`** — needed for `--memory` and `memory.high` (demos 2, 6)
+- **`io`** — needed for I/O limits (not heavily used by current demos
+  but cheap to include)
+- **`pids`** — already delegated by default
+
+Re-run the `cat` command after re-login to verify all five appear.
 
 ## Verify your kernel has what the demos need
 
@@ -377,7 +400,7 @@ warnings may vary depending on whether your network reaches
 [ ok ]  fedora baseline                  Fedora Linux 44 (Workstation Edition)
 [ ok ]  kernel >= 5.19                   6.10.7-200.fc44.x86_64
 [ ok ]  cgroup v2                        cgroup2fs
-[ ok ]  rootless cgroup delegation       cpu io memory pids
+[ ok ]  rootless cgroup delegation       cpu cpuset io memory pids
 [ ok ]  podman >= 5.0                    5.2.1
 [ ok ]  cmake >= 3.25                    3.28.2
 [ ok ]  podman-compose                   /usr/bin/podman-compose
@@ -483,10 +506,14 @@ On Fedora 44 the binary is in `/usr/bin/abidiff`; if your `PATH`
 is unusual, point at it explicitly. The demo's `run-clang-tidy`
 wrapper handles this; if it doesn't, file an issue.
 
-**Rootless cgroup write returns `Permission denied`.**
-Re-run step 7 above — delegation didn't stick. After re-applying,
+**Rootless cgroup write returns `Permission denied`** or **`controller
+cpuset is not available`.**
+Delegation isn't enabled or didn't stick. Run:
+`./scripts/cgroup-delegation.sh check` to diagnose, then
+`./scripts/cgroup-delegation.sh enable` to fix. After enabling,
 **you must log out and back in** (or reboot) for the user manager
-to pick it up.
+to pick it up. The `--cpuset-cpus` error in particular needs the
+cpuset controller specifically — see G-40 in the gotcha catalog.
 
 ## What's next
 

@@ -68,7 +68,8 @@ if (( ! HAS_CPU_DELEGATED )) || (( ! HAS_CPUSET_DELEGATED )); then
   log_warn "  cpu:    $((HAS_CPU_DELEGATED))  (needed for the 'weighted' scenario)"
   log_warn "  cpuset: $((HAS_CPUSET_DELEGATED))  (needed for the 'pinned' scenario)"
   log_warn "Scenarios that need missing controllers will be skipped cleanly."
-  log_warn "See README's 'Cgroup v2 controller delegation' section for the fix."
+  log_warn "Fix: run \$REPO/scripts/cgroup-delegation.sh enable  (then re-login)"
+  log_warn "     or see this demo's README for details."
 fi
 
 log_step "Building both tenants"

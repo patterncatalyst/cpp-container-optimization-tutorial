@@ -42,38 +42,67 @@ default, most distros — including Fedora 44 in many install
 configurations — only delegate `memory` and `pids` to user slices.
 You may need a one-time host opt-in to delegate `cpu` and `cpuset`.
 
-### Check your current state
+A helper script handles the check, enable, and disable for you:
 
 ```bash
-cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.subtree_control
+# From the repo root:
+./scripts/cgroup-delegation.sh check     # show current state (default)
+./scripts/cgroup-delegation.sh enable    # install systemd drop-in
+./scripts/cgroup-delegation.sh disable   # remove the drop-in
+./scripts/cgroup-delegation.sh verify    # terse pass/fail (for CI)
+./scripts/cgroup-delegation.sh help
 ```
 
-You want this to contain at least `cpu cpuset memory io`. If it shows
-just `memory pids` (or similar), the `weighted` and `pinned` scenarios
-will skip cleanly with a warning, and you'll only see the
-`baseline` and `unisolated` numbers.
-
-### Enable full delegation (one-time, persists across reboots)
+### Quick path
 
 ```bash
-sudo mkdir -p /etc/systemd/system/user@.service.d/
-sudo tee /etc/systemd/system/user@.service.d/delegate.conf <<'EOF'
+./scripts/cgroup-delegation.sh check
+# If it reports "missing controllers":
+./scripts/cgroup-delegation.sh enable
+# Log out and back in (or reboot), then:
+./scripts/cgroup-delegation.sh check
+# Should now report "fully configured."
+```
+
+### What the script does (in case you want to do it by hand)
+
+`enable` creates this file:
+
+```ini
+# /etc/systemd/system/user@.service.d/delegate.conf
 [Service]
 Delegate=cpu cpuset io memory pids
-EOF
-sudo systemctl daemon-reload
-
-# Then log out and back in, or:
-sudo loginctl terminate-user "$USER"
 ```
 
-After re-login, verify with the check command above. The
-`weighted` and `pinned` scenarios will work on the next `./demo.sh`
-run.
+…then runs `systemctl daemon-reload`. The new delegation activates on
+your next login (the script does NOT automatically log you out —
+you're invited to do that yourself or reboot at a convenient time).
 
-The demo's `./demo.sh` detects the delegation state up front and
-prints a clear message if the controllers aren't available; scenarios
-that need missing controllers are skipped cleanly rather than crashing.
+`disable` removes that file and runs `daemon-reload`. The script
+refuses to touch the file if it's been hand-customized; it only
+manages its own canonical form.
+
+`check` reads `/sys/fs/cgroup/.../cgroup.subtree_control` to see
+which controllers are currently live in your user slice, reads the
+drop-in file to see what's configured, and reports any inconsistency
+(e.g., "drop-in installed but not yet applied — you need to re-login").
+
+### Why this is needed
+
+Rootless podman containers run inside cgroups parented to your
+systemd user slice. For podman to apply CPU/memory/IO limits to
+those child cgroups, the user slice itself must have the respective
+controllers delegated — meaning they're listed in the slice's
+`cgroup.subtree_control`. Default systemd configurations delegate
+only `memory` and `pids` to user slices, which is fine for most
+containers but insufficient for `--cpu-weight`, `--cpus`,
+`--cpuset-cpus`, and similar resource flags. This script just
+flips the systemd switch that makes those flags work.
+
+If your current state shows missing controllers, `demo.sh` detects
+this up front and skips the affected scenarios cleanly with a
+warning — you'll see baseline and unisolated rows, with
+`weighted: skipped` and `pinned: skipped` in the summary.
 
 ## Caveats
 
@@ -84,7 +113,7 @@ that need missing controllers are skipped cleanly rather than crashing.
 - `--cpus` flag in podman is a wrapper around `cpu.max`; we use
   `--cpu-weight` (which maps to `cpu.weight` in cgroups v2) for the
   weighted scenario because that's the more interesting knob.
-- G-40 captured during r97/r98: rootless podman + cpuset.cpus needs
-  cpuset controller delegated to the user slice, not just available
-  on the host. Earlier documentation incorrectly suggested cpuset
-  worked without delegation; it doesn't.
+- G-40 captured during r97/r98: rootless podman + `cpuset.cpus`
+  needs the cpuset controller delegated to the user slice, not just
+  available on the host. Earlier documentation incorrectly suggested
+  cpuset worked without delegation; it doesn't.
