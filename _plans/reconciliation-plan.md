@@ -13415,6 +13415,86 @@ descriptions of the example syntax, not literal source.
 **No code changes, no rebuilds, no compose changes.** Pure site
 content fix to restore the Jekyll build.
 
+### 2026-05-16 — r93: 00-index hot-links 404 in deployment — switched to plain relative URLs
+
+User reported after r92's build-fix landed: all 82 hot-links on the
+00-index page of the statelessness reference set return 404 when
+clicked in deployment.
+
+The 00-index page itself renders correctly (the user is on it,
+sees the links, can click them). So the collection IS being
+processed and Jekyll IS generating that page. But clicking any
+"Doc NN" link goes to a 404.
+
+**Possible root causes** (sandbox has no Ruby/Jekyll so couldn't
+test-build to distinguish):
+
+1. Jekyll's link-tag resolved to a URL that doesn't match where
+   the sibling pages were actually generated. Possible if the
+   collection permalink interaction with subdirectories has any
+   subtle behavior the link tag doesn't account for.
+2. The sibling pages aren't being generated at all (only 00-index
+   is). Less likely since the collection's subdirectory was
+   processed for at least one file.
+3. Baseurl handling in the link tag differs from the actual
+   served URL prefix.
+
+**Fix:** sidestep the whole problem by converting the 82 link
+tags to plain relative URLs of the form `../NN-slug/`.
+
+The 00-index page lives at the URL `/reference/statelessness/
+00-index/`. Its sibling docs live at `/reference/statelessness/
+NN-name/`. From the perspective of the browser on the 00-index URL,
+the relative path to a sibling is `../NN-name/` — up one URL
+segment, then into the sibling slug's directory.
+
+This approach has three advantages:
+
+- Independent of Jekyll's link tag resolution
+- Independent of baseurl handling (browser resolves relative URLs
+  against whatever the current page URL is, including any baseurl)
+- Independent of collection permalink config details
+
+Wrote `/tmp/relativize-index-links.py`, a regex-based converter
+that maps each Jekyll-link tag form back to the corresponding
+relative URL via a slug-to-URL dict. Applied to 00-index.md: 82
+of 82 link tags converted, zero link tags remaining.
+
+**Files changed in r93 (3):**
+
+- `_reference/statelessness/00-index.md`: 82 link tags converted
+  to relative URLs of the form `../NN-slug/`
+- `_plans/backlog.md`: updated the "Cross-doc linking in body
+  docs" cleanup entry to point at the new relativizer script
+  (`/tmp/relativize-index-links.py`) and note that plain relative
+  URLs are the chosen pattern going forward (vs the Jekyll link
+  tag tried in r91)
+- `_plans/reconciliation-plan.md`: this r93 entry
+
+**If 404s persist after r93:** the issue is bigger than link tag
+resolution and the sibling pages aren't being generated at all.
+At that point the collection permalink config or the layout
+default needs investigation. Most likely culprits in that scenario:
+
+- Verify each file in `_reference/statelessness/` other than
+  00-index has the same frontmatter shape (layout, sectionid,
+  order, title, description). The r91 03-pmr YAML fix was
+  surgical to that one file; if any other doc has a similar YAML
+  parse failure that hasn't surfaced as a visible symptom yet,
+  the page might be skipped or generated at a different URL.
+- Check the deployed `_site/reference/statelessness/` directory
+  contents on the GH Pages artifact to see what files exist.
+- Look at the GH Actions build log for any per-file rendering
+  warnings or errors (the log truncates after the fatal error;
+  with the build now succeeding, the full log should be
+  inspectable).
+
+**No code changes, no rebuilds, no compose changes.** Site
+content fix to restore the in-page navigation. Same r92 caveat
+applies: this plan entry is written prose-only — no literal
+Jekyll/Liquid template syntax in the prose — to avoid the
+recursive-self-breakage problem.
+
 ---
 
 ## Known divergences from the PRD

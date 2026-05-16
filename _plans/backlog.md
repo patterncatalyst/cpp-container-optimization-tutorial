@@ -318,10 +318,17 @@ Per-doc reference counts (from `grep -oE 'Doc [0-9]+' | wc -l`):
 11-build-tooling.md          36 refs
 ```
 
-The `/tmp/link-index-refs.py` script used in r91 generalizes
-cleanly — point it at any of these files and it will do the same
-substitution with the same regex handling for "Doc NN–NN" range
-patterns.
+The `/tmp/relativize-index-links.py` script used in r93 generalizes
+cleanly. It uses plain relative URLs of the form `../NN-slug/`
+which are independent of Jekyll's `{% raw %}{% link %}{% endraw %}` tag resolution
+behavior and work regardless of baseurl or collection permalink
+config. Point it at any of the body docs, expand its slug list,
+and run.
+
+(The original r91 approach used Jekyll's link tag for these
+references. That approach produced 404s in deployment — see r93
+plan entry for details. Plain relative URLs are the chosen
+pattern going forward.)
 
 **Effort estimate:** 5-10 minutes plus a careful review. The same
 script + a wrapper to apply it to each file. Cross-references in
