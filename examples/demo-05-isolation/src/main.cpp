@@ -18,6 +18,8 @@
 
 #if defined(TENANT_A)
   #include <httplib.h>
+  #include <netinet/tcp.h>  // TCP_NODELAY
+  #include <sys/socket.h>   // setsockopt, SOL_SOCKET, SO_REUSEADDR
 #endif
 
 namespace {
@@ -31,6 +33,40 @@ int main() {
     std::signal(SIGINT,  on_sig);
 
     httplib::Server svr;
+
+    // ── r84 httplib config (carried over from demo-06) ──
+    //
+    // The library defaults are tuned for low-volume HTTP, not load
+    // testing. Three knobs matter for stable percentiles under hey:
+    //
+    //   keep_alive_max_count:   5     → conn retires after 5 reqs
+    //   keep_alive_timeout_sec: 5     → idle conn dies in 5s
+    //   ThreadPool size:        ~cpu  → too small for 50+ hey workers
+    //
+    // Without these, hey reports >270ms averages and 10s tail
+    // latencies — and the isolation comparisons we're trying to
+    // make are drowned in connection-setup overhead.
+    svr.set_keep_alive_max_count(1000);
+    svr.set_keep_alive_timeout(60);
+    svr.new_task_queue = [] { return new httplib::ThreadPool(16); };
+
+    // ── G-36: TCP_NODELAY (Nagle + delayed-ACK trap) ──
+    //
+    // httplib writes the HTTP response in multiple small write()s.
+    // Nagle's algorithm holds the second packet until ACK for the
+    // first; the client does delayed-ACK (waits up to 40ms hoping
+    // to piggyback). Net effect: 40ms minimum response time even
+    // when server work is 200µs.
+    //
+    // TCP_NODELAY disables Nagle on accepted sockets. SO_REUSEADDR
+    // restored here because set_socket_options REPLACES httplib's
+    // default callback (which would otherwise set it).
+    svr.set_socket_options([](auto sock) {
+        int yes = 1;
+        setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+    });
+
     svr.Get("/", [](const httplib::Request&, httplib::Response& res) {
         // Latency-sensitive: small CPU burst + a touch of memory access.
         thread_local std::vector<std::uint64_t> buf(4096);

@@ -13495,6 +13495,132 @@ applies: this plan entry is written prose-only — no literal
 Jekyll/Liquid template syntax in the prose — to avoid the
 recursive-self-breakage problem.
 
+### 2026-05-16 — r94: demo-05 isolation, Round A (apply G-36 / r84 httplib lessons to tenant-a)
+
+Returning to option-1 plan order B → C → D → E. r88 closed out
+demo-06; r89 verified it; r90-r93 handled the statelessness
+reference set integration and follow-on bugs. Now starting
+**demo-05 isolation, Round A**.
+
+**What demo-05 demonstrates:**
+
+Twin-tenant scenario showing how cgroup v2 isolation knobs change
+the latency story:
+
+- `tenant-a` — latency-sensitive HTTP service, light CPU + memory
+  access (4096-element thread_local buf, 2000-iter XOR per request)
+- `tenant-b` — memory-bandwidth hog (32MB/worker buffer, random
+  access XOR all cores) — the noisy neighbor
+
+Four scenarios measured side-by-side:
+
+1. **Baseline** — `tenant-a` alone, no neighbor (the "no contention"
+   reference point)
+2. **Unisolated** — both running, no cgroup tuning, default scheduler
+3. **Weighted** — `cpu.weight=10` for `tenant-b` (shares-based)
+4. **Pinned** — distinct `cpuset.cpus` for each tenant
+
+The expectation: scenario 2 shows tenant-a's p99 degraded; scenarios
+3 and 4 should recover most or all of the loss.
+
+**The stub was unexpectedly useful.**
+
+The pre-existing `examples/demo-05-isolation/` directory had:
+
+- `CMakeLists.txt` (20 lines) — twin-binary build via
+  `-DTENANT_A=1` / `-DTENANT_B=1` per target
+- `Containerfile` (47 lines) — multi-stage with separate runtime
+  stages for each tenant; G-35 subscription-manager fix already in
+  place from earlier rounds
+- `README.md` (46 lines) — well-thought-out spec articulating the
+  four scenarios, the rootless cgroup delegation caveat, and the
+  NUMA single-node skip
+- `demo.sh` (137 lines) — scenario-aware skeleton with `--scenario
+  baseline|unisolated|weighted|pinned`, a `bench_a` helper that
+  uses `hey` + awk to print p50/p95/p99, and a summary loop at the
+  end
+- `src/main.cpp` (83 lines) — twin-source with both tenants in
+  one file, controlled by the compile-time defines
+
+So Round A is genuinely small — apply the demo-06 lessons to the
+HTTP server config, ship, verify baseline runs. Not clean-slate.
+
+**What r94 changed (1 file, ~35 lines of additions):**
+
+`examples/demo-05-isolation/src/main.cpp`:
+
+Added two configuration sections to tenant-a's HTTP server,
+mirroring the r84 + G-36 (Nagle + delayed-ACK) fixes that took
+~4 rounds to discover in demo-06 (r81 → r82 → r83 → r84):
+
+1. **r84 httplib config:** keep_alive_max_count=1000,
+   keep_alive_timeout=60, ThreadPool(16). Without these, httplib's
+   defaults (max_count=5, timeout=5, pool size ~cpu) collapse
+   under hey's 25-50 concurrent connection load — the connection
+   churn dominates the latency measurement and the isolation
+   comparison is invisible.
+
+2. **G-36 TCP_NODELAY:** set_socket_options callback that calls
+   setsockopt(IPPROTO_TCP, TCP_NODELAY, 1) and re-sets SO_REUSEADDR
+   (because set_socket_options REPLACES httplib's default callback
+   that would otherwise set it). Without TCP_NODELAY, every
+   response hits the 40ms delayed-ACK timer even when server work
+   is 200µs.
+
+Also added the two associated #includes — `<netinet/tcp.h>` for
+the TCP_NODELAY constant and `<sys/socket.h>` for setsockopt /
+SOL_SOCKET / SO_REUSEADDR — guarded by the TENANT_A define so
+they don't pull headers into the tenant-b binary.
+
+Source-only change. No CMakeLists / Containerfile / demo.sh /
+README edits this round.
+
+**Carrying lessons across demos is the whole point.**
+
+The G-36 + r84 fixes took demo-06 four rounds to discover
+(r81: HTTP defaults broken at 78 req/s; r82: keep-alive+pool
+fixed connection-level, still 99 req/s; r83: TCP_NODELAY attempt
+with wrong socket_t qualifier; r84: TCP_NODELAY with generic
+auto-lambda, 18,469 req/s). Applying them to demo-05 took one
+round of reading the demo-06 source and pasting the relevant
+block with comments adjusted for context.
+
+This is what the gotcha catalog and teaching-points are for —
+**rounds two through five of "the same bug" should be one-line
+references rather than four-round discoveries.**
+
+**What's next (in this round, after user verifies):**
+
+User to run `./demo.sh --scenario baseline` and confirm:
+
+- Both binaries build (the source changes are syntactically clean
+  and use the same patterns demo-06 already proves compile under
+  the UBI + gcc-toolset-14 toolchain in our Containerfile)
+- tenant-a starts, accepts HTTP on the mapped port
+- The baseline `hey` run produces sensible numbers — expectation
+  is p50 around 200-500µs (similar to demo-06's tenant work which
+  is a different workload but same TCP path) and p99 within 1-2ms
+  on a quiet host
+
+If baseline works, Round A is complete and Round B begins (the
+four-scenario comparison). If baseline numbers are anomalously
+high (p50 > 5ms or p99 > 100ms), there's a Round-A leftover bug to
+chase before the comparison can be meaningful — probably an
+httplib build issue, a Containerfile entrypoint mismatch, or a
+sleep-after-start timing problem in the demo.sh.
+
+**Files changed in r94 (2):**
+
+- `examples/demo-05-isolation/src/main.cpp`: +35 lines, all
+  inside the `#if defined(TENANT_A)` block — two #includes
+  (TCP_NODELAY + setsockopt headers) and three httplib server
+  configuration calls between server construction and route
+  registration
+- `_plans/reconciliation-plan.md`: this r94 entry
+
+**No new gotchas this round.** Pure application of demo-06's
+hard-won lessons (G-35 already in stub, G-36 + r84 now in tenant-a).
+
 ---
 
 ## Known divergences from the PRD
