@@ -52,14 +52,49 @@ start_a()    { podman run --rm -d --name demo05-a -p "${PORT}:8080" "$IMG_A" >/d
 start_b()    { podman run --rm -d --name demo05-b "$@" "$IMG_B" >/dev/null; }
 stop_both()  { podman stop demo05-a demo05-b >/dev/null 2>&1 || true; sleep 0.5; }
 
+# Wait for tenant-a's HTTP server to be accepting connections. Replaces
+# a fixed 'sleep 1' which would silently race against the container's
+# startup time, especially under rootless slirp4netns.
+wait_for_a() {
+  local i
+  for i in $(seq 1 50); do
+    if curl -sf --max-time 1 "http://127.0.0.1:${PORT}/healthz" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  log_err "tenant-a did not become ready within 5s"
+  podman logs demo05-a 2>&1 | tail -20
+  return 1
+}
+
+# Robust hey-output parser.
+#
+# G-38: hey's percentile lines can have either '50%' or '50%%' depending
+# on the installation (some builds don't expand the %%-escape in the
+# format string). Pattern uses %+ to match one or more percent signs.
+#
+# Also validates that percentile lines were found at all; if not,
+# the output is unparseable and we bail with a clear error rather than
+# silently printing all-zero percentiles.
 bench_a() {
   local label="$1"
-  sleep 1
+  if ! wait_for_a; then
+    return 1
+  fi
   hey -n 5000 -c 25 "http://127.0.0.1:${PORT}/" > "results/$label.txt" 2>&1
+  if ! grep -qE '^[[:space:]]+50%+ in' "results/$label.txt"; then
+    log_err "hey produced no percentile data for $label"
+    log_err "first 30 lines of results/$label.txt:"
+    head -30 "results/$label.txt" | sed 's/^/    /' >&2
+    log_err "tenant-a container logs (tail):"
+    podman logs demo05-a 2>&1 | tail -10 | sed 's/^/    /' >&2
+    return 1
+  fi
   awk -v lbl="$label" '
-    /50% in/ {p50=$3*1000}
-    /95% in/ {p95=$3*1000}
-    /99% in/ {p99=$3*1000}
+    /^[[:space:]]+50%+ in/ {p50=$3*1000}
+    /^[[:space:]]+95%+ in/ {p95=$3*1000}
+    /^[[:space:]]+99%+ in/ {p99=$3*1000}
     END     {printf "%-12s p50=%8.2fms  p95=%8.2fms  p99=%8.2fms\n", lbl, p50, p95, p99}
   ' "results/$label.txt"
 }
@@ -127,11 +162,15 @@ esac
 log_step "Summary"
 for s in baseline unisolated weighted pinned; do
   if [[ -f "results/$s.txt" ]]; then
-    awk -v lbl="$s" '
-      /50% in/ {p50=$3*1000}
-      /95% in/ {p95=$3*1000}
-      /99% in/ {p99=$3*1000}
-      END     {printf "%-12s p50=%8.2fms  p95=%8.2fms  p99=%8.2fms\n", lbl, p50, p95, p99}
-    ' "results/$s.txt"
+    if grep -qE '^[[:space:]]+50%+ in' "results/$s.txt"; then
+      awk -v lbl="$s" '
+        /^[[:space:]]+50%+ in/ {p50=$3*1000}
+        /^[[:space:]]+95%+ in/ {p95=$3*1000}
+        /^[[:space:]]+99%+ in/ {p99=$3*1000}
+        END     {printf "%-12s p50=%8.2fms  p95=%8.2fms  p99=%8.2fms\n", lbl, p50, p95, p99}
+      ' "results/$s.txt"
+    else
+      printf "%-12s (no percentile data — see results/%s.txt)\n" "$s" "$s"
+    fi
   fi
 done

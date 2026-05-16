@@ -293,6 +293,25 @@ measurement perturbs the measurement.
 
 ### Diagnostic for "is my Simple processor killing my server?"
 
+Two signs that point at the SpanProcessor / LogRecordProcessor as
+the dominant cost:
+
+1. **Throughput is roughly constant across workload size.** If
+   `iters=1` and `iters=100` both produce around the same req/sec,
+   per-request overhead is dominating workload time. Tells you the
+   instrumentation is the constant, not the workload.
+2. **`perf record` against the server shows time in
+   `grpc::CompletionQueue::Next` and `OtlpGrpcExporter::Export`.**
+   These should be in the background batch-export thread, not in
+   the request handler's call stack. If they're in the handler
+   stack, you're synchronous-exporting.
+
+The fix is always the same: switch to Batch* processors. The
+question is whether you can afford the latency on signal
+delivery (5 seconds default) — for production observability yes,
+for debugging an active incident maybe no (use Simple* + a small
+sample rate during the debugging window).
+
 If your service has OTel instrumentation and shows:
 
 - p50 in the millisecond range when the workload itself is microseconds
@@ -314,6 +333,89 @@ auto processor = sdk_t::BatchSpanProcessorFactory::Create(std::move(exporter), o
 sdk_l::BatchLogRecordProcessorOptions opts;
 auto processor = sdk_l::BatchLogRecordProcessorFactory::Create(std::move(exporter), opts);
 ```
+
+## PMR's batch-mode advantage and the cache-sensitivity story
+
+Demo-06 ships two measurement paths against the same three
+binaries: batch mode (one container per variant, 200 inner
+iterations per binary call, JSON to stdout) and serve mode (HTTP
+service, 1 inner iteration per `/run` request). Both run the
+same workload code path. The numbers tell two different stories.
+
+### The mini-essay (publishable as-is)
+
+Batch mode (200 iters/call, hot cache, demo-06's `./demo.sh`):
+
+| Variant | p50 µs | p99 µs | Throughput |
+|---|---|---|---|
+| std::allocator | 8.66 | 15.29 | 128,924/s |
+| **std::pmr (mono+sync_pool)** | **4.08** | **5.61** | **239,090/s** |
+| mimalloc | 9.77 | 17.20 | 101,821/s |
+
+Serve mode (1 iter/req, cold cache per request, demo-06's
+`compose-serve.yml` + `hey`):
+
+| Variant | p50 µs | p99 µs | Throughput |
+|---|---|---|---|
+| std::allocator | 200 | 1,700 | 29,033/s |
+| std::pmr (mono+sync_pool) | 200 | 1,800 | 28,073/s |
+| mimalloc | 300 | 1,900 | 27,365/s |
+
+**Same C++ code, same allocators, same hardware. Completely
+different conclusions.** In batch mode PMR is 2.12× faster than
+std and 2.35× faster than mimalloc. In serve mode all three are
+indistinguishable at p50 and within run-to-run variance at p99.
+
+The PMR variant uses a `monotonic_buffer_resource` backed by a
+1MB `thread_local` inline buffer, with a
+`unsynchronized_pool_resource` as the upstream. When this is hot
+in L1/L2 cache, every `pmr::vector::push_back` becomes a pointer
+bump and a small mark-as-used update — no syscalls, no free-list
+walk, no contention. With 200 iterations per invocation, you do
+enough allocations against the same arena that the entire data
+structure stays cache-resident; the bump-allocator wins.
+
+In serve mode, a single `/run` call does ONE iteration. Even if
+the arena is hot from a previous request on the same worker
+thread, the arena's `release()` (called between iterations as
+the request scope ends) doesn't return memory to the OS — but
+it does reset the bump pointer and discard cached metadata. The
+next request starts with a "warm but reset" arena that has to
+re-fault the same pages, re-build the same small free-lists. By
+the time the data structure is hot enough for PMR to win, the
+request is done.
+
+**The teaching point**: PMR is not a free win. It's a specific
+trade-off — give up generality, get a cache-locality bonus. The
+bonus only materializes when you do enough work per arena to
+amortize the reset cost. If your service handles short-lived
+requests with little allocation per request, PMR will not show
+up in your headline numbers; if your service does bulk batch
+work with sustained allocation against the same arena, PMR can
+be transformative.
+
+**The architecture-level implication**: where you measure
+matters as much as what you measure. A microbenchmark loop
+(batch mode equivalent) will tell you PMR is 2× faster; a
+production HTTP service load test (serve mode equivalent) will
+tell you PMR doesn't help. Both are correct. Both are about the
+same code. **This is the canonical "performance is not a scalar"
+demonstration**, suitable as a §7 (memory management) primary
+example.
+
+### Where this lives in the talk
+
+This batch-vs-serve contrast is a candidate for the §7 prose
+opener. The two tables side-by-side, the cache-resident-arena
+explanation, the "where you measure matters" framing. Concrete
+numbers from a real demo, both verified end-to-end (r96 for
+batch, r89 for serve).
+
+It also pairs naturally with the OTel SpanProcessor section
+above: that one is about "your instrumentation can hide your
+workload"; this one is about "your measurement frame can hide
+the difference between allocators." Both are corollaries of
+"performance is not a scalar."
 
 ---
 

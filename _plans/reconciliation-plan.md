@@ -13621,6 +13621,188 @@ sleep-after-start timing problem in the demo.sh.
 **No new gotchas this round.** Pure application of demo-06's
 hard-won lessons (G-35 already in stub, G-36 + r84 now in tenant-a).
 
+### 2026-05-16 — r95: demo-05 Round A verify — Round-A code works; demo.sh awk parser bug + G-38 captured
+
+User ran `./demo.sh --scenario baseline`. Output looked broken at
+first glance:
+
+    baseline     p50=    0.00ms  p95=    0.00ms  p99=    0.00ms
+
+But `cat results/baseline.txt` revealed the server worked perfectly:
+
+- Total runtime: 20.05 sec (bounded by 9 stragglers hitting hey's
+  default 20-sec per-request timeout — see below)
+- 4991 of 5000 returned 200 OK (99.8% success)
+- p50 0.2 ms, p95 0.7 ms, p99 1.2 ms
+- All metrics well within the Round-A expected range (200-500µs
+  p50, <2ms p99 on a quiet host)
+
+Confirming the server's correctness, the ad-hoc test (`hey -n 100
+-c 5` outside the script) ran in 13ms at 7,453 req/sec.
+
+**The bug is in demo.sh, not the C++.** The awk parser pattern
+`/50% in/` looks for the substring "50% in" in hey's percentile
+lines. The user's installed hey emits the literal characters
+"50%% in" — two percent signs instead of one — because the
+specific hey build doesn't expand the Go fmt-printf `%%` escape
+to a single `%`. The substring "50% in" never matches the actual
+output "50%% in", so the awk variables stay at zero and the
+silent fallback prints all-zero percentiles.
+
+**G-38: hey output can have doubled percent signs in some
+installations.** Some hey builds emit `50%% in` instead of `50%
+in` in their latency-distribution lines. The Go source format
+string is `"  %v%% in %4.4f secs\n"` which in correct fmt expansion
+produces a single `%`, but apparently some compilation or wrapper
+paths preserve the literal `%%`. The fix in any awk pattern
+parsing hey output: use `%+` (one or more percent signs) instead
+of `%`. Affects only output parsing; the percentile values
+themselves are correct.
+
+**This wasn't caught earlier** because demo-06's demo.sh is
+batch-mode only and parses JSON output (from the binaries' own
+stats_to_json, not from hey). The hey output we eyeballed during
+r84/r88 verification displayed the `%%` as a visual oddity but
+didn't need parsing. demo-05's awk-based parser is the first time
+this gotcha matters.
+
+**About the 9 stragglers (separate observation, not blocking):**
+
+Of the 5000 requests, 4991 succeeded with p99 of 1.2ms; 9 timed
+out at hey's default 20-second timeout. Since hey runs them in
+parallel (25 workers), these stragglers all happened together and
+extended the wall clock from ~1 sec of actual work to ~20 sec.
+Hypotheses: connection establishment race during the brief window
+when slirp4netns is still wiring up rootless port forwarding,
+some occasional buffer-cache eviction, or a httplib accept-loop
+quirk. 0.18% error rate — annoying but tolerable; investigate in
+Round B if it shows up consistently in the comparison scenarios.
+
+**Fix shipped in r95 (3 changes to demo.sh):**
+
+1. **awk pattern uses `%+`** to match one or more percent signs
+   in both the bench-time parser and the end-of-run summary
+   loop. Both forms (`50%` and `50%%`) now parse correctly.
+
+2. **Validation step before parsing.** After hey writes to
+   results/$label.txt, the script greps for the expected
+   percentile-line pattern. If not found, it dumps the first 30
+   lines of hey output + the tail of tenant-a's container logs
+   and exits non-zero. No more silent zero-fill.
+
+3. **Health-check loop replaces `sleep 1`.** A new `wait_for_a`
+   function curls `/healthz` with up to 50 retries (5 seconds
+   total), exiting 0 on first success. Removes the fixed-sleep
+   timing race even though it wasn't the cause this round.
+
+**Files changed in r95 (2):**
+
+- `examples/demo-05-isolation/demo.sh`: bench_a rewritten to
+  call `wait_for_a` then validate hey output before awk parsing;
+  awk patterns in bench_a + summary loop updated to use `%+`;
+  G-38 captured in inline comment above bench_a
+- `_plans/reconciliation-plan.md`: this r95 entry
+
+**Round A is verified.** The Round-A code (G-36 + r84 httplib
+config from r94) works correctly. The demo.sh hey-parser bug
+masked successful execution. With r95, baseline scenario should
+report: p50 ~0.2ms, p95 ~0.7ms, p99 ~1.2ms.
+
+User to re-run `./demo.sh --scenario baseline` after applying
+r95. If numbers match the expected range, Round A is complete
+and Round B starts (the four-scenario comparison with cgroup
+v2 controls).
+
+**Sanity-tested in sandbox:** ran the new awk pattern against
+both `50%%` (user's hey output) and `50%` (canonical hey output)
+synthetic inputs. Both produce identical results matching the
+user's baseline.txt values: p50 0.20ms / p95 0.70ms / p99 1.20ms.
+
+### 2026-05-16 — r96: demo-06 ./demo.sh batch mode verified post-OTel; closes r90 backlog item
+
+User ran `./demo.sh` from `examples/demo-06-memory-and-allocators/`.
+Batch mode worked exactly as expected — all three binaries built
+and ran correctly post-r88's OTel work, the comparison table
+printed, the hash `0xac09f54afe8c6152` matched across variants as
+expected from r79.
+
+**Verified numbers (200 iters/variant, default params):**
+
+| Variant | p50 µs | p99 µs | Throughput | Hash |
+|---|---|---|---|---|
+| std::allocator | 8.66 | 15.29 | 128,924/s | 0xac09f54afe8c6152 ✓ |
+| std::pmr (mono+sync_pool) | 4.08 | 5.61 | 239,090/s | 0xac09f54afe8c6152 ✓ |
+| mimalloc | 9.77 | 17.20 | 101,821/s | 0xac09f54afe8c6152 ✓ |
+
+**This closes the r90 backlog item** "Cleanup: demo-06's
+./demo.sh (batch mode) hasn't been verified since r88." Backlog
+entry updated in place with the verified numbers; item is now
+marked as closed.
+
+**The contrast with r88's serve-mode numbers is illuminating
+and worth keeping.** Same code, same allocators, same hardware:
+
+| Mode | PMR p50 | std p50 | PMR advantage |
+|---|---|---|---|
+| Batch (200 iters/req, this run) | 4.08 µs | 8.66 µs | **2.12×** |
+| Serve (1 iter/req, r88) | 200 µs | 200 µs | none visible |
+
+In batch mode PMR's bump-allocator + warm-arena pattern produces
+~2× throughput vs std::allocator and ~2.35× vs mimalloc. In serve
+mode all three are indistinguishable at p50 and within run-to-run
+noise at p99 — exactly as the r82 README cache-sensitivity note
+predicted and r89's serve-mode verification confirmed.
+
+This is the canonical "performance is not a scalar" demonstration
+for §7 prose: same C++ code, same hardware, completely different
+allocator conclusions depending on whether you measure the inner
+loop (batch, warm arena, many iters per call) or the request
+boundary (serve, cold arena per request, one iter per call). Both
+measurements are correct; neither is the "truth"; the difference
+is the teaching point.
+
+**Captured for §7 prose** as a new ## section in
+`_plans/teaching-points.md`:
+
+- Title: "PMR's batch-mode advantage and the cache-sensitivity
+  story"
+- Structure: intro paragraph, mini-essay (both side-by-side
+  tables + cache-residency explanation + architectural
+  implication), "Where this lives in the talk" cross-reference
+- Pair-references the existing "OpenTelemetry SDK processor
+  choice: Simple vs Batch" entry as a sibling instance of the
+  same pattern (Simple-vs-Batch: instrumentation hides workload;
+  batch-vs-serve: measurement frame hides allocator difference)
+
+**Files changed in r96 (3):**
+
+- `_plans/backlog.md`: r90's "Cleanup: demo-06's ./demo.sh
+  ... hasn't been verified" entry updated in place with verified
+  numbers, marked closed (heading struck-through)
+- `_plans/teaching-points.md`: new entry "PMR's batch-mode
+  advantage and the cache-sensitivity story" inserted between
+  the existing OTel Processor entry and the (Future...)
+  placeholder; existing OTel diagnostic content preserved
+  intact
+- `_plans/reconciliation-plan.md`: this r96 entry
+
+**No code changes, no rebuilds.** Pure documentation lock-in of
+verified numbers + new teaching-point capture. Same caveat as r92
+and after: prose-only style to avoid Liquid hazards in plan
+documentation.
+
+**Recap of what's verified at this point:**
+
+- demo-06 batch mode (r96, today) — `./demo.sh` runs all 3
+  variants, 200 iters/req, hash check ✓, PMR 2.12× advantage
+- demo-06 serve mode (r89, earlier today) — `compose-serve.yml +
+  hey -z 50s -c 50` → 28,073 req/s with PMR, full OTel through
+  LGTM stack
+- demo-05 isolation Round A (r94 code + r95 demo.sh fix,
+  pending user re-run) — baseline scenario works after r95;
+  Round B (the four-scenario comparison) is up next once
+  baseline reports the expected p50 ~0.2ms numbers
+
 ---
 
 ## Known divergences from the PRD

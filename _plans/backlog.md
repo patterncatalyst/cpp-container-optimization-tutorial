@@ -262,35 +262,30 @@ touched. Not worth a dedicated round.
 
 ---
 
-## Cleanup: demo-06's `./demo.sh` (batch mode) hasn't been verified since r88
+## ~~Cleanup: demo-06's `./demo.sh` (batch mode) hasn't been verified since r88~~ — verified 2026-05-16 (r96)
 
-**Status:** Logged 2026-05-16 during r90 planning. User noted that
-the entire r80-r88 work on demo-06 has been driven via `podman
-compose` commands directly; the original `./demo.sh` (batch-mode
-comparison via `run-all.sh` inside a single container) was last
-touched in r82 (subscription-manager fix) and never re-run after
-the OTel work landed.
+**Status:** **Verified 2026-05-16 (r96).** User ran `./demo.sh`
+(default 200 iters per variant) post-r88; all three binaries built
+and ran correctly, comparison table printed, hash `0xac09f54afe8c6152`
+matched across variants exactly as expected from r79.
 
-The batch-mode path should still work — it doesn't go through the
-HTTP server, doesn't initialize OTel (env var unset), and only
-exercises the 3 binaries' stdout-JSON output mode. But "should
-still work" isn't "verified to still work."
+**Verified results:**
 
-**To verify:**
+| Variant | p50 µs | p99 µs | Throughput | Hash |
+|---|---|---|---|---|
+| std::allocator | 8.66 | 15.29 | 128,924/s | `0xac09f54afe8c6152` ✓ |
+| std::pmr (mono+sync_pool) | 4.08 | 5.61 | 239,090/s | `0xac09f54afe8c6152` ✓ |
+| mimalloc | 9.77 | 17.20 | 101,821/s | `0xac09f54afe8c6152` ✓ |
 
-```bash
-cd examples/demo-06-memory-and-allocators/
-./demo.sh                        # default: 200 iters per variant
-./demo.sh --iterations 1000      # bigger sample
-./demo.sh --clean                # rebuild path
-```
+**The PMR batch-mode advantage that disappeared in serve mode is
+real here.** 2.12× std::allocator throughput; p50 ~2× faster; p99
+~3× tighter. The "performance is not a scalar" story: same code,
+same allocator, same hardware — different conclusions depending
+on whether you measure the inner loop (batch, 200 iters/req) or
+the request boundary (serve, 1 iter/req). Worth capturing as a
+§7 prose bullet during the section-prose phase.
 
-Expected: comparison table printed, identical hash across variants
-(matching r79's verified `0xac09f54afe8c6152`), no librhsm
-warnings (r82 fix), no errors.
-
-**Effort estimate:** 5 minutes (image is already cached; just runs
-the binaries). Roll into the next demo-06 touch.
+Item closed. No further action needed.
 
 ---
 
