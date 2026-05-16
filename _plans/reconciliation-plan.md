@@ -14618,6 +14618,137 @@ cross-references.
 
 **§-anchor progress:** §11 ✓; §10 next; §7 last of the three.
 
+### 2026-05-16 — r104: §10 observability-profiling prose buildout (second of three)
+
+`_docs/10-observability-profiling.md` was 65 lines of "Planned
+content" bullets. Promoted to 437 lines / ~2700 words of finished
+prose. Following the same template as §11 (r103) but with §10-
+specific content.
+
+**Structure:**
+
+1. Frontmatter — refined description names the actual finding
+   (8.5× throughput collapse with the wrong processor) and
+   notes the LGTM + perf + eBPF coverage; duration bumped from
+   15 → 18 minutes to reflect the expanded scope
+2. Learning objectives — 6 bullets, consequence-focused; added
+   the production-diagnostic objective and the *"my service got
+   10× slower"* framing
+3. Diagram include — unchanged
+4. **The single biggest knob** (the hook) — opens with the
+   tutorial-default Simple processor code, then the verified
+   r88 numbers table, then the framing: "This is the single
+   most consequential decision in OpenTelemetry-cpp
+   instrumentation, and the documentation buries it"
+5. **How the two processors actually differ** — Simple's
+   synchronous serialization → gRPC framing → network round-
+   trip cost broken down (75-200 µs per span); Batch's
+   asynchronous enqueue cost (~1-2 µs per span)
+6. **When to use which** (decision table) — Batch for
+   production; Simple for development/debugging; Simple + 1%
+   sample for incident response; Batch with small queue for
+   memory-constrained
+7. **Metrics are different** — `PeriodicExportingMetricReader`
+   is already batch-by-design; why metrics don't suffer the
+   per-call cost; "the cost of observability is not a single
+   number"
+8. **The fix** — the actual code change, both Span and Log
+   sides, with default options as a starting point
+9. **The stack: Prometheus, Tempo, Loki, Mimir, Grafana** —
+   what each owns, why this stack vs alternatives, the
+   `otel-lgtm` single-container shape for development
+10. **Instrumenting a C++ service with OpenTelemetry** —
+    minimum viable C++ OTel setup code; "the hard part is not
+    the SDK setup; it's choosing the right processor"
+11. **`perf record` against containerized processes** — symbol
+    resolution across namespaces, two workarounds (exec inside
+    or `--symfs` outside), `perf_event_paranoid` privileges,
+    the sidecar pattern
+12. **eBPF: `bpftrace` and `bcc-tools`** — bpftrace one-liner
+    syntax with a working read-latency-histogram example;
+    bcc-tools as pre-built investigations (`runqlat`,
+    `opensnoop`, `tcpconnlat`); rootless `CAP_BPF` caveat
+13. **Production diagnostic** — 3-signal checklist (p50 ms-range
+    on µs workload; throughput constant across workload size;
+    perf shows gRPC frames in the handler stack)
+14. **Why this is a C++ concern** — C++ workloads are where
+    OTel overhead matters proportionally; the gRPC stack OTel
+    uses is the same one your app probably uses for its own
+    RPCs (§9 link)
+15. **Demo** — pointers to demo-04 (LGTM stack + sidecar
+    eBPF) and demo-06 (Simple-vs-Batch contrast)
+16. **For deeper coverage** — Enberg ch.8, Andrist & Sehr
+    ch.3, bpftrace/bcc references, OpenTelemetry-cpp docs
+    with the override-the-default warning, Grafana project
+    pages
+17. **What's next** — pointer to §11, framed to set up the
+    24.7 ms unisolated-tail story
+
+**Cross-references all check out:**
+
+- §9 (gRPC) → async vs sync gRPC calls (twice — once for
+  bcc-tools tcpconnlat angle, once for OTel exporter using
+  the same gRPC stack)
+- §11 (noisy-neighbors) → cpu.weight symptom for runqlat
+  reads, and forward pointer in "what's next"
+- demo-04 → LGTM stack walkthrough + sidecar eBPF
+- demo-06 → Simple-vs-Batch r88 verified numbers
+
+**Cross-reference to §11 (forward pointer) matches §11's
+opening framing.** §10's "what's next" says: "§11 takes the
+workload up: there are now *two* tenants on the host, both
+well-behaved... and the latency-sensitive one's tail goes from
+2 ms to 25 ms." §11's prose opens with the unisolated baseline
+(0.40 ms) → 24.70 ms p99 transition. The 2/25 ms numbers in
+§10's pointer match §11's verified data exactly.
+
+**Voice match:** matches §11 (r103) and §7's established style —
+direct, opinionated, mixes mechanism with C++ specifics, tables
+and code where they help, bold-italic for surprising results
+(8.5×, 13×), "Pick your X" decision frames, production
+diagnostic with the exact diagnostic checklist.
+
+**Mini-essay → prose transformation:**
+
+The teaching-points mini-essay (~190 lines) provided about 60%
+of the final prose. New content added:
+
+- Per-span cost breakdown (5-step itemization for both Simple
+  and Batch processors)
+- The LGTM stack table with "why this not that" reasoning
+- Minimum-viable C++ OTel SDK setup code
+- `perf record` against containerized processes (symbol
+  resolution, capabilities, two workarounds with exact commands)
+- `bpftrace` one-liner example + `bcc-tools` investigations
+  with concrete tool names
+- "Why this is a C++ concern" subsection
+- Forward pointer to §11
+
+**Files changed in r104 (2):**
+
+- `_docs/10-observability-profiling.md`: stub replaced with
+  ~2700-word finished prose (65 lines → 437 lines)
+- `_plans/reconciliation-plan.md`: this r104 entry
+
+**No code changes. No image rebuild. Pure prose lock-in.**
+
+**§-anchor progress:** §11 ✓; §10 ✓; §7 next.
+
+After §7 ships in r105, the three publishable §-anchors are
+complete and the option-1 plan moves to **C** (build out demo-07
+quality-pipeline). All three §-anchors will follow the same
+"performance is not a scalar" template:
+
+- §7: measurement frame can dominate allocator (PMR batch vs
+  serve)
+- §10: instrumentation can dominate workload (OTel Simple vs
+  Batch)
+- §11: scheduler defaults can dominate latency (CFS vs
+  isolation primitives)
+
+Three sections, three mechanisms, one shape of argument. The
+tutorial's spine.
+
 ---
 
 ## Known divergences from the PRD
