@@ -16,8 +16,8 @@ find_package(Threads REQUIRED)
 
 # Shared sources — workload is independent of allocator choice.
 # Each binary picks its allocator behavior at compile time via
-# ALLOC_TYPE_* defines, plus (for mimalloc/jemalloc) link-time
-# library replacement of the global new/delete.
+# ALLOC_TYPE_* defines, plus (for mimalloc) link-time library
+# replacement of the global new/delete via --whole-archive.
 set(SHARED_SOURCES
     src/main.cpp
     src/workload.cpp
@@ -38,13 +38,14 @@ target_link_libraries(demo06-svc-pmr PRIVATE Threads::Threads)
 # ── Variant 3: mimalloc static-linked ─────────────────────────────────
 # mimalloc's static library installs a constructor that replaces
 # global malloc/free/new/delete; the user doesn't need to call any
-# mimalloc API. Target name from Conan recipe is
-# `mimalloc::mimalloc-static`.
+# mimalloc API. Target name from Conan recipe is `mimalloc-static`
+# (flat, no `mimalloc::` namespace prefix — confirmed by Conan's
+# 'Target declared' build output in r75).
 add_executable(demo06-svc-mimalloc ${SHARED_SOURCES})
 target_compile_definitions(demo06-svc-mimalloc PRIVATE ALLOC_TYPE_MIMALLOC)
 target_include_directories(demo06-svc-mimalloc PRIVATE src)
 target_link_libraries(demo06-svc-mimalloc PRIVATE
-    mimalloc::mimalloc-static
+    mimalloc-static
     Threads::Threads
 )
 # Important: mimalloc's malloc must be linked BEFORE libc's, so we
@@ -52,7 +53,7 @@ target_link_libraries(demo06-svc-mimalloc PRIVATE
 # via a global ctor, but we belt-and-suspenders it.
 target_link_options(demo06-svc-mimalloc PRIVATE
     "-Wl,--whole-archive"
-    "$<TARGET_FILE:mimalloc::mimalloc-static>"
+    "$<TARGET_FILE:mimalloc-static>"
     "-Wl,--no-whole-archive"
 )
 

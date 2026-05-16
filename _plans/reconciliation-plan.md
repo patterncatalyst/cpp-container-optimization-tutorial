@@ -10963,6 +10963,81 @@ Or with formal pass/fail:
 
     ./scripts/test-demo-06-memory-and-allocators.sh
 
+### 2026-05-16 — r76: demo-06 CMake mimalloc target name fix (mimalloc::mimalloc-static → mimalloc-static)
+
+User ran r75 verification. Big progress: the build cleanly passed
+`conan install` (no chmod issue, no GCC 14 issue — both were
+autotools-specific to jemalloc which we dropped). Mimalloc built
+from source under our CMake-based recipe. The build proceeded to
+our CMake step where it failed with a different, much smaller
+error:
+
+    -- Conan: Target declared 'mimalloc-static'
+    CMake Error at CMakeLists.txt:53 (target_link_options):
+      Error evaluating generator expression:
+        $<TARGET_FILE:mimalloc::mimalloc-static>
+      No target "mimalloc::mimalloc-static"
+    CMake Error at CMakeLists.txt:46 (target_link_libraries):
+      Target "demo06-svc-mimalloc" links to:
+        mimalloc::mimalloc-static
+      but the target was not found.
+
+The Conan recipe declares the CMake target as `mimalloc-static`
+(flat, no namespace prefix). My r71 CMakeLists.txt assumed the
+namespaced `mimalloc::mimalloc-static` based on common Conan
+recipe patterns (which most of demo-04's OTel targets follow, for
+example — `opentelemetry-cpp::opentelemetry-cpp`). The mimalloc
+recipe is an exception.
+
+The signal was right there in Conan's own log line: "Target
+declared 'mimalloc-static'" tells us the exact CMake target name
+to use. That's worth a gotcha-catalog note for future readers
+(though it's a small one — added inline to the existing G-19
+recipe-target-naming entry rather than as a new G-NN).
+
+**Fix shipped in r76:** rename two references in CMakeLists.txt:
+- `target_link_libraries(... mimalloc::mimalloc-static ...)` →
+  `target_link_libraries(... mimalloc-static ...)`
+- `$<TARGET_FILE:mimalloc::mimalloc-static>` →
+  `$<TARGET_FILE:mimalloc-static>`
+
+Plus a comment update noting the namespace convention exception
+and citing where Conan's log told us the right name. Plus a small
+follow-up cleanup of a stale "(for mimalloc/jemalloc)" comment to
+just "(for mimalloc)" now that jemalloc is gone.
+
+**Files changed in r76 (1, plus plan):**
+
+- `examples/demo-06-memory-and-allocators/CMakeLists.txt` (3
+  lines changed across 2 hunks)
+
+**Anticipated outcomes for the r76 rebuild:**
+
+- **Very likely (~85%):** mimalloc-static target resolves, the
+  three binaries link, demo-06 toolchain proof finally completes.
+  r77 starts (HTTP + OTel).
+- **Possible (~10%):** mimalloc's global new/delete replacement
+  isn't actually happening at runtime even though linkage
+  succeeds. Symptom: all three variants produce identical
+  performance numbers because mimalloc isn't replacing anything.
+  Diagnostic: check `ldd` of demo06-svc-mimalloc, or add a
+  print of an allocator-specific symbol. Fix path: revisit the
+  `mimalloc/*:override` option in conanfile.py (I set False; might
+  need True for static-link replacement to actually take effect)
+  or use the `mimalloc-new-delete.h` include in main.cpp's
+  mimalloc branch.
+- **Possible (~5%):** PMR vs std hash divergence. Examine
+  build_node_pmr.
+
+User runs (rebuild required because CMakeLists.txt changed):
+
+    podman rmi cpp-tut/demo-06:latest 2>/dev/null || true
+    ./examples/demo-06-memory-and-allocators/demo.sh
+
+Or with formal pass/fail:
+
+    ./scripts/test-demo-06-memory-and-allocators.sh
+
 ---
 
 ## Known divergences from the PRD
