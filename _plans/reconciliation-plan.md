@@ -13803,6 +13803,117 @@ documentation.
   Round B (the four-scenario comparison) is up next once
   baseline reports the expected p50 ~0.2ms numbers
 
+### 2026-05-16 — r97: G-39 root-cause for demo-05 stragglers — httplib ThreadPool vs hey -c
+
+User returned with the demo-05 baseline output again. Re-reading
+`results/baseline.txt` showed something I'd dismissed in r95 as
+"annoying but tolerable":
+
+    Status code distribution:
+      [200] 4991 responses
+    Error distribution:
+      [9]  context deadline exceeded (Client.Timeout exceeded
+           while awaiting headers)
+
+The `25 - 16 = 9` math is not coincidence.
+
+**G-39: httplib's ThreadPool size must exceed hey's concurrency
+when keep-alive is enabled.**
+
+httplib's threading model: each accepted TCP connection is
+dispatched to a ThreadPool worker, and **that worker stays bound
+to the connection for the connection's lifetime** — not per
+request. With `keep_alive_max_count=1000` (r84 config), a single
+connection can handle up to 1000 requests, all on the same
+worker.
+
+When hey opens `-c N` concurrent persistent connections to a
+server with `ThreadPool(M)`:
+
+- If N ≤ M: every connection gets a worker, everything works
+- If N > M: M connections get workers, (N − M) connections sit
+  in the kernel accept queue waiting for a free worker, and time
+  out at hey's default 20-second per-request timeout
+
+demo-05 used `hey -c 25` against `ThreadPool(16)`: exactly
+**25 − 16 = 9 stuck connections**. The 9 timeouts in the user's
+baseline.txt match the prediction to the digit.
+
+**demo-06 has the same latent bug.** Going back to r88's verified
+hey output:
+
+| Test | hey -c | Pool | Errors observed | (-c minus pool) |
+|---|---|---|---|---|
+| demo-05 baseline | 25 | 16 | 9 | 9 ✓ |
+| demo-06 std (r88) | 50 | 16 | 37 | 34 |
+| demo-06 pmr (r88) | 50 | 16 | 35 | 34 |
+| demo-06 mimalloc (r88) | 50 | 16 | 34 | 34 ✓ |
+
+The match is exact for mimalloc, off by 1-3 for std/pmr (likely
+run-to-run variance in which connections survive). The pattern
+holds. demo-06 didn't surface this as a problem because its
+0.0035% error rate (37 of ~1M) was lost in the noise — but the
+mechanism is the same.
+
+**Why r95's parser fix didn't catch this:** the awk parser
+correctly read the percentile lines (after r95). But the 9
+stuck-connection errors don't affect the percentile values for
+the 4991 successes; those successes are fast (p50 0.2 ms, p99
+1.2 ms). The cost is *wallclock duration only* — hey waited 20
+sec for the stragglers to time out, extending the test from
+~1 sec of actual work to ~20 sec total.
+
+**Fix shipped in r97 (1 line):**
+
+```cpp
+// examples/demo-05-isolation/src/main.cpp
+svr.new_task_queue = [] { return new httplib::ThreadPool(64); };
+// (was 16)
+```
+
+Pool size 64 covers both demo-05's default `-c 25` and demo-06's
+`-c 50` patterns with headroom. Larger pools cost mostly thread
+memory (~8KB stack each at default; ~512KB total for 64 threads)
+— well within container memory budgets.
+
+Inline comment in tenant-a documents G-39 with the math
+explanation and the `25 - 16 = 9` empirical confirmation.
+
+**demo-06 backport deferred** (captured in backlog). The fix
+itself is 1 character (16 → 64), but it requires rebuilding the
+demo-06 image which has a ~30 minute Conan + OTel build cycle.
+Bundle into the next demo-06 touch rather than spend a build
+cycle on what's currently a 0.0035% error rate.
+
+**Expected after r97:**
+
+Re-running `./demo.sh --scenario baseline` should produce:
+
+- Wallclock runtime ~1 second (not 20 seconds)
+- 0 errors (or near 0) in `results/baseline.txt`
+- `Requests/sec` jumps from ~250 to multi-thousand
+- Percentile values unchanged (~p50 0.2ms, ~p99 1.2ms)
+
+The 20-second timeout-bound test ends; the actual workload speed
+shows through.
+
+**Files changed in r97 (3):**
+
+- `examples/demo-05-isolation/src/main.cpp`: ThreadPool(16) →
+  ThreadPool(64) with G-39 explanation inline
+- `_plans/backlog.md`: new entry "Cleanup: backport G-39 to
+  demo-06" with the per-demo error-count comparison table and
+  rationale for deferral
+- `_plans/reconciliation-plan.md`: this r97 entry
+
+**No rebuild for demo-06.** Only demo-05's images need rebuilding
+(quick — no Conan, just gcc-toolset-14 + httplib.h).
+
+**Round A status:** still pending user re-run to confirm. With
+r97's fix the baseline scenario should be clean and stable
+enough that Round B's four-scenario comparison signal won't be
+masked by the 0.18% stragglers we were tolerating.
+
 ---
 
 ## Known divergences from the PRD

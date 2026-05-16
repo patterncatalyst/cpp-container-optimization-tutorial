@@ -46,9 +46,21 @@ int main() {
     // Without these, hey reports >270ms averages and 10s tail
     // latencies — and the isolation comparisons we're trying to
     // make are drowned in connection-setup overhead.
+    //
+    // ── G-39 (r97): ThreadPool size vs hey concurrency ──
+    //
+    // With keep_alive enabled, each accepted TCP connection occupies
+    // one ThreadPool worker for its ENTIRE lifetime (not per request).
+    // If hey's -c exceeds the pool size, the excess connections sit
+    // in the accept queue with no worker to service them, and time
+    // out at hey's default 20-sec per-request timeout.
+    //
+    // demo-05 default test is `hey -c 25`; pool=16 produced exactly
+    // 25-16=9 stuck connections (r95 observation). Pool=64 covers
+    // both -c 25 and -c 50 (demo-06's pattern) with headroom.
     svr.set_keep_alive_max_count(1000);
     svr.set_keep_alive_timeout(60);
-    svr.new_task_queue = [] { return new httplib::ThreadPool(16); };
+    svr.new_task_queue = [] { return new httplib::ThreadPool(64); };
 
     // ── G-36: TCP_NODELAY (Nagle + delayed-ACK trap) ──
     //

@@ -380,4 +380,47 @@ anything.
 ---
 
 
+## Cleanup: backport G-39 (ThreadPool size) to demo-06
+
+**Status:** Logged 2026-05-16 (r97). demo-05 surfaced G-39 — httplib's
+ThreadPool size must exceed test concurrency when keep-alive is on,
+because each accepted TCP connection occupies one worker for its
+ENTIRE lifetime (not per-request). r97 fixed demo-05's tenant-a by
+bumping the pool from 16 to 64.
+
+**demo-06 has the same latent bug.** Its r88 verification data showed
+exactly the same pattern at lower visibility:
+
+| Test | hey -c | Pool | Errors | 25/50 - 16 prediction |
+|---|---|---|---|---|
+| demo-05 baseline | 25 | 16 | 9 | 25 − 16 = 9 ✓ |
+| demo-06 std (r88) | 50 | 16 | 37 | 50 − 16 = 34 (≈37) |
+| demo-06 pmr (r88) | 50 | 16 | 35 | 50 − 16 = 34 (≈35) |
+| demo-06 mimalloc (r88) | 50 | 16 | 34 | 50 − 16 = 34 ✓ |
+
+demo-06's error rate is 0.0035% (37 of ~1M requests) — so low it was
+lost in the noise during r88 verification. But the same root cause is
+there. The fix would be:
+
+```cpp
+// In examples/demo-06-memory-and-allocators/src/main.cpp:
+svr.new_task_queue = [] { return new httplib::ThreadPool(64); };
+// (was 16)
+```
+
+**Why deferred:**
+- Requires rebuilding demo-06's image (long Conan + OTel build, ~30 min)
+- Doesn't change demo-06's headline numbers materially (37/1M is invisible)
+- Should be batched with any other demo-06 touch to avoid a dedicated
+  build cycle for one constant change
+
+**When to do it:** the next time demo-06 needs a rebuild for any other
+reason — fold this in as a 1-line addition. Or as a standalone round
+if no other demo-06 touch is coming and we want to close the latent
+bug formally.
+
+**Effort estimate:** 1 minute of code change + 30 min build/verify.
+
+---
+
 (Other backlog items go here as they come up.)
