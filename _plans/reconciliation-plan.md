@@ -14514,6 +14514,110 @@ at once. demo-07 can be the next demo-buildout pass after that.
 
 User's call on path forward.
 
+### 2026-05-16 — r103: §11 noisy-neighbors prose buildout (first of three)
+
+User confirmed path forward: do prose rounds for the three
+publishable §-anchors (§11, §10, §7) in that order; then build
+out demo-07; PPTX last. r103 ships §11.
+
+`_docs/11-noisy-neighbors.md` was 62 lines of "Planned content"
+bullets. Promoted to 320 lines of finished prose, structured as:
+
+1. Frontmatter — kept, with refined `description` line that
+   names the actual finding (10.7× / 3.9× / 0.78× ratios)
+2. Learning objectives — refined the original 4 bullets to be
+   concrete and consequence-focused; added the production-
+   diagnostic objective
+3. Diagram include — kept as-is
+4. **The setup** — concrete description of `tenant-a`,
+   `tenant-b`, and the load generator; the verified four-row
+   numbers table as the data spine
+5. **What default fairness costs you** — explains the 10.7×
+   unisolated mechanism (CFS equal-weight default, the
+   waiting-runnable cost, the "your tail is set by your
+   neighbors" framing)
+6. **`cpu.weight`: relative priority, not a hard barrier** —
+   the 3.9× recovery, the mechanism (weight vs. preemption-
+   latency), when to use it, when not to
+7. **`cpuset.cpus`: physical isolation, with a cache bonus** —
+   the 0.78× result, the cache-warmth-from-non-migration
+   explanation, the HFT-style framing for the surprising
+   "pinned beats baseline" effect
+8. **NUMA, briefly** (subsection) — single-node host caveat
+   for the demo, the membind story for multi-socket hosts
+9. **Pick your primitive** — decision table with 5 workload
+   shapes mapped to recommended primitives; the "pinning helps
+   even with no neighbor" row called out as the surprising one
+10. **Production diagnostic** — 4-step diagnostic sequence
+    (shared cpus check, weights check, migrations check, NUMA
+    check) with the exact shell commands; fix-from-diagnosis
+    framing
+11. **Why this is a C++ concern** — the C++-specific angle that
+    distinguishes this section from a Linux-generic isolation
+    treatment: hard latency budgets are predominantly C++
+    territory, and the cache-locality bonus compounds with C++
+    work like SoA layouts (§6) and PMR arenas (§7)
+12. **Demo** — pointer to `examples/demo-05-isolation/`,
+    `./demo.sh` invocation, the controller-delegation caveat
+    with pointer to `scripts/cgroup-delegation.sh`
+13. **For deeper coverage** — refs to Enberg ch.5-6, Ghosh
+    ch.7, Andrist & Sehr ch.14, the kernel.org cgroups v2
+    admin guide
+14. **What's next** — pointer to §12 (analysis-debugging)
+
+**Voice match:** matches §7's established style — direct,
+opinionated, mixes technical mechanism with the C++ specifics,
+short paragraphs, tables and code where they help, no over-
+explanation. Section heading style consistent (## for major,
+### for subsections like NUMA).
+
+**Cross-references fixed during draft:**
+
+- Initial draft had "the httplib production-load knobs from §6"
+  — §6 is stl-layout, not the httplib config. Changed to "the
+  same production-load httplib knobs used in demo-06" with a
+  README pointer; this is accurate (G-36 and G-39 lived in
+  demo-development, not in §6 prose) and doesn't promise
+  content that isn't in that §
+- Initial draft had a "see §11 caveats" reference inside §11
+  itself (self-reference) for the `--cgroup-conf` vs
+  `--cpu-weight` G-42 note. Changed to "see the demo-05
+  README's Caveats section" — same information, correct
+  pointer
+
+**Cross-references preserved (correct as-written):**
+
+- §6 (stl-layout) → SoA layouts compounding with pinning
+- §7 (memory-management) → PMR arenas as cache-locality work
+- §10 (observability-profiling) → Grafana dashboards from §10
+  showing the same numbers as histograms
+- §1 (prerequisites) → cgroup v2 controller delegation
+- §12 (analysis-debugging) → what's next
+
+**The §-anchor model is working.** Teaching-points mini-essay
+existed; r103 promoted it to section prose with minor expansion
+(diagnostic addendum, "Why this is a C++ concern" frame). The
+verified numbers from r102 carry through unchanged. The mini-
+essay's structure provided the section's spine; what got added
+was concrete framing (Pick Your Primitive table, Production
+Diagnostic shell commands) and the C++-specific section that
+ties the Linux mechanisms back to the rest of the tutorial.
+
+This validates the path-D approach for §10 and §7 next: the
+teaching-points mini-essays are publication-ready spines; prose
+rounds promote them with audience-appropriate framing and
+cross-references.
+
+**Files changed in r103 (2):**
+
+- `_docs/11-noisy-neighbors.md`: stub replaced with 2300-word
+  finished prose (62 lines → 327 lines)
+- `_plans/reconciliation-plan.md`: this r103 entry
+
+**No code changes. No image rebuild. Pure prose lock-in.**
+
+**§-anchor progress:** §11 ✓; §10 next; §7 last of the three.
+
 ---
 
 ## Known divergences from the PRD
