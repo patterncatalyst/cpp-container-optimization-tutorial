@@ -14297,6 +14297,122 @@ pinned       p50= 0.3-0.5 ms  ...   p99= 1.5-2.5 ms
 If those numbers land, **Round B is fully verified** and the
 isolation story is complete on real data.
 
+### 2026-05-16 — r101: G-42 — `--cpu-weight` is not a podman flag; weighted scenario fix
+
+User applied r100, re-ran `./demo.sh`. Three of four scenarios
+produced clean signal:
+
+| Scenario | p50 | p95 | p99 | vs baseline |
+|---|---|---|---|---|
+| baseline (alone) | 0.50 ms | 1.50 ms | 2.20 ms | 1.0× |
+| unisolated | 1.80 ms | 6.30 ms | 12.30 ms | **3.6× / 4.2× / 5.6×** |
+| weighted | — | — | — | (failed) |
+| pinned | 0.40 ms | 1.40 ms | 2.00 ms | **0.93×** |
+
+The unisolated → pinned story is clean: 5.6× tail degradation, then
+**full recovery** via cpuset.cpus split. Pinned actually beats
+baseline marginally — the cache-warmth-from-non-migration effect
+HFT/low-latency people exploit by pinning even when alone. Worth a
+teaching-point capture (deferred — there's enough material from r100
+already and we want to keep the round focused).
+
+Weighted scenario failed. User ran the underlying command manually:
+
+    $ podman run --rm --replace -d --name demo05-test \
+          --cpu-weight=10 localhost/cpp-tut/demo-05:tenant-b
+    Error: unknown flag: --cpu-weight
+
+**G-42: `--cpu-weight` is not a podman flag.** This was a r98 typo
+that survived undetected because demo.sh redirected stderr to
+/dev/null (`if start_b --cpu-weight=10 2>/dev/null; then`) and
+produced the misleading message "rootless cgroup did not accept
+--cpu-weight; recording N/A." The error was never about cgroup
+delegation (r99 verified all controllers fully active); it was
+about the flag not existing in any podman release.
+
+The intuitive name `--cpu-weight` mirrors the cgroup v2 file
+`cpu.weight` it would conceptually set, which is why writing it
+from memory feels right. But podman's actual options for cgroup
+v2 weight are:
+
+| Flag | Behavior | Tutorial fit |
+|---|---|---|
+| `--cgroup-conf=cpu.weight=N` | Writes directly to `cpu.weight` in the container's cgroup | **Idiomatic for v2** — the value passed IS the weight |
+| `--cpu-shares=N` | Sets cgroup v1 `cpu.shares`; podman auto-translates to v2 weight | Universal but indirect — value passed is NOT the weight |
+| `--cpus=N.N` | Sets CFS quota `cpu.max`, not weight | Different concept (cap, not relative share) |
+
+Demo-05 uses `--cgroup-conf=cpu.weight=10` because:
+1. The value passed (10) IS the cgroup v2 weight, matching the
+   conceptual description in the scenario name and README
+2. The README, prerequisites doc, and inline comments all describe
+   "cpu.weight" — the flag should mirror that vocabulary
+3. Requires podman 4.0+; user has 5.8.2, no compatibility issue
+
+**Secondary fix: surface diagnostic errors.** The `2>/dev/null`
+suppression was actively harmful — it produced a fabricated
+explanation that pointed at cgroup delegation, costing a full
+debugging cycle (r98 captured G-40 and added gating; r99 added
+the delegation script; user manually enabled delegation; THEN we
+discovered the real bug was a flag typo). Captured stderr to a
+tempfile and surface it both on screen and in `results/weighted.txt`
+when the command fails.
+
+**Files changed in r101 (4):**
+
+- `examples/demo-05-isolation/demo.sh`: `--cpu-weight=10` →
+  `--cgroup-conf=cpu.weight=10`; replaced `2>/dev/null` with stderr
+  capture-to-tempfile; on failure both prints podman's actual error
+  and includes it in the weighted.txt result file; inline G-42
+  comment documenting both the wrong flag and the alternatives
+- `examples/demo-05-isolation/README.md`: 2 occurrences of
+  `--cpu-weight` updated to `--cgroup-conf=cpu.weight=N`; added G-42
+  bullet to the Caveats section with the comparison table
+- `_docs/01-prerequisites.md`: 1 occurrence updated; added G-42
+  note to the cpu-controller description
+- `_plans/reconciliation-plan.md`: this r101 entry
+
+**No image rebuild needed.** Pure demo.sh + docs fix.
+
+**Expected after r101 re-run:**
+
+The weighted scenario now produces real numbers. With tenant-a at
+default `cpu.weight=100` and tenant-b at `cpu.weight=10`, tenant-b
+gets ~10% of CPU when contending; tenant-a's degradation under load
+should be partial — somewhere between baseline (no neighbor) and
+unisolated (equal-priority neighbor):
+
+| Scenario | Expected p50 | Expected p99 |
+|---|---|---|
+| baseline | 0.50 ms | 2.20 ms |
+| unisolated | 1.80 ms | 12.30 ms |
+| **weighted** | **0.6-1.0 ms** | **3-5 ms** |
+| pinned | 0.40 ms | 2.00 ms |
+
+That gives the four-row monotonic story for §11: noisy neighbor
+costs you, weighted partly recovers, pinned recovers (and slightly
+better than baseline). On real data, in your terminal.
+
+**Lessons captured beyond G-42:**
+
+1. **Never `2>/dev/null` a command that might fail with diagnostic
+   info you care about.** Either let it through, capture to a file,
+   or wrap with `|| { capture_and_show; }`. The "silent fallback"
+   pattern in r98's weighted block fabricated a wrong story.
+2. **Manually-typed flag names that mirror config file names are a
+   recurring class of error.** `--cpu-weight` for `cpu.weight`,
+   `--memory-high` for `memory.high`, `--io-weight` for `io.weight`,
+   etc. None of these are actual podman flags. The right approach
+   is either `--cgroup-conf=$FILE=$VALUE` (idiomatic v2) or check
+   `podman run --help | grep $TOPIC` before writing.
+3. **Cumulative debugging cost matters.** G-40 (delegation) was real
+   and worth fixing. But the user's weighted-scenario failure was
+   from G-42 (this flag typo), not G-40. The misleading error from
+   r98 sent us down the delegation path for ~3 rounds (r98 gating,
+   r99 script + docs, manual setup) before we found the actual
+   cause was a one-character flag typo. Plan documents the
+   chronology accurately so future readers can see how diagnostic
+   suppression compounds into wasted effort.
+
 ---
 
 ## Known divergences from the PRD

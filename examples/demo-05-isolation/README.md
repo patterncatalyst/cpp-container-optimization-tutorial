@@ -95,9 +95,9 @@ those child cgroups, the user slice itself must have the respective
 controllers delegated — meaning they're listed in the slice's
 `cgroup.subtree_control`. Default systemd configurations delegate
 only `memory` and `pids` to user slices, which is fine for most
-containers but insufficient for `--cpu-weight`, `--cpus`,
-`--cpuset-cpus`, and similar resource flags. This script just
-flips the systemd switch that makes those flags work.
+containers but insufficient for `--cgroup-conf=cpu.weight=N`,
+`--cpus`, `--cpuset-cpus`, and similar resource flags. This script
+just flips the systemd switch that makes those flags work.
 
 If your current state shows missing controllers, `demo.sh` detects
 this up front and skips the affected scenarios cleanly with a
@@ -111,9 +111,17 @@ warning — you'll see baseline and unisolated rows, with
   single-NUMA-node host (most laptops), `pinned` still uses
   `cpuset.cpus` to split CPU cores between tenants — that part works.
 - `--cpus` flag in podman is a wrapper around `cpu.max`; we use
-  `--cpu-weight` (which maps to `cpu.weight` in cgroups v2) for the
-  weighted scenario because that's the more interesting knob.
+  `--cgroup-conf=cpu.weight=N` (which writes directly to `cpu.weight`
+  in cgroups v2) for the weighted scenario because that's the more
+  interesting knob.
 - G-40 captured during r97/r98: rootless podman + `cpuset.cpus`
   needs the cpuset controller delegated to the user slice, not just
   available on the host. Earlier documentation incorrectly suggested
   cpuset worked without delegation; it doesn't.
+- G-42 captured during r101: `--cpu-weight` is NOT a podman flag (it's
+  intuitively close to the cgroup file `cpu.weight` it would write to,
+  but no podman version has shipped it). The correct invocations are
+  `--cgroup-conf=cpu.weight=N` (writes the v2 file directly; requires
+  podman 4.0+) or `--cpu-shares=N` (legacy cgroup v1 flag, auto-
+  translated to v2 weight via a formula — the value you pass is not
+  the weight you get). The demo uses `--cgroup-conf=cpu.weight=10`.

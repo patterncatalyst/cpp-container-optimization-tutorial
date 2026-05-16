@@ -163,12 +163,33 @@ run_weighted() {
     return
   fi
   start_a
-  if start_b --cpu-weight=10 2>/dev/null; then
+  # G-42 (r101): `--cpu-weight` is NOT a podman flag (confusingly close
+  # to the cgroup v2 file name `cpu.weight` it would set). The right
+  # invocation for cgroup v2 weight is `--cgroup-conf=cpu.weight=N`,
+  # which writes directly to the container's cpu.weight in its cgroup.
+  # Alternative: `--cpu-shares=N` (cgroup v1 flag; podman auto-translates
+  # to v2 weight via a formula, but the input value is not the resulting
+  # weight). We use --cgroup-conf because the value passed IS the cgroup
+  # v2 weight, matching the conceptual description.
+  #
+  # Capture stderr to a tempfile so the actual error surfaces if podman
+  # rejects the flag — the prior `2>/dev/null` hid the original typo
+  # (--cpu-weight) and produced a misleading "rootless cgroup didn't
+  # allow it" message that was never the real cause.
+  local err
+  err=$(mktemp)
+  if start_b --cgroup-conf=cpu.weight=10 2>"$err"; then
     bench_a weighted
+    rm -f "$err"
   else
-    log_warn "rootless cgroup did not accept --cpu-weight; recording N/A"
-    echo "weighted: skipped (rootless cgroup didn't allow cpu.weight)" \
-      > results/weighted.txt
+    log_warn "podman rejected --cgroup-conf=cpu.weight=10; actual error:"
+    sed 's/^/    /' "$err" >&2
+    {
+      echo "weighted: skipped"
+      echo "podman error was:"
+      cat "$err"
+    } > results/weighted.txt
+    rm -f "$err"
   fi
   stop_both
 }
