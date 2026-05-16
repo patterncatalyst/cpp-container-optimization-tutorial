@@ -11280,6 +11280,134 @@ Or with formal pass/fail:
 
     ./scripts/test-demo-06-memory-and-allocators.sh
 
+### 2026-05-16 — r79: demo-06 second real C++ bug — PmrNode missing allocator-extended copy + move constructors
+
+**This round's bug was hiding behind r78's:** the build error
+cascade from r77 had compile failures at both `workload.cpp:107`
+(emplace_back) and `workload.cpp:113` (reserve). r78 fixed the
+proximate cause at line 107; with that out of the way, line 113's
+reserve error rose to the top of the next build.
+
+The error stack ends with:
+
+```
+vector::reserve [_Alloc = std::pmr::polymorphic_allocator<demo06::PmrNode>]
+required from here
+  113 |     out.children.reserve(static_cast<std::size_t>(nchildren));
+
+uninitialized_construct_using_allocator<
+   demo06::PmrNode, polymorphic_allocator<PmrNode>, demo06::PmrNode>(
+   PmrNode*, const polymorphic_allocator<PmrNode>&, PmrNode&&)
+```
+
+`reserve()` needs to **move existing elements** into the new
+buffer. The PMR machinery requires an allocator-extended move
+constructor of the form `PmrNode(PmrNode&&, allocator_type)`. We
+didn't have one. Same for the copy case if the move isn't viable.
+
+**The three allocator-extended constructors PMR requires:**
+
+For any type to be properly allocator-aware so std::pmr containers
+can copy or move it during resize while propagating the right
+allocator, it needs all three of:
+
+1. `PmrNode(allocator_type)` — default-construct with allocator
+2. `PmrNode(const PmrNode&, allocator_type)` — copy with allocator
+3. `PmrNode(PmrNode&&, allocator_type)` — move with allocator
+
+We had only #1 going into r79. `emplace_back()` calls #1 (default
+construction in place); `reserve()` triggers a buffer-grow that
+moves existing elements, which calls #3. `uses_allocator_-
+construction_args` (the PMR machinery) picks whichever signature
+matches the operation in flight.
+
+**Fix:**
+
+Added #2 and #3 to PmrNode in workload.hpp, each delegating to the
+allocator-extended copy/move constructors of `pmr::string` and
+`pmr::vector` (which themselves are properly allocator-aware).
+Marked the move constructor `noexcept` so `vector::reserve` uses
+move semantics rather than falling back to copy (the
+`_GLIBCXX_MAKE_MOVE_IF_NOEXCEPT_ITERATOR` path in libstdc++'s
+vector reserve checks this).
+
+Strictly speaking the allocator-extended move can allocate when
+the source and destination allocators differ (it has to re-allocate
+the per-member storage in the destination's arena). But for the
+vector::reserve case, the source and destination allocators always
+match (they're both the vector's own allocator), so the move is
+genuinely allocation-free. The standard libstdc++ pmr types use the
+same `noexcept` claim. Accepting the same trade-off here.
+
+Added an explanatory comment block above PmrNode listing all three
+required constructors and explaining why omitting #2 and #3 breaks
+`reserve()` even when `emplace_back()` works. The PmrNode type is
+now the worked example for "what an allocator-aware type looks
+like" in §7 prose.
+
+**Why this didn't show up in earlier rounds:**
+
+The vector's `reserve()` only triggers a move when the buffer needs
+to grow. In a degenerate case with a small tree, the initial vector
+capacity might be enough and reserve would be a no-op (template
+instantiation might short-circuit). But our `build_node_pmr` does
+`reserve(nchildren)` early, *forcing* the move-construct path
+during template instantiation regardless of runtime behavior. The
+compile-time check fires whether the runtime path is taken or not.
+
+**The pedagogical point worth promoting to §7 prose:**
+
+Three categories of common PMR mistakes worth a worked example
+each:
+
+1. **Manual `emplace_back(memory_resource*)` thinking it threads
+   the resource** (r78's bug). Caught by the compile error
+   "construction with an allocator must be possible if uses_allocator
+   is true." Fix: drop the arg; the vector injects its allocator.
+
+2. **Forgetting the allocator-extended copy + move constructors**
+   (r79's bug). Often works initially with small trees, then
+   fails the moment `reserve()` or `resize()` triggers a buffer
+   grow. Fix: define all three allocator-extended constructors.
+
+3. **Mixing allocators within a container subtree** (not in our
+   demo, but worth a warning). Silently corrupts the arena reset
+   semantics — children's storage outlives the arena reset.
+
+These three together cover the bulk of "I tried to use PMR and it
+didn't work" reports.
+
+**Files changed in r79 (1):**
+
+- `examples/demo-06-memory-and-allocators/src/workload.hpp`:
+  - PmrNode gains allocator-extended copy ctor
+  - PmrNode gains allocator-extended move ctor (noexcept)
+  - 15-line comment block above PmrNode documenting the
+    requirement and pedagogical context
+
+**Anticipated outcomes for the r79 rebuild:**
+
+- **Very likely (~85%):** all three binaries compile and link.
+  demo.sh runs all three. Cross-variant hash check confirms std
+  and PMR produce identical hashes. Toolchain proof complete at
+  long last.
+- **Possible (~10%):** another subtle PMR or C++23 issue surfaces
+  that the r78 template-error cascade was hiding. We're now
+  peeling layers off a deep template instantiation; each round
+  reveals what was masked by the prior error.
+- **Possible (~5%):** binaries build but cross-variant hash check
+  fails. Indicates a bug in the PMR variant's tree-building logic.
+  Diff the trees, find divergence point.
+
+User runs (rebuild required because source changed):
+
+    podman rmi cpp-tut/demo-06:latest 2>/dev/null || true
+    ./examples/demo-06-memory-and-allocators/demo.sh
+
+Or with formal pass/fail:
+
+    ./scripts/test-demo-06-memory-and-allocators.sh
+
 ---
 
 ## Known divergences from the PRD

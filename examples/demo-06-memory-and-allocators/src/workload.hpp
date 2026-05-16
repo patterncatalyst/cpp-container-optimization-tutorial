@@ -77,8 +77,35 @@ struct PmrNode {
     std::pmr::vector<int>              values;
     std::pmr::vector<PmrNode>          children;
 
+    // ── The three allocator-extended constructors PMR requires ─────────
+    //
+    // For a type to be properly allocator-aware (so std::pmr containers
+    // can copy/move it during resize while propagating the right
+    // allocator), it needs all three of:
+    //
+    //   1. `PmrNode(allocator_type)`            — default-construct with allocator
+    //   2. `PmrNode(const PmrNode&, allocator_type)` — copy with allocator
+    //   3. `PmrNode(PmrNode&&,      allocator_type)` — move with allocator
+    //
+    // `uses_allocator_construction_args` (the machinery std::pmr
+    // containers use internally) calls whichever one matches the
+    // emplace/insert/reserve operation in flight. Without #2 and #3,
+    // `reserve()` after `emplace_back()` fails to compile because the
+    // vector can't reallocate its buffer (it can't move the existing
+    // elements into the new storage with the right allocator).
+
     explicit PmrNode(allocator_type alloc)
         : label(alloc), values(alloc), children(alloc) {}
+
+    PmrNode(const PmrNode& other, allocator_type alloc)
+        : label(other.label, alloc),
+          values(other.values, alloc),
+          children(other.children, alloc) {}
+
+    PmrNode(PmrNode&& other, allocator_type alloc) noexcept
+        : label(std::move(other.label), alloc),
+          values(std::move(other.values), alloc),
+          children(std::move(other.children), alloc) {}
 };
 
 PmrNode build_tree_pmr(const WorkloadParams&  params,
