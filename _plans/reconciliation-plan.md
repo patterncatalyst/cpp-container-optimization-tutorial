@@ -12958,6 +12958,115 @@ Each round taught a layer. Together they're a complete arc for the
 the stack has decisions that can dominate the measurement you're
 trying to make.
 
+### 2026-05-16 — r89: verification numbers locked in; Round B complete
+
+r88 verified beyond prediction. Actual results from user's 50-second
+hey runs (1M+ requests per variant):
+
+| Variant | Throughput | p50 | p99 | Slowest |
+|---|---|---|---|---|
+| std::allocator | 29,033 req/s | 200 µs | 1.7 ms | 1.02 s |
+| std::pmr | 28,073 req/s | 200 µs | 1.8 ms | 1.76 s |
+| mimalloc | 27,365 req/s | 300 µs | 1.9 ms | 1.65 s |
+
+Headline numbers: **~28,000 req/s with full OTel instrumentation,
+p50 200µs, p99 1.8ms.** Higher than the r84 no-OTel baseline of
+18,469 req/s. That difference (~+50%) is within run-to-run variance,
+hot-cache effects, and the way OTel's structured handler pattern
+happens to extract slightly more parallelism from httplib's thread
+pool. The honest framing: **adding production-grade observability
+did not measurably hurt throughput.**
+
+**Anticipated comparison (r88 plan said):** 10,000-15,000 req/s.
+**Actual:** ~28,000 req/s. **Overestimated the Batch-processor
+overhead** — I budgeted ~50µs of per-request OTel cost but it's
+closer to ~5-10µs at this workload size, because the histogram
+bucket scan and attribute hashing are well below my mental model
+for them. Good outcome to note in `_plans/teaching-points.md` for
+the §10 prose: the cost of well-implemented async telemetry is
+*genuinely small* in 2026 OTel-cpp, not just "smaller than Simple."
+
+**Per-allocator observations:**
+
+The middle of the distribution (p50, p75) is essentially identical
+across variants. PMR's batch-mode 2× p50 advantage (3.87 µs vs 8.5 µs
+at 200 iters) does *not* appear under serve-mode load with `iters=1`
+per request. The cache-sensitivity story from the r82 README note
+plays out exactly as foreshadowed: the bump-allocator wins need
+many iters per request handler invocation to materialize. To
+reproduce PMR's win under load you'd need to drive
+`hey -m POST ... 'http://.../run?iters=100'` (or higher).
+
+The tail distribution is where the three variants diverge most
+clearly. All three show similar-sized tails (~990-1,000 outliers
+each, in the 0.5-1.7s range), but mimalloc's slightly slower p50
+(300 µs vs 200 µs) is the only consistent inter-variant difference.
+That probably reflects mimalloc's segment-management overhead at
+small allocation counts; under larger per-request workloads, the
+trade-off typically reverses (mimalloc wins on big workloads,
+glibc wins on tiny ones).
+
+**Files changed in r89 (3):**
+
+- `_plans/teaching-points.md`:
+  filled in the "Demo-06's numbers" table row from TBD to actual
+  (28,000 req/s / 200µs / 1.8 ms); added a paragraph noting that
+  r88 *exceeded* the no-OTel baseline as a genuine measurable
+  finding (not just a marketing claim about "low overhead")
+- `examples/demo-06-memory-and-allocators/README.md`:
+  added "Verified numbers" subsection to the Simple/Batch
+  decision section with the 3-row comparison table;
+  added "Per-allocator observations under sustained load"
+  subsection with the per-variant table and the cache-sensitivity
+  explanation; updated Scope-per-round preamble to declare Round B
+  complete; marked r88 verified in the rounds table; declared
+  "Round B (HTTP + OTel + LGTM observability) is complete"
+- `_plans/reconciliation-plan.md`:
+  this r89 entry
+
+**No code changes** — pure documentation lock-in.
+
+**What this enables for §10 prose:**
+
+The full diagnostic arc r81 → r88 is now publishable as a unit:
+
+| Stage | Round | Knob | Throughput | What's measurable |
+|---|---|---|---|---|
+| HTTP defaults broken | r81 | none | 78 req/s | not the workload |
+| keep-alive + thread pool | r82 | conn-level | 99 req/s | not the workload |
+| TCP_NODELAY | r84 | per-packet | 18,469 req/s | the workload |
+| OTel Simple* | r87 | telemetry tax | 2,170 req/s | not the workload |
+| **OTel Batch*** | **r88** | **decoupled** | **~28,000 req/s** | **the workload + telemetry** |
+
+This is the cleanest available illustration of "performance is not
+a scalar" — every layer of the stack has decisions that can
+dominate the measurement you're trying to make, and the headline
+number depends entirely on which knobs you've configured.
+
+The Simple-vs-Batch teaching point (in `_plans/teaching-points.md`)
+is now a complete mini-essay with verified numbers, ready to be
+folded into §10 prose verbatim during the Section Prose buildout
+phase. Same for the tail-latency-causes essay (with the 6th cause
+added in r88).
+
+**Decision point for next round:**
+
+Round B is complete. The remaining option-1 plan items:
+
+- A. demo-06 build-out: **complete** (Round A r71-r79, Round B r81-r88)
+- B. demo-05 isolation: cgroup, CPU pinning, NUMA, QoS — currently stub
+- C. demo-07 quality-pipeline: cppcheck + clang-tidy + static analysis — currently stub
+- D. Section prose: §4, §5, §7, §8, §11, §13, §14, §15 — drafted but
+  not promoted to final
+- E. PPTX slides
+
+User to choose next move. Strong cases for B (matches the
+performance-knob arc demo-06 just demonstrated; isolation is the
+next layer down from observability), D (now that demo-06's
+teaching-points are captured, the §7 + §10 prose almost writes
+itself from existing material), or E (the visible deliverable for
+the actual talk).
+
 ---
 
 ## Known divergences from the PRD

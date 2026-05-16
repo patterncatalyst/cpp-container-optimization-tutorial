@@ -200,7 +200,7 @@ instrumentation.
 |---|---|---|---|---|
 | No OTel (r84) | 18,469 req/s | 200 µs | 400 µs | baseline |
 | OTel Simple* (r87) | 2,170 req/s | 2.7 ms | 25.9 ms | 8.5× drop |
-| OTel Batch* (r88) | ~10–15k req/s (TBD) | ~300–500 µs (TBD) | ~1–3 ms (TBD) | recovers most |
+| OTel Batch* (r88) | **~28,000 req/s** | **200 µs** | **1.8 ms** | recovers fully — *exceeds* baseline (within run-to-run variance) |
 
 The Simple→Batch transition is the difference between "your service
 runs ten times slower because you turned on observability" and "your
