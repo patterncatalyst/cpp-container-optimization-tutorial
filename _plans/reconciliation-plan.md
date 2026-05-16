@@ -11038,6 +11038,108 @@ Or with formal pass/fail:
 
     ./scripts/test-demo-06-memory-and-allocators.sh
 
+### 2026-05-16 — r77: demo-06 CMake --whole-archive via inline-in-link-libraries (mimalloc-static is INTERFACE, not STATIC)
+
+User ran r76 verification. Target-name fix worked — CMake found
+`mimalloc-static` — but hit a new error one step further:
+
+    CMake Error at CMakeLists.txt:54 (target_link_options):
+      Error evaluating generator expression:
+        $<TARGET_FILE:mimalloc-static>
+      Target "mimalloc-static" is not an executable or library.
+
+Diagnosis: `$<TARGET_FILE:...>` only works for targets of kind
+EXECUTABLE / STATIC_LIBRARY / SHARED_LIBRARY (targets that produce
+a single concrete output file). The Conan recipe declares
+`mimalloc-static` as an INTERFACE IMPORTED library, which wraps
+the actual `.a` file in its interface properties rather than being
+the file itself. INTERFACE IMPORTED libraries have no TARGET_FILE
+to extract.
+
+I'd been using the TARGET_FILE generator expression as my way of
+getting the concrete archive path to bracket with
+`-Wl,--whole-archive` / `-Wl,--no-whole-archive`. That's the
+standard pattern when you have a STATIC_LIBRARY target, but it
+doesn't apply here.
+
+**The cleaner alternative for INTERFACE IMPORTED targets:** put
+the --whole-archive flags directly into `target_link_libraries`
+bracketing the target name. CMake passes these to the linker in
+order, expanding the target to its underlying library paths
+in-place. The linker sees:
+
+    -Wl,--whole-archive /path/to/libmimalloc-static.a -Wl,--no-whole-archive
+
+even though our source never names the .a file path explicitly.
+
+This pattern works for any target kind (INTERFACE IMPORTED or
+otherwise), so it's actually the right default; I should have
+used it from r71. The `target_link_options` + `$<TARGET_FILE>`
+form is brittle (depends on target kind) and overly clever.
+
+**Fix shipped in r77:**
+
+Replaced the separate `target_link_libraries` + `target_link_options`
+pair with a single `target_link_libraries` call that mixes raw
+linker flags with target names:
+
+```cmake
+target_link_libraries(demo06-svc-mimalloc PRIVATE
+    "-Wl,--whole-archive"
+    mimalloc-static
+    "-Wl,--no-whole-archive"
+    Threads::Threads
+)
+```
+
+Added a comment block explaining the INTERFACE-IMPORTED target
+distinction and why this form works for any target kind.
+
+**Files changed in r77 (2):**
+
+1. `examples/demo-06-memory-and-allocators/CMakeLists.txt`: the
+   variant-3 mimalloc block now uses inline linker flags in
+   `target_link_libraries` instead of a separate
+   `target_link_options` with `$<TARGET_FILE:...>`. Net: -6 lines
+   of code, +10 lines of comment explaining why.
+2. `_plans/reconciliation-plan.md`: this r77 entry.
+
+**Anticipated outcomes:**
+
+- **Very likely (~85%):** CMake configure succeeds, three binaries
+  link cleanly, demo.sh runs all three with the cross-variant hash
+  check passing. Toolchain proof finally completes after seven
+  rounds of dependency wrangling. r78 starts (HTTP + OTel).
+- **Possible (~10%):** the link succeeds but mimalloc's global
+  new/delete replacement still isn't happening (constructors
+  pulled in but mimalloc's new/delete overrides require the
+  `override` Conan option to be True at recipe build time, which
+  I set False). Diagnostic: all three variants benchmark
+  identically. Fix path: set `mimalloc/*:override = True` in
+  conanfile.py and rebuild from cache-clean state.
+- **Possible (~5%):** cross-variant hash divergence (PMR vs std).
+  Examine build_node_pmr.
+
+**Pattern note for the gotcha catalog (small, not a new G-NN):**
+
+For Conan-managed dependencies, prefer mixing raw linker flags
+directly into `target_link_libraries` rather than splitting into
+`target_link_libraries` + `target_link_options` + `$<TARGET_FILE:...>`.
+The mixed form works for any target kind (INTERFACE IMPORTED,
+STATIC_LIBRARY, SHARED_LIBRARY) and doesn't depend on the recipe's
+target-kind choice. The split form is brittle — if the recipe
+changes from STATIC to INTERFACE between versions, the split form
+breaks while the mixed form keeps working.
+
+User runs (rebuild required because CMakeLists.txt changed):
+
+    podman rmi cpp-tut/demo-06:latest 2>/dev/null || true
+    ./examples/demo-06-memory-and-allocators/demo.sh
+
+Or with formal pass/fail:
+
+    ./scripts/test-demo-06-memory-and-allocators.sh
+
 ---
 
 ## Known divergences from the PRD

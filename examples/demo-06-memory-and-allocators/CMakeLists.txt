@@ -41,20 +41,25 @@ target_link_libraries(demo06-svc-pmr PRIVATE Threads::Threads)
 # mimalloc API. Target name from Conan recipe is `mimalloc-static`
 # (flat, no `mimalloc::` namespace prefix — confirmed by Conan's
 # 'Target declared' build output in r75).
+#
+# Static-lib constructor pull-in: `mimalloc-static` is an
+# INTERFACE IMPORTED target (not a STATIC_LIBRARY target with a
+# concrete file path), so we can't use $<TARGET_FILE:...> to get
+# its archive path for --whole-archive bracketing. Instead, we
+# put --whole-archive / --no-whole-archive directly into the
+# target_link_libraries list bracketing the target. CMake passes
+# these in order to the linker; the target name gets expanded to
+# its underlying library paths in between the markers, forcing
+# all symbols (including the mi_process_init constructor) to be
+# pulled into the final binary.
 add_executable(demo06-svc-mimalloc ${SHARED_SOURCES})
 target_compile_definitions(demo06-svc-mimalloc PRIVATE ALLOC_TYPE_MIMALLOC)
 target_include_directories(demo06-svc-mimalloc PRIVATE src)
 target_link_libraries(demo06-svc-mimalloc PRIVATE
-    mimalloc-static
-    Threads::Threads
-)
-# Important: mimalloc's malloc must be linked BEFORE libc's, so we
-# use a linker flag to wrap the symbols. The static lib does this
-# via a global ctor, but we belt-and-suspenders it.
-target_link_options(demo06-svc-mimalloc PRIVATE
     "-Wl,--whole-archive"
-    "$<TARGET_FILE:mimalloc-static>"
+    mimalloc-static
     "-Wl,--no-whole-archive"
+    Threads::Threads
 )
 
 install(TARGETS
