@@ -3368,6 +3368,106 @@ system, same diagnosis, same fix.
 
 ---
 
+### G-37 · Compose network references use the alias (YAML key), not the `name:` field (r86)
+
+In a compose YAML file, networks are referenced *by their
+project-local alias* — the YAML key under the top-level
+`networks:` declaration — not by their external Docker/podman
+network name. Mixing these up produces the cryptic compose error:
+
+```
+service "X" refers to undefined network Y: invalid compose project
+```
+
+Worked example. Consider `compose-serve.yml`:
+
+```yaml
+services:
+  demo06-svc-std:
+    networks:
+      - demo06              # ← alias used in service refs
+networks:
+  demo06:                   # ← alias declaration
+    name: tutorial-demo06   # ← actual podman network name
+    external: false
+```
+
+The YAML key `demo06` is the project-local *alias*. The `name:`
+field is the external name podman labels the network with (visible
+in `podman network ls`). Services reference networks by alias, not
+by `name:`. This is by design — it lets you write portable compose
+files where the external name is reserved/configurable but the
+alias used in service refs stays stable.
+
+The trap is using the external name in another compose file
+intended as an overlay:
+
+```yaml
+# WRONG (compose-observe.yml r85 version):
+services:
+  demo06-svc-std:
+    networks:
+      - tutorial-demo06     # ← rejected, this is the name not the alias
+      - obs
+```
+
+When podman compose merges `compose-serve.yml -f compose-observe.yml`,
+the merged config still doesn't have `tutorial-demo06` as a network
+alias. Compose validation fails with the "undefined network"
+error, BEFORE any container starts — useful because the failure is
+instant and unambiguous.
+
+**Fix:**
+
+Use the alias (YAML key) consistently. In overlay files:
+
+```yaml
+# CORRECT:
+services:
+  demo06-svc-std:
+    networks:
+      - demo06       # alias from compose-serve.yml
+      - obs          # alias from observability/compose.yml
+```
+
+**Companion good-practice:** also declare the network aliases in
+each compose file's top-level `networks:` section so each file is
+syntactically self-valid when parsed independently. Identical
+declarations across files merge without conflict. Example for
+compose-observe.yml:
+
+```yaml
+networks:
+  demo06:
+    name: tutorial-demo06
+    external: false
+  obs:
+    name: tutorial-obs
+    external: false
+```
+
+This makes each file standalone-parseable while still working
+correctly when merged.
+
+**Diagnostic note:**
+
+The compose error message gives you the name it failed to resolve.
+If the name in the error is the `name:` value from another compose
+file's network declaration, you've hit this. Always-instant
+failure mode: compose validates the network graph before pulling
+images or building anything, so you find this bug in milliseconds,
+not in the 30-60 minute Conan build. Worth-knowing.
+
+**Cross-references:**
+
+- Compose Spec, "Networks top-level element":
+  https://docs.docker.com/compose/compose-file/06-networks/
+  (covers the alias/name distinction explicitly)
+- Demo-06 r85→r86: r85 introduced compose-observe.yml with the
+  bug; r86 fixed it. Caught instantly before any heavy build.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -12445,6 +12545,115 @@ the binary still works correctly with `compose-serve.yml` alone
 (no LGTM, no telemetry) and with `compose-observe.yml` overlay (LGTM
 ingests). Same binary, two deployment shapes — useful for the
 talk's framing of "observability as opt-in instrumentation layer."
+
+### 2026-05-16 — r86: compose-observe.yml used network name instead of alias (G-37)
+
+r85 was caught instantly by compose validation, before any
+container started, before the 30-60 minute build kicked in. Best
+possible failure mode.
+
+User's r85 verification output:
+
+```
+service "demo06-svc-mimalloc" refers to undefined network
+tutorial-demo06: invalid compose project
+Error: executing /usr/libexec/docker/cli-plugins/docker-compose
+  -f ... up --build -d: exit status 1
+```
+
+**Root cause:** compose YAML distinguishes between the
+project-local network *alias* (the YAML key under top-level
+`networks:`) and the external network *name* (the `name:` field).
+Service `networks:` lists reference the alias, not the name.
+
+In compose-serve.yml:
+
+```yaml
+networks:
+  demo06:                  # ← alias
+    name: tutorial-demo06  # ← external podman network name
+    external: false
+```
+
+r85's compose-observe.yml used `tutorial-demo06` in service network
+refs, which compose validation rejected because `tutorial-demo06`
+is the external name, not an alias. Fix: change to `demo06`.
+
+**Mechanism:** compose intentionally separates the alias-namespace
+from the external-name-namespace because the alias is for
+in-project references (portable, stable across deployments) and
+`name:` is for podman's network labeling (can be parameterized
+per environment). Conflating them is a common newcomer error;
+worth a catalog entry (G-37, ~80 lines).
+
+**Files changed in r86 (2):**
+
+- `examples/demo-06-memory-and-allocators/compose-observe.yml`:
+  changed 3 service network refs from `- tutorial-demo06` to
+  `- demo06`. Added explicit comment in the file header
+  explaining the alias-vs-name distinction with the worked
+  example. Added `demo06` to the top-level networks declaration
+  so the file is self-valid when parsed standalone (compose
+  merges identical network declarations across files without
+  conflict).
+- `_plans/reconciliation-plan.md`:
+  G-37 catalog entry; this r86 entry.
+
+**Lesson worth flagging:**
+
+Compose-level validation errors happen instantly (milliseconds),
+unlike build-time errors which happen after long Conan compiles.
+This is design: compose builds a dependency graph from all `-f`
+files, validates it, THEN starts pulling/building/running. If
+the graph is invalid, it fails before doing any heavy work. r85
+→ r86 cycle cost ~5 seconds of compose validation, not a
+half-hour of OTel rebuild. Lean into this — when introducing
+new compose files, run a `podman compose -f ... config` first
+to validate without building.
+
+**Anticipated:**
+
+- ~95%: r86 fixes the network ref bug, the 30-60 minute build
+  proceeds, end-to-end observability test works.
+- ~5%: a different compose-merge or OTel issue surfaces during
+  the actual build/run cycle. At that point we're past the
+  config-validation gate and into the actual deployment, so
+  failure modes there are: Conan recipe drift, OTel-cpp linker
+  issues with mimalloc, or LGTM warmup timing. Each has its own
+  diagnostic; we'll handle if they appear.
+
+**Verification path (unchanged from r85):**
+
+```bash
+podman rmi cpp-tut/demo-06:latest 2>/dev/null || true
+
+# Validation check (instant; will catch any remaining compose issues)
+podman compose \
+    -f examples/demo-06-memory-and-allocators/compose-serve.yml \
+    -f examples/demo-06-memory-and-allocators/compose-observe.yml \
+    -f observability/compose.yml \
+    config > /dev/null
+
+# Full bring-up (30-60 min on first build)
+podman compose \
+    -f examples/demo-06-memory-and-allocators/compose-serve.yml \
+    -f examples/demo-06-memory-and-allocators/compose-observe.yml \
+    -f observability/compose.yml \
+    up --build -d
+
+sleep 30  # LGTM warmup
+
+hey -z 30s http://127.0.0.1:18601/run
+hey -z 30s http://127.0.0.1:18602/run
+hey -z 30s http://127.0.0.1:18603/run
+
+xdg-open http://localhost:3000 &
+```
+
+The `config` step is added to the recommended flow — it costs
+~1 second and catches every compose-level issue (network refs,
+service ref typos, schema mismatches) before the build starts.
+Worth adopting as a verification-script convention.
 
 ---
 

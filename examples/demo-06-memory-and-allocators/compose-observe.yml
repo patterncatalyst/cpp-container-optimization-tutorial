@@ -18,10 +18,31 @@
 # earlier ones. So the final picture is:
 #
 #   - compose-serve.yml:    defines demo06-svc-{std,pmr,mimalloc},
-#                           port mappings, the tutorial-demo06 net
+#                           port mappings, the `demo06` network alias
+#                           (named `tutorial-demo06` externally)
 #   - compose-observe.yml:  adds OTEL_* env vars, joins services
-#                           to tutorial-obs network, depends_on lgtm
+#                           to `obs` network alias (named
+#                           `tutorial-obs` externally), depends_on lgtm
 #   - observability/compose.yml: defines the lgtm service itself
+#                           and declares the `obs` network alias
+#
+# IMPORTANT — alias vs name distinction (r86 fix):
+# In compose YAML, `networks:` under a service uses the
+# project-local *alias* (the YAML key under top-level
+# `networks:`), NOT the `name:` field. The `name:` field is the
+# external Docker/podman network name. So:
+#
+#   services:
+#     foo:
+#       networks:
+#         - demo06        ← project-local alias used by service refs
+#   networks:
+#     demo06:             ← alias declaration
+#       name: tutorial-demo06   ← actual podman network name
+#
+# r85 originally used `tutorial-demo06` in service network refs,
+# which compose rejected with "undefined network tutorial-demo06."
+# Fixed in r86 to use the `demo06` alias.
 #
 # Then in Grafana (http://localhost:3000):
 #   Explore → Tempo → query traces by service.name
@@ -41,8 +62,8 @@ services:
       OTEL_SERVICE_NAME:          "demo06-svc-std"
       OTEL_RESOURCE_ATTRIBUTES:   "deployment.environment=tutorial,variant=std"
     networks:
-      - tutorial-demo06
-      - obs
+      - demo06    # alias from compose-serve.yml (maps to tutorial-demo06)
+      - obs       # alias from observability/compose.yml (maps to tutorial-obs)
     depends_on:
       - lgtm
 
@@ -52,7 +73,7 @@ services:
       OTEL_SERVICE_NAME:          "demo06-svc-pmr"
       OTEL_RESOURCE_ATTRIBUTES:   "deployment.environment=tutorial,variant=pmr"
     networks:
-      - tutorial-demo06
+      - demo06
       - obs
     depends_on:
       - lgtm
@@ -63,15 +84,21 @@ services:
       OTEL_SERVICE_NAME:          "demo06-svc-mimalloc"
       OTEL_RESOURCE_ATTRIBUTES:   "deployment.environment=tutorial,variant=mimalloc"
     networks:
-      - tutorial-demo06
+      - demo06
       - obs
     depends_on:
       - lgtm
 
-# Declare the obs network here so this file is valid standalone.
-# compose merges this with observability/compose.yml's identical
-# declaration without conflict.
+# Declare both network aliases for self-validity when compose
+# parses each -f file independently. The `obs` declaration matches
+# observability/compose.yml's identical declaration (compose merges
+# identical network declarations across files without conflict).
+# `demo06` is declared identically to compose-serve.yml.
 networks:
+  demo06:
+    name: tutorial-demo06
+    external: false
   obs:
     name: tutorial-obs
     external: false
+

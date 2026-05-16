@@ -297,8 +297,9 @@ Round C (cgroups, huge pages, threads toggles) is planned.
 | r82 | 3 polish fixes: subscription-manager warning, httplib keep-alive + thread pool, cache-sensitivity README note | shipped |
 | r83 | TCP_NODELAY (Nagle's algorithm fix) — unmasked by r82's keep-alive fix; 40ms-per-request was Linux delayed-ACK timeout | partial — typo `httplib::socket_t` vs global `socket_t`, build failed |
 | r84 | Fix r83 typo — generic-lambda (`auto sock`) avoids version-specific namespace question | shipped (18,469 req/s verified) |
-| **r85** | **OTel traces/metrics/logs export to LGTM via OTLP/gRPC; conditional on `OTEL_EXPORTER_OTLP_ENDPOINT`; compose-observe.yml overlay** | **shipped** |
-| r86+ | Layer toggles: `HUGE_PAGES`, cgroup `memory.high`, `THREADS` | planned |
+| r85 | OTel traces/metrics/logs export to LGTM via OTLP/gRPC; conditional on `OTEL_EXPORTER_OTLP_ENDPOINT`; compose-observe.yml overlay | partial — caught instantly by compose validation: network ref used external name instead of alias |
+| **r86** | **compose-observe.yml fix: `tutorial-demo06` → `demo06` (use alias not external name; G-37)** | **shipped** |
+| r87+ | Layer toggles: `HUGE_PAGES`, cgroup `memory.high`, `THREADS` | planned |
 
 ## The two PMR bugs worth promoting to §7 prose
 
