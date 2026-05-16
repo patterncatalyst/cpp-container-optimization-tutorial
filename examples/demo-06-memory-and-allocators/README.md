@@ -62,6 +62,54 @@ allocator is used. Allocator choice should be invisible at the
 application layer; if hashes diverge, there's a bug in the PMR
 path (the most likely place for type subtleties to creep in).
 
+## Serve mode (r81+)
+
+The same three binaries also support an HTTP-server mode for
+load-testing with `hey`, `wrk`, or curl, and as the foundation for
+r82's OpenTelemetry instrumentation. Activate it via:
+
+- the `--serve` argv flag: `./demo06-svc-std --serve`
+- or the env var: `DEMO06_MODE=serve ./demo06-svc-std`
+
+Endpoints (all GET, all on port 8080):
+
+- **`/healthz`** — liveness probe, returns `ok` as text/plain
+- **`/info`** — variant name + workload defaults as JSON
+- **`/run?iters=N`** — runs N iterations (default 1, max 10000),
+  returns single-line JSON identical to batch mode's output
+
+The server warms up with 50 iterations at startup so the first
+`/run` doesn't carry cold-allocator overhead.
+
+Bring up all three variants via the included compose file:
+
+```bash
+podman compose -f compose-serve.yml up --build
+```
+
+Then in another terminal:
+
+```bash
+# Check each variant's defaults
+curl http://127.0.0.1:18601/info     # std::allocator
+curl http://127.0.0.1:18602/info     # pmr
+curl http://127.0.0.1:18603/info     # mimalloc
+
+# Run 100 iters per variant
+curl 'http://127.0.0.1:18601/run?iters=100'
+curl 'http://127.0.0.1:18602/run?iters=100'
+curl 'http://127.0.0.1:18603/run?iters=100'
+
+# Or use hey for 1s of traffic at each variant
+hey -z 1s http://127.0.0.1:18601/run
+hey -z 1s http://127.0.0.1:18602/run
+hey -z 1s http://127.0.0.1:18603/run
+```
+
+Ports `18601/02/03` follow the convention `186XX` (with the demo
+number `06` in the middle) to avoid collision with other demos'
+host ports.
+
 ## What the numbers say
 
 Reading the table above as a teaching artifact for §7 prose:
@@ -118,8 +166,9 @@ Why this shape:
 ## Scope per round
 
 This demo is being built incrementally. Round A (the toolchain
-proof, r71-r79) is complete; Round B (HTTP + OTel observability)
-and Round C (cgroups, huge pages, threads toggles) are planned.
+proof, r71-r79) is complete. Round B (HTTP + OTel observability)
+is in progress; r81 (this round) ships HTTP, r82 will add OTel.
+Round C (cgroups, huge pages, threads toggles) is planned.
 
 | Round | What's in | Status |
 |---|---|---|
@@ -131,9 +180,11 @@ and Round C (cgroups, huge pages, threads toggles) are planned.
 | r76 | mimalloc CMake target name `mimalloc-static` not `mimalloc::*` | works |
 | r77 | `--whole-archive` inline in target_link_libraries; mimalloc-static is INTERFACE not STATIC | works |
 | r78 | First real C++ bug: `emplace_back(memory_resource*)` PMR misuse | works |
-| **r79** | **Second real C++ bug: PmrNode missing allocator-extended copy + move ctors for `reserve()`** | **shipped — toolchain proof complete** |
-| r80+ | HTTP server entry point + OTel traces/metrics/logs → LGTM | planned |
-| r80+ | Layer toggles: `HUGE_PAGES`, cgroup `memory.high`, `THREADS` | planned |
+| r79 | Second real C++ bug: PmrNode missing allocator-extended copy + move ctors for `reserve()` | **Round A complete** |
+| r80 | Docs lock-in (this README's actual numbers + rounds table) | shipped |
+| **r81** | **HTTP server mode (`--serve`); cpp-httplib vendored; compose-serve.yml** | **shipped** |
+| r82 | OTel traces/metrics/logs export to LGTM; compose-observe.yml | planned |
+| r83+ | Layer toggles: `HUGE_PAGES`, cgroup `memory.high`, `THREADS` | planned |
 
 ## The two PMR bugs worth promoting to §7 prose
 

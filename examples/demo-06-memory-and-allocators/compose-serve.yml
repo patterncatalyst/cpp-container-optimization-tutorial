@@ -1,0 +1,69 @@
+# Demo-06 — three allocator variants as HTTP services.
+#
+# r81: no observability stack yet (no LGTM, no OTel). Just three
+# services running in --serve mode on different host ports, suitable
+# for manual curl / hey testing. r82 will add OTel and wire to LGTM
+# via a second compose overlay (compose-observe.yml).
+#
+# Bring up:
+#   podman compose -f compose-serve.yml up --build
+#
+# Smoke test:
+#   curl http://127.0.0.1:18601/info             # std::allocator variant
+#   curl http://127.0.0.1:18602/info             # pmr variant
+#   curl http://127.0.0.1:18603/info             # mimalloc variant
+#   curl 'http://127.0.0.1:18601/run?iters=100'  # run 100 iters, get stats
+#
+# Compare with hey (1s of traffic):
+#   hey -z 1s http://127.0.0.1:18601/run         # std::allocator
+#   hey -z 1s http://127.0.0.1:18602/run         # pmr
+#   hey -z 1s http://127.0.0.1:18603/run         # mimalloc
+#
+# Tear down:
+#   podman compose -f compose-serve.yml down
+#
+# Port choice note: 186XX picks a 5-digit range with the demo
+# number (06) in the middle two digits to avoid collisions with
+# other demos' ports (18401 demo-04, future 18501 demo-05, etc.).
+
+services:
+  demo06-svc-std:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: cpp-tut/demo-06:latest
+    container_name: demo06-svc-std
+    # Override the default entrypoint (run-all.sh batch comparison)
+    # to run a single variant in serve mode.
+    entrypoint: ["/usr/local/bin/demo06-svc-std", "--serve"]
+    ports:
+      - "127.0.0.1:18601:8080"
+    networks:
+      - demo06
+
+  demo06-svc-pmr:
+    image: cpp-tut/demo-06:latest
+    container_name: demo06-svc-pmr
+    depends_on:
+      - demo06-svc-std    # share the built image
+    entrypoint: ["/usr/local/bin/demo06-svc-pmr", "--serve"]
+    ports:
+      - "127.0.0.1:18602:8080"
+    networks:
+      - demo06
+
+  demo06-svc-mimalloc:
+    image: cpp-tut/demo-06:latest
+    container_name: demo06-svc-mimalloc
+    depends_on:
+      - demo06-svc-std    # share the built image
+    entrypoint: ["/usr/local/bin/demo06-svc-mimalloc", "--serve"]
+    ports:
+      - "127.0.0.1:18603:8080"
+    networks:
+      - demo06
+
+networks:
+  demo06:
+    name: tutorial-demo06
+    external: false

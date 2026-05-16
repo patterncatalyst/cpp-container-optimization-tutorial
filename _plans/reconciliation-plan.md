@@ -11518,6 +11518,157 @@ Round B (HTTP + OTel) first since it makes the demo reachable by
 the rest of the LGTM stack like demo-04. Then demo-05. Then
 demo-07. Then prose.
 
+### 2026-05-16 — r81: demo-06 Round B sub-1 — HTTP server mode (`--serve`)
+
+Starting Round B (HTTP + OTel observability layer) per the user's
+"do them in order" choice. Splitting Round B into two sub-rounds
+because OTel-cpp + its grpc/protobuf/abseil override chain is a
+30-60 minute first-build hit (per demo-04's experience). r81 ships
+the HTTP server layer cleanly; r82 will add OTel and LGTM
+integration.
+
+**Design choice — preserve batch mode as default:**
+
+The existing 3-binary batch comparison (demo.sh's headline value)
+is preserved unchanged. r81 adds a `--serve` flag (or
+`DEMO06_MODE=serve` env var) that switches the same binaries into
+HTTP server mode. Same binaries, same image, same defaults — just
+a mode dispatch in `main()`.
+
+Two reasons for one-binary-two-modes vs separate batch/server
+binaries:
+
+1. The workload code (`run_iteration`) is identical between modes.
+   Splitting binaries would mean duplicating the dispatch logic
+   in three pairs, six binaries to maintain.
+2. The container image stays single-purpose. compose-serve.yml
+   overrides the entrypoint per service to pick the variant; no
+   image proliferation.
+
+**Endpoints (port 8080):**
+
+- `GET /healthz` — liveness, returns `ok` as text/plain
+- `GET /info` — variant name + workload defaults as JSON
+- `GET /run?iters=N` — runs N iterations (default 1, bounded 1-10000),
+  returns single-line JSON identical to batch mode's output
+
+Same JSON shape across both modes means downstream consumers (jq
+scripts, dashboards, comparison tooling) work uniformly.
+
+Startup warmup runs 50 iters (vs batch's 10) — a real service is
+up for hours, so we err on the side of a fuller warmup at the
+cost of slightly slower startup. Each `/run` request then measures
+hot-path behavior only.
+
+**cpp-httplib v0.16.0 — vendored, not Conan'd:**
+
+cpp-httplib is a single-header library. Vendoring it at build
+time via `curl` matches demo-04's pattern exactly. No Conan
+recipe added, no opentelemetry-cpp deps yet (that's r82). The
+build cost stays at ~3-5 min on a clean cache.
+
+**Compose file for the 3 services:**
+
+`compose-serve.yml` runs all three variants on host ports
+18601/18602/18603 (the `186XX` range avoids collision with
+demo-04's 184XX). Suitable for manual curl, `hey` load tests,
+or `wrk` benchmarking.
+
+```
+hey -z 1s http://127.0.0.1:18601/run    # std::allocator
+hey -z 1s http://127.0.0.1:18602/run    # pmr
+hey -z 1s http://127.0.0.1:18603/run    # mimalloc
+```
+
+The two non-first services use `depends_on: demo06-svc-std` solely
+to ensure the image is built once and reused; no service
+dependency at runtime.
+
+**Files changed in r81 (6):**
+
+- `examples/demo-06-memory-and-allocators/Containerfile`:
+  vendor cpp-httplib v0.16.0 via curl; expose port 8080; expanded
+  header comment documenting both modes.
+- `examples/demo-06-memory-and-allocators/CMakeLists.txt`:
+  added `src/third_party` to include paths for all 3 targets.
+  No link change (httplib is header-only).
+- `examples/demo-06-memory-and-allocators/src/main.cpp`:
+  full rewrite. Factored `run_iterations()` and `stats_to_json()`
+  out of `main()`. Added `parse_args()` flag detection for
+  `--serve`. Added `run_batch_mode()` (preserves r79 behavior)
+  and `run_serve_mode()` (httplib::Server with 3 endpoints,
+  signal-handled graceful shutdown). Variant labels gained a
+  `kVariantSlug` for compact JSON output.
+- `examples/demo-06-memory-and-allocators/compose-serve.yml`:
+  NEW, 3 services on host ports 18601/18602/18603 with the
+  `--serve` flag injected via entrypoint override.
+- `examples/demo-06-memory-and-allocators/README.md`:
+  added a "Serve mode (r81+)" section with curl + hey examples;
+  rounds table updated to include r80 + r81 + planned r82.
+- `examples/demo-06-memory-and-allocators/demo.sh`:
+  updated header comment to acknowledge serve mode exists (no
+  behavior change; this script remains batch-only).
+
+**Files NOT changed (preserved behaviors):**
+
+- `src/workload.{hpp,cpp}` — workload identical between modes.
+- `conanfile.py` — no new deps (httplib is vendored, not Conan'd).
+- `run-all.sh` — still runs the 3 binaries in batch mode.
+- `scripts/test-demo-06-memory-and-allocators.sh` — tests batch
+  mode via positional argv; r81's parse_args still accepts those.
+
+**Verification:**
+
+The user runs `demo.sh` (batch mode) and verifies the comparison
+table matches r79's numbers (allocator behavior unchanged). Then
+optionally runs `podman compose -f compose-serve.yml up --build`
+and curls the endpoints to verify HTTP mode works.
+
+Expected:
+
+- ~95%: batch mode produces identical output to r79 (no
+  measurable change since `run_iterations()` is just the
+  factored-out version of r79's main body). Serve mode comes up,
+  `/healthz` returns `ok`, `/info` returns valid JSON, `/run`
+  returns identical JSON shape to batch mode.
+- ~5%: a subtle issue with httplib's listen/stop ordering or
+  signal handling. Fallback: ensure listener thread is joined
+  before main returns; check for SO_REUSEADDR if rapid
+  start/stop fails.
+
+User runs:
+
+    podman rmi cpp-tut/demo-06:latest 2>/dev/null || true
+
+    # Batch mode (should match r79's numbers)
+    ./examples/demo-06-memory-and-allocators/demo.sh
+
+    # Serve mode (manual verification)
+    podman compose -f examples/demo-06-memory-and-allocators/compose-serve.yml up --build &
+    sleep 5
+    curl http://127.0.0.1:18601/healthz
+    curl http://127.0.0.1:18601/info
+    curl 'http://127.0.0.1:18601/run?iters=100'
+    curl 'http://127.0.0.1:18602/run?iters=100'
+    curl 'http://127.0.0.1:18603/run?iters=100'
+    podman compose -f examples/demo-06-memory-and-allocators/compose-serve.yml down
+
+**Next round (r82) plan preview:**
+
+- Add opentelemetry-cpp 1.14.2 to conanfile.py with the
+  grpc/protobuf/abseil override chain copied from demo-04.
+- Lift `init_otel()` from demo-04's main.cpp into a shared header
+  (eventually a small `otel_setup.hpp` we can use across demos).
+- Instrument `/run` with span, latency histogram, request counter,
+  log emission.
+- Add `compose-observe.yml` that overlays the LGTM stack from
+  `observability/compose.yml` and points all 3 services at it via
+  `OTEL_EXPORTER_OTLP_ENDPOINT=http://lgtm:4317`.
+- Estimated build time on first run: 30-60 min (the
+  opentelemetry-cpp + grpc Conan rebuild from source).
+- Estimated rounds: 1-2 (demo-04 already proved this stack works;
+  r82 is mostly copy-and-adapt).
+
 ---
 
 ## Known divergences from the PRD

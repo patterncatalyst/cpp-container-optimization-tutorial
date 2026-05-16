@@ -26,13 +26,13 @@ set(SHARED_SOURCES
 # ── Variant 1: std::allocator (default glibc malloc) ──────────────────
 add_executable(demo06-svc-std ${SHARED_SOURCES})
 target_compile_definitions(demo06-svc-std PRIVATE ALLOC_TYPE_STD)
-target_include_directories(demo06-svc-std PRIVATE src)
+target_include_directories(demo06-svc-std PRIVATE src src/third_party)
 target_link_libraries(demo06-svc-std PRIVATE Threads::Threads)
 
 # ── Variant 2: std::pmr (monotonic_buffer + synchronized_pool) ────────
 add_executable(demo06-svc-pmr ${SHARED_SOURCES})
 target_compile_definitions(demo06-svc-pmr PRIVATE ALLOC_TYPE_PMR)
-target_include_directories(demo06-svc-pmr PRIVATE src)
+target_include_directories(demo06-svc-pmr PRIVATE src src/third_party)
 target_link_libraries(demo06-svc-pmr PRIVATE Threads::Threads)
 
 # ── Variant 3: mimalloc static-linked ─────────────────────────────────
@@ -54,7 +54,7 @@ target_link_libraries(demo06-svc-pmr PRIVATE Threads::Threads)
 # pulled into the final binary.
 add_executable(demo06-svc-mimalloc ${SHARED_SOURCES})
 target_compile_definitions(demo06-svc-mimalloc PRIVATE ALLOC_TYPE_MIMALLOC)
-target_include_directories(demo06-svc-mimalloc PRIVATE src)
+target_include_directories(demo06-svc-mimalloc PRIVATE src src/third_party)
 target_link_libraries(demo06-svc-mimalloc PRIVATE
     "-Wl,--whole-archive"
     mimalloc-static

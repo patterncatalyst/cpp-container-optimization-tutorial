@@ -8,19 +8,24 @@
 #   demo06-svc-pmr        std::pmr (monotonic_buffer + sync_pool_resource)
 #   demo06-svc-mimalloc   mimalloc static-linked, replaces global new/delete
 #
-# r75 scope: toolchain proof, 3-way fallback after the jemalloc
-# attempt didn't land (see r71-r74 round entries in the plan for
-# the full story; short version: GCC 14 conformance strictness vs
-# jemalloc's pre-2024 C source code, mitigation flags wouldn't
-# propagate through Conan's autotools toolchain in any mechanism
-# we tried).
+# Two execution modes:
 #
-# §7 prose includes a paragraph describing jemalloc as an
-# alternative to mimalloc, citing Latency Ch. 3 and Ghosh Ch. 5,
-# without requiring it to build here.
+#   Batch (default):  ./demo06-svc-XXX [iters [depth [branch [values]]]]
+#                     Runs N iterations, prints JSON stats to stdout.
+#                     Used by demo.sh for the comparison table.
+#
+#   Serve (r81+):     ./demo06-svc-XXX --serve
+#                     (or set DEMO06_MODE=serve)
+#                     Starts an HTTP server on :8080 with endpoints:
+#                       GET /healthz       — liveness
+#                       GET /info          — variant + defaults
+#                       GET /run?iters=N   — runs workload, returns JSON
+#                     Used by compose-serve.yml (r81+) and the
+#                     OTel-instrumented compose flow (r82+).
 #
 # Build cost: ~3-5 min on a clean cache (mimalloc CMake build is
-# fast). Cached: ~30 seconds (just our app code).
+# fast; cpp-httplib is single-header). Cached: ~30 seconds (just
+# our app code).
 
 FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
 
@@ -44,6 +49,14 @@ RUN conan profile detect --force && \
         /root/.conan2/profiles/default
 
 WORKDIR /src
+
+# Vendor cpp-httplib at build time (single header, no Conan recipe
+# needed for a header-only lib). Same pattern as demo-04. r81 adds
+# the optional HTTP-server mode; r82 will wire OTel through it.
+ARG HTTPLIB_VERSION=v0.16.0
+RUN mkdir -p src/third_party && \
+    curl -fsSL -o src/third_party/httplib.h \
+        "https://raw.githubusercontent.com/yhirose/cpp-httplib/${HTTPLIB_VERSION}/httplib.h"
 
 COPY conanfile.py ./
 
@@ -84,9 +97,11 @@ COPY --from=builder /src/build/demo06-svc-std      /usr/local/bin/demo06-svc-std
 COPY --from=builder /src/build/demo06-svc-pmr      /usr/local/bin/demo06-svc-pmr
 COPY --from=builder /src/build/demo06-svc-mimalloc /usr/local/bin/demo06-svc-mimalloc
 
-# r75: no exposed ports; the binaries are pure CPU/memory workloads
-# launched via podman exec and printing to stdout. r76+ will add the
-# HTTP server entrypoint and expose port 8080.
+# Port 8080 — used by the optional HTTP-server mode (r81+).
+# Activate by passing `--serve` argv or setting `DEMO06_MODE=serve`
+# in the environment. Default mode (no flag) is batch comparison
+# to stdout; the EXPOSE here doesn't force the server mode on.
+EXPOSE 8080
 
 # Default entrypoint is a thin wrapper that picks the allocator
 # variant from $ALLOC, or runs all three sequentially if unset.

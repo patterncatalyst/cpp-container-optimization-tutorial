@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Demo-06 — memory management & allocator comparison.
+# Demo-06 — memory management & allocator comparison (batch mode).
 #
-# r75 v1 3-way: build the 3-variant image, run all three binaries in
-# sequence inside one container, parse the JSON output, print a
-# comparison table. No HTTP, no OTel, no cgroup pressure yet —
-# those land in r72-r74.
+# Builds the 3-variant image, runs all three binaries in sequence
+# inside one container (batch mode), parses the JSON output, prints
+# a comparison table.
+#
+# This script covers BATCH mode only (one-shot run + comparison).
+# For HTTP server mode (added in r81), see compose-serve.yml and
+# the README's "Serve mode" section.
 #
 # Usage:
 #   ./demo.sh                         # default: 200 iterations per variant
