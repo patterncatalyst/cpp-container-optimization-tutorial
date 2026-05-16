@@ -12810,6 +12810,154 @@ hey -z 30s http://127.0.0.1:18603/run
 xdg-open http://localhost:3000 &
 ```
 
+### 2026-05-16 — r88: Simple* → Batch* OTel processors — recover throughput, canonical §10 teaching-point
+
+r87 worked end-to-end — all containers up, LGTM ingesting traces +
+metrics + logs, Grafana renderable. But the numbers showed something
+critical:
+
+| Round | Throughput | p50 | p99 | Tail |
+|---|---|---|---|---|
+| r84 (no OTel) | 18,469 req/s | 200 µs | 400 µs | 4 outliers near 1.5s |
+| r87 (OTel Simple*) | 2,170 req/s | 2.7 ms | 25.9 ms | 80 outliers near 9-13s |
+
+**8.5× throughput drop, 13× p50 increase.** The same allocator
+differences demo-06 was built to measure became invisible under the
+per-request OTel cost — all three variants posted identical numbers
+because the workload's ~10 µs of allocator work was buried under
+~250 µs of synchronous gRPC export per request.
+
+**Root cause:** `SimpleSpanProcessor` and `SimpleLogRecordProcessor`
+export each signal synchronously inside the API call. Every
+`span->End()` blocks until gRPC finishes serializing and sending the
+span. Every `EmitLogRecord` does the same. Two synchronous gRPC
+round-trips per request, plus scope/context overhead, plus histogram
+bucket scans.
+
+**Fix:** switch both processors to their Batch variants. Batch
+processors queue spans/logs and export periodically (every 5 seconds
+by default) on a background thread. Per-signal cost drops from
+~100 µs (full gRPC roundtrip) to ~5 µs (lock-free queue insertion +
+atomic counter). The metrics path was already batch-like
+(`PeriodicExportingMetricReader`); only spans and logs were on the
+synchronous path.
+
+Code change is a 1-line swap per processor + a 4-line options
+struct, plus updated includes:
+
+```cpp
+// FROM (synchronous, ~100µs per span):
+auto processor = sdk_t::SimpleSpanProcessorFactory::Create(
+    std::move(exporter));
+
+// TO (asynchronous, ~5µs per span):
+sdk_t::BatchSpanProcessorOptions opts;  // defaults are fine
+auto processor = sdk_t::BatchSpanProcessorFactory::Create(
+    std::move(exporter), opts);
+```
+
+Same shape for `BatchLogRecordProcessor`. Default options
+(2048-entry queue, 5-second schedule, 512-record batches) are
+sensible for tutorial purposes; tutorial value is in the
+Simple-vs-Batch *contrast*, not in tuning further.
+
+**Teaching-point captured in `_plans/teaching-points.md`** as a
+2,000-word mini-essay candidate for §10 prose. The Simple-vs-Batch
+decision is genuinely the most consequential single knob in
+production OTel-cpp instrumentation, and beginners (including this
+demo's author) hit the performance cliff because Simple* appears
+first in the docs and tutorials. Mini-essay covers:
+- The mechanism (Simple = synchronous on hot path; Batch = queue + bg thread)
+- Demo-06's exact numbers (r84 vs r87, with r88 measurements TBD)
+- Why metrics don't have this problem (PeriodicExportingMetricReader)
+- Caveats (Simple* is right for dev/tests)
+- A diagnostic checklist for spotting Simple* overhead via perf/profiling
+- The bigger principle: "observability is itself a performance decision"
+
+Also extended the existing "tail-latency causes" entry with a
+6th cause: synchronous OTel exporters. Updated the diagnostic
+signature table to include OTel Simple* processor signatures
+(throughput drop on instrumentation; perf record shows time in
+`grpc::CompletionQueue::Next`).
+
+**Files changed in r88 (4):**
+
+- `examples/demo-06-memory-and-allocators/src/main.cpp`:
+  removed 2 Simple* factory includes; added 4 Batch* factory +
+  options includes; updated tracing block (5 lines → 8 lines with
+  explanatory comment); updated logs block (same); extended the
+  init_otel header comment with the r88 decision + metrics-are-
+  unchanged note
+- `_plans/teaching-points.md`:
+  new "OpenTelemetry SDK processor choice: Simple vs Batch"
+  entry (~2,000 words, publication-ready); extended the
+  tail-latency entry's "5 causes" to 6 (added synchronous OTel
+  exporters); extended the diagnostic table with the OTel row
+- `examples/demo-06-memory-and-allocators/README.md`:
+  new "Simple/Batch processor decision (r88)" subsection in the
+  observe-mode section, with cross-reference to teaching-points;
+  rounds table extended with r88
+- `_plans/reconciliation-plan.md`:
+  this r88 entry
+
+**Anticipated:**
+
+- ~85%: throughput recovers to 10,000-15,000 req/s (somewhere between
+  no-OTel baseline and r87's collapsed numbers — Batch overhead is
+  small but non-zero, and the hot path now has +1 scope object +
+  +1 attribute hash per request). p50 drops to ~300-500 µs (still
+  some overhead from scope/context push, but no gRPC waiting).
+  Allocator differences become visible again in the per-variant
+  histograms in Mimir.
+- ~10%: throughput recovers less than expected (~5,000-10,000 req/s),
+  indicating other OTel overhead beyond just the synchronous export.
+  Likely candidates: the histogram bucket scan, the
+  attribute-set hashing per Add/Record. Tuning options: aggregation
+  view config, histogram bucket pruning. Not worth a follow-up
+  round unless the contrast is unimpressive.
+- ~5%: a runtime issue surfaces — most likely the Batch processor
+  has a shutdown-flush requirement we missed. Symptom: clean
+  container exit but no traces/logs in Grafana. Fix: explicit
+  ForceFlush call before svr.stop().
+
+**Verification (same as r87 + an additional comparison):**
+
+```bash
+podman compose \
+    -f examples/demo-06-memory-and-allocators/compose-serve.yml \
+    -f examples/demo-06-memory-and-allocators/compose-observe.yml \
+    -f observability/compose.yml \
+    up --build -d
+
+sleep 30  # LGTM warmup
+
+# Drive traffic — same 30s test as r87, directly comparable
+hey -z 30s http://127.0.0.1:18601/run
+hey -z 30s http://127.0.0.1:18602/run
+hey -z 30s http://127.0.0.1:18603/run
+
+xdg-open http://localhost:3000 &
+```
+
+After verification, fill in the actual r88 throughput numbers in
+the teaching-points.md table (currently marked TBD) and in this
+plan entry's anticipated-outcomes table.
+
+**The diagnostic arc is now complete for §7 + §10:**
+
+| Stage | Round | Knob | Throughput | What's measurable |
+|---|---|---|---|---|
+| HTTP defaults broken | r81 | none | 78 req/s | not the workload |
+| keep-alive + pool | r82 | conn-level | 99 req/s | not the workload |
+| TCP_NODELAY | r84 | per-packet | 18,469 req/s | the workload |
+| OTel Simple* | r87 | telemetry tax | 2,170 req/s | not the workload |
+| OTel Batch* | r88 | telemetry decoupled | ~10-15k req/s expected | the workload + telemetry |
+
+Each round taught a layer. Together they're a complete arc for the
+"performance is not a scalar" framing of the talk: every layer of
+the stack has decisions that can dominate the measurement you're
+trying to make.
+
 ---
 
 ## Known divergences from the PRD

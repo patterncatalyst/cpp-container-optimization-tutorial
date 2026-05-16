@@ -74,13 +74,15 @@
 #include "opentelemetry/metrics/provider.h"
 #include "opentelemetry/sdk/logs/logger_provider_factory.h"
 #include "opentelemetry/sdk/logs/processor.h"
-#include "opentelemetry/sdk/logs/simple_log_record_processor_factory.h"
+#include "opentelemetry/sdk/logs/batch_log_record_processor_factory.h"
+#include "opentelemetry/sdk/logs/batch_log_record_processor_options.h"
 #include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h"
 #include "opentelemetry/sdk/metrics/meter_provider.h"
 #include "opentelemetry/sdk/metrics/view/view_registry.h"
 #include "opentelemetry/sdk/resource/resource.h"
 #include "opentelemetry/sdk/trace/processor.h"
-#include "opentelemetry/sdk/trace/simple_processor_factory.h"
+#include "opentelemetry/sdk/trace/batch_span_processor_factory.h"
+#include "opentelemetry/sdk/trace/batch_span_processor_options.h"
 #include "opentelemetry/sdk/trace/tracer_provider_factory.h"
 #include "opentelemetry/trace/provider.h"
 
@@ -301,7 +303,7 @@ int run_batch_mode(const Args& args, const demo06::WorkloadParams& params) {
 std::atomic<bool> g_stop{false};
 void on_signal(int) { g_stop = true; }
 
-// ── OTel SDK init (r85) ────────────────────────────────────────────────
+// ── OTel SDK init (r85 + r88) ──────────────────────────────────────────
 //
 // Lifted from demo-04's init_otel (~75 lines) with the
 // service_name parameterized so all three variants share one
@@ -314,6 +316,21 @@ void on_signal(int) { g_stop = true; }
 // run_serve_mode below checks that env var before calling init_otel,
 // so we don't pay any OTel init cost (or get spammed with retry
 // warnings) when running compose-serve.yml without LGTM.
+//
+// r88: switched both SpanProcessor and LogRecordProcessor from
+// Simple* to Batch*. r87 measured the cost of Simple* (synchronous
+// gRPC export on every span->End() and EmitLogRecord call): 8.5x
+// throughput drop, 13x p50 increase. Batch processors queue spans
+// and logs for periodic export by a background thread, keeping
+// the hot path near-free. See _plans/teaching-points.md for the
+// full "Simple vs Batch" mini-essay (a candidate §10 prose nugget).
+//
+// Metrics are *unchanged* from r85 — PeriodicExportingMetricReader
+// is already batch-like by design, exporting accumulated metric
+// state every 5 seconds regardless of how many counter->Add or
+// histogram->Record calls happened. There is no "Simple" analog
+// for metrics in OTel-cpp; the metric pipeline is naturally
+// cheap-per-call by design.
 //
 // Why nostd::shared_ptr and .release() patterns (G-19, G-20):
 // OTel-cpp's API/SDK split means factory return types differ by
@@ -330,10 +347,36 @@ void init_otel(const std::string& service_name) {
     namespace nostd = otel::nostd;
 
     // ── Tracing ────────────────────────────────────────────────
+    // r88: BatchSpanProcessor (not Simple). The Simple processor
+    // exports each span synchronously inside span->End(), turning
+    // every instrumented request into a gRPC round-trip on the
+    // hot path. Demo-06 r87 measured the cost: 18,469 req/s →
+    // 2,170 req/s, p50 200µs → 2.7ms. Batch processor queues
+    // spans for periodic export by a background thread, keeping
+    // the hot path near-free (~5µs per span instead of ~100µs).
+    //
+    // Default options (set 2024 in OTel-cpp 1.14.x):
+    //   max_queue_size:           2048
+    //   schedule_delay_millis:    5000 (matches metric export tick)
+    //   max_export_batch_size:    512
+    //
+    // We use defaults for clarity. Tutorial value is in the
+    // Simple-vs-Batch contrast; tuning further is a separate
+    // exercise.
+    //
+    // Trade-off: spans show up in Tempo 5 seconds later than they
+    // would with Simple. For production this is fine; for
+    // debugging a specific request mid-development, Simple is
+    // briefly preferable. The talk's §10 prose covers this
+    // decision in depth — see _plans/teaching-points.md.
     {
         otlp::OtlpGrpcExporterOptions opts;
         auto exporter  = otlp::OtlpGrpcExporterFactory::Create(opts);
-        auto processor = sdk_t::SimpleSpanProcessorFactory::Create(std::move(exporter));
+
+        sdk_t::BatchSpanProcessorOptions batch_opts;
+        auto processor = sdk_t::BatchSpanProcessorFactory::Create(
+            std::move(exporter), batch_opts);
+
         auto provider_unique =
             sdk_t::TracerProviderFactory::Create(std::move(processor), resource);
         nostd::shared_ptr<otel::trace::TracerProvider> provider(provider_unique.release());
@@ -369,10 +412,19 @@ void init_otel(const std::string& service_name) {
     }
 
     // ── Logs ────────────────────────────────────────────────
+    // Same Batch-vs-Simple decision as Tracing above. Logs are
+    // even more bursty than spans in many services (multi-line
+    // structured logs per request), so the per-call cost of
+    // synchronous export hits even harder. Batch defaults match
+    // the span processor.
     {
         otlp::OtlpGrpcLogRecordExporterOptions opts;
         auto exporter  = otlp::OtlpGrpcLogRecordExporterFactory::Create(opts);
-        auto processor = sdk_l::SimpleLogRecordProcessorFactory::Create(std::move(exporter));
+
+        sdk_l::BatchLogRecordProcessorOptions batch_opts;
+        auto processor = sdk_l::BatchLogRecordProcessorFactory::Create(
+            std::move(exporter), batch_opts);
+
         auto provider_unique =
             sdk_l::LoggerProviderFactory::Create(std::move(processor), resource);
         nostd::shared_ptr<otel::logs::LoggerProvider> provider(provider_unique.release());

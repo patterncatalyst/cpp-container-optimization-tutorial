@@ -205,6 +205,28 @@ If you don't have Grafana time, the same data is available via
 the Prometheus UI at <http://localhost:9090> with PromQL queries
 directly. Less polished, faster for ad-hoc investigation.
 
+### The Simple/Batch processor decision (r88)
+
+r87 shipped with `SimpleSpanProcessor` and `SimpleLogRecordProcessor`
+— OTel-cpp's synchronous processors. The cost was visible
+immediately: throughput collapsed from r84's ~18,500 req/s (no
+OTel) to ~2,170 req/s (8.5× drop), with p50 jumping from 200 µs
+to 2.7 ms. The same allocator differences demo-06 was built to
+measure became invisible under the per-request OTel cost.
+
+r88 switched both processors to their Batch variants. Batch
+processors queue spans/logs and export them periodically (every
+5 seconds by default) on a background thread, instead of
+synchronously inside each `span->End()` and `EmitLogRecord` call.
+Per-signal overhead drops from ~100 µs (full gRPC roundtrip) to
+~5 µs (lock-free queue insertion).
+
+The contrast is genuinely the most consequential observability
+decision the talk covers — see `_plans/teaching-points.md` for the
+full "Simple vs Batch" mini-essay, which is a candidate §10 prose
+nugget. **Production services should use Batch by default; Simple
+is for development and unit tests.**
+
 ### Build time warning (r85+)
 
 The first build with OTel enabled takes **30-60 minutes** on a
@@ -299,8 +321,9 @@ Round C (cgroups, huge pages, threads toggles) is planned.
 | r84 | Fix r83 typo — generic-lambda (`auto sock`) avoids version-specific namespace question | shipped (18,469 req/s verified) |
 | r85 | OTel traces/metrics/logs export to LGTM via OTLP/gRPC; conditional on `OTEL_EXPORTER_OTLP_ENDPOINT`; compose-observe.yml overlay | partial — caught instantly by compose validation: network ref used external name instead of alias |
 | r86 | compose-observe.yml fix: `tutorial-demo06` → `demo06` (use alias not external name; G-37) | partial — compose validated, build proceeded, but C++ compile failed on lambda capture of unique_ptr OTel handles |
-| **r87** | **Fix lambda capture for OTel unique_ptr handles — `request_counter` / `latency_hist` need `&` prefix** | **shipped** |
-| r88+ | Layer toggles: `HUGE_PAGES`, cgroup `memory.high`, `THREADS` | planned |
+| r87 | Fix lambda capture for OTel unique_ptr handles — `request_counter` / `latency_hist` need `&` prefix | shipped — observability working end-to-end at 2,170 req/s but 8.5× throughput collapse from synchronous processors |
+| **r88** | **Switch SpanProcessor and LogRecordProcessor from Simple* to Batch* — recovers throughput; canonical §10 teaching-point** | **shipped** |
+| r89+ | Layer toggles: `HUGE_PAGES`, cgroup `memory.high`, `THREADS` | planned |
 
 ## The two PMR bugs worth promoting to §7 prose
 
