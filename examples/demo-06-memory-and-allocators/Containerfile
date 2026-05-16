@@ -47,10 +47,11 @@ COPY conanfile.py ./
 # ── Build compatibility layers for jemalloc/5.3.1 ─────────────────────
 #
 # Building jemalloc/5.3.1 (released 2022) in our environment hits two
-# independent compatibility conflicts. Both are addressed at the right
-# layer rather than worked around at the build-step layer:
+# independent compatibility conflicts. Both are documented with their
+# fix-vs-workaround label so future maintainers understand the
+# trade-offs.
 #
-# CONFLICT 1 — GCC 14 conformance strictness (G-34):
+# CONFLICT 1 — GCC 14 conformance strictness (G-34, fix at right layer):
 #   GCC 14 turned several long-standing warnings into errors-by-default:
 #   implicit function declarations, implicit-int returns, old-style K&R
 #   function definitions, incompatible pointer types, int↔pointer
@@ -59,16 +60,28 @@ COPY conanfile.py ./
 #   errors like:
 #       malloc_io.h: error: old-style parameter declarations ...
 #       ctl.c: error: expected declaration specifiers ... before 'tsd_t'
+#
 #   Fix at the right layer: tell GCC 14 to behave like GCC 13 regarding
 #   these specific idioms, FOR THE JEMALLOC BUILD ONLY. This is the
 #   documented GCC 14 migration pattern at:
 #       https://gcc.gnu.org/gcc-14/porting_to.html
 #   and matches Fedora/Debian/openSUSE practice for pre-2024 C packages.
-#   The CFLAGS env var is picked up by autotools' configure step. Our
-#   C++23 app code is unaffected — those flags are C-language specific
-#   and our app builds via CMake, not autotools.
 #
-# CONFLICT 2 — Conan recipe chmod gap (G-33):
+#   Mechanism note (r73 → r74): the first attempt used `ENV CFLAGS=...`
+#   in the Containerfile but this did NOT propagate through to the
+#   actual compile step. Conan 2's AutotoolsToolchain generates a
+#   conanbuild.sh that sets CFLAGS from profile + conf, shadowing the
+#   env-level CFLAGS we set. The correct Conan-native mechanism is
+#   `-c tools.build:cflags=[...]` on the conan install command, which
+#   the toolchain reads and adds to its generated CFLAGS. Same flags,
+#   right mechanism.
+#
+#   Our C++23 app code is unaffected — these are C-language flags
+#   only, and our app builds via CMake (not autotools). Mimalloc is
+#   also CMake-based and doesn't pick up these flags either; only
+#   jemalloc's autotools build is affected.
+#
+# CONFLICT 2 — Conan recipe chmod gap (G-33, workaround at build-step layer):
 #   Separately, jemalloc's Conan recipe extracts source from a tarball
 #   without preserving the executable bit on `configure`. The autotools
 #   helper then fails with errno 126 (Permission denied). This bug is
@@ -76,23 +89,30 @@ COPY conanfile.py ./
 #   is a workaround at the build-step layer rather than a fix at the
 #   recipe layer. A real fix would require forking the Conan recipe,
 #   which exceeds tutorial scope. Documented as G-33.
+#
+# UX note: the first build attempt will ALWAYS print a scary-looking
+# "configure: Permission denied" error, then the retry catches it and
+# continues. This is the workaround pattern in action — we can't
+# prevent the first failure without forking the recipe. Subsequent
+# builds reuse Conan's cache and don't hit either conflict.
 
-ENV CFLAGS="-Wno-error=implicit-function-declaration \
-            -Wno-error=implicit-int \
-            -Wno-error=incompatible-pointer-types \
-            -Wno-error=int-conversion \
-            -Wno-error=old-style-definition"
+# The Conan conf to inject GCC 14 compatibility flags via Conan's
+# AutotoolsToolchain. Defined once and referenced by both the
+# initial attempt and the retry path below.
+ENV CONAN_COMPAT_CFLAGS='tools.build:cflags=["-Wno-error=implicit-function-declaration","-Wno-error=implicit-int","-Wno-error=incompatible-pointer-types","-Wno-error=int-conversion","-Wno-error=old-style-definition"]'
 
 RUN conan install . --output-folder=build/conan \
                     -s build_type=Release \
                     --build=missing \
+                    -c "$CONAN_COMPAT_CFLAGS" \
     || ( echo "==> First conan install failed; trying chmod-and-retry for autotools-recipe scripts" \
          && find /root/.conan2/p -type f \
              \( -name configure -o -name 'config.guess' -o -name 'config.sub' \) \
              -exec chmod +x {} + \
          && conan install . --output-folder=build/conan \
                             -s build_type=Release \
-                            --build=missing )
+                            --build=missing \
+                            -c "$CONAN_COMPAT_CFLAGS" )
 
 COPY src/         ./src/
 COPY CMakeLists.txt ./

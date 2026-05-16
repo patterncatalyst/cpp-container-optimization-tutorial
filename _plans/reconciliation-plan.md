@@ -3118,21 +3118,40 @@ real bugs. The specific flags here only relax the *new* errors
 GCC 14 added. Long-standing checks (uninitialized variables,
 type mismatches, etc.) stay strict.
 
-**Fix.** Set `CFLAGS` for the Conan-driven build to include the
-five compatibility flags. The CFLAGS env var is picked up by
-autotools' `configure` step and passed through to the C compiler:
+**Fix.** Inject the compatibility flags via Conan's
+`tools.build:cflags` conf, which the `AutotoolsToolchain` reads
+and adds to the generated CFLAGS. Pass on the `conan install`
+command line:
 
 ```dockerfile
-ENV CFLAGS="-Wno-error=implicit-function-declaration \
-            -Wno-error=implicit-int \
-            -Wno-error=incompatible-pointer-types \
-            -Wno-error=int-conversion \
-            -Wno-error=old-style-definition"
+ENV CONAN_COMPAT_CFLAGS='tools.build:cflags=["-Wno-error=implicit-function-declaration","-Wno-error=implicit-int","-Wno-error=incompatible-pointer-types","-Wno-error=int-conversion","-Wno-error=old-style-definition"]'
 
 RUN conan install . --output-folder=build/conan \
                     -s build_type=Release \
-                    --build=missing
+                    --build=missing \
+                    -c "$CONAN_COMPAT_CFLAGS"
 ```
+
+**Mechanism note (r73 → r74).** The first attempt at the GCC 14
+fix used `ENV CFLAGS=...` directly in the Containerfile. **This did
+not work.** The errors were byte-identical to pre-fix output,
+proving the flags weren't reaching the compile step.
+
+Root cause: Conan 2's `AutotoolsToolchain.generate()` produces a
+`conanbuild.sh` script that explicitly sets CFLAGS from
+profile + settings + conf. The recipe sources this script before
+running the actual build, which **shadows any env-level CFLAGS**
+set earlier in the Dockerfile.
+
+The right mechanism is the `tools.build:cflags` conf, which the
+toolchain reads and includes in its generated CFLAGS. Same flags,
+right injection point.
+
+Diagnostic for "did the flags propagate": before fixing, the
+compile errors mention `tsd_t` and `old-style parameter
+declarations`. If those errors still appear with `-Wno-error=...`
+in CFLAGS, the flags are being shadowed — switch to the conf
+mechanism.
 
 **Scope discipline.** The CFLAGS env var applies during the
 Conan-driven build only. Our C++ application code compiles
@@ -10689,6 +10708,119 @@ User runs (rebuild required because Containerfile changed):
     ./examples/demo-06-memory-and-allocators/demo.sh
 
 Or with formal pass/fail criteria:
+
+    ./scripts/test-demo-06-memory-and-allocators.sh
+
+### 2026-05-16 — r74: demo-06 GCC 14 flags via Conan conf (r73's ENV CFLAGS shadowed; same flags, right mechanism)
+
+User ran r73 verification. Same `tsd_t` / `old-style parameter
+declarations` errors as pre-r73 — byte-identical, proving r73's
+fix mechanism didn't take effect. The flags weren't propagating
+through to the actual compile step.
+
+**Root cause (diagnosis added to G-34's body):**
+
+Conan 2's `AutotoolsToolchain.generate()` produces a
+`conanbuild.sh` script that explicitly sets CFLAGS from
+profile + settings + conf. The recipe sources this script before
+the actual build, which shadows any env-level CFLAGS set earlier
+in the Dockerfile. r73's `ENV CFLAGS=...` was set in the build
+shell but immediately overridden when the recipe sourced Conan's
+generated script.
+
+The right mechanism is `tools.build:cflags` conf passed via
+`-c` to `conan install`. The toolchain reads this conf at
+`generate()` time and includes the flags in `conanbuild.sh`.
+Same compatibility flags, right injection point.
+
+**Honest accounting on the jemalloc iteration cost:**
+
+This is the third attempt on this dep:
+
+| Round | Issue | Approach | Result |
+|---|---|---|---|
+| r71 | Discovered chmod gap | None (first build attempt) | failed at configure |
+| r72 | Workaround: retry-with-chmod | Build-step layer | works |
+| r73 | Fix: ENV CFLAGS | Wrong mechanism (shadowed) | failed at make |
+| r74 | Same fix, right mechanism | `-c tools.build:cflags` conf | TBD |
+
+Iteration on dependency-build issues is normal for new toolchain
+combinations but I should have validated the mechanism more
+carefully in r73 rather than assuming `ENV CFLAGS` would
+propagate. The fix-vs-workaround framing the user pushed for is
+valuable; r73's fix was conceptually right but its mechanism
+was wrong, and I missed that distinction at ship time.
+
+**Fix shipped in r74:**
+
+Containerfile changes (1 net new line, several lines reorganized):
+
+```dockerfile
+# Define the conf once, reference it in both attempts:
+ENV CONAN_COMPAT_CFLAGS='tools.build:cflags=["-Wno-error=implicit-function-declaration","-Wno-error=implicit-int","-Wno-error=incompatible-pointer-types","-Wno-error=int-conversion","-Wno-error=old-style-definition"]'
+
+RUN conan install . --output-folder=build/conan \
+                    -s build_type=Release \
+                    --build=missing \
+                    -c "$CONAN_COMPAT_CFLAGS" \
+    || ( ... chmod-retry ... \
+         && conan install . ... -c "$CONAN_COMPAT_CFLAGS" )
+```
+
+Removed the now-obsolete `ENV CFLAGS=...` line that didn't work.
+
+**Fallback option if r74 also fails:**
+
+If `-c tools.build:cflags` also doesn't take effect, or if more
+GCC 14 conformance errors surface beyond the five flags we
+listed, the cleanest fallback is to **drop jemalloc from the
+4-way comparison** and ship as 3-way (std::allocator + std::pmr +
+mimalloc). Mimalloc already gives us the "linked replacement"
+story; jemalloc adds breadth but not anything mimalloc doesn't
+already demonstrate. Iglberger's *Software Design* discussion
+of Strategy pattern with allocator backends works equally well
+with three variants.
+
+Will offer this fallback if r74 doesn't land.
+
+**Plan changes in r74 (2 files):**
+
+1. `examples/demo-06-memory-and-allocators/Containerfile`:
+   - Removed `ENV CFLAGS=...` block (r73's failed mechanism)
+   - Added `ENV CONAN_COMPAT_CFLAGS=...` with the conf as JSON
+   - Both `conan install` invocations now reference the conf
+     via `-c "$CONAN_COMPAT_CFLAGS"`
+   - Expanded the comment block to document the r73→r74
+     mechanism correction so future readers don't repeat the
+     mistake
+2. `_plans/reconciliation-plan.md`:
+   - Updated G-34's "Fix" section to show the conf mechanism
+   - Added "Mechanism note (r73 → r74)" subsection with the
+     ENV-shadowing explanation and the diagnostic for "did the
+     flags propagate"
+   - Added this r74 round entry
+
+**Anticipated outcomes:**
+
+- **Most likely (~75%):** `-c tools.build:cflags` injects the
+  flags correctly; jemalloc compiles under GCC 14; toolchain
+  proof completes; r75 starts (HTTP + OTel).
+- **Conf doesn't propagate either (~10%):** jemalloc recipe may
+  have its own CFLAGS handling that overrides the toolchain's.
+  Mitigation: try `tools.build:extra_cflags` or set per-package
+  conf with `jemalloc/*:tools.build:cflags=[...]`.
+- **More GCC 14 errors surface (~10%):** extend the flag set.
+  jemalloc's source might have additional conformance issues
+  beyond the five common ones.
+- **Drop jemalloc fallback (~5%):** ship 3-way if r74 + one
+  follow-up attempt don't land it.
+
+User runs (rebuild required because Containerfile changed):
+
+    podman rmi cpp-tut/demo-06:latest 2>/dev/null || true
+    ./examples/demo-06-memory-and-allocators/demo.sh
+
+Or with formal pass/fail:
 
     ./scripts/test-demo-06-memory-and-allocators.sh
 
