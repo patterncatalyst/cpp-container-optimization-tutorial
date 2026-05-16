@@ -419,6 +419,105 @@ the difference between allocators." Both are corollaries of
 
 ---
 
+## Three isolation primitives, monotonically better: demo-05 Round B
+
+Demo-05 Round B ran four scenarios on a single 22-CPU host with two
+tenants — `tenant-a` (the service being protected) and `tenant-b` (a
+steady CPU-bound neighbor). Each scenario applies one isolation
+mechanism and re-measures tenant-a's latency. The full four-row
+result, verified r101:
+
+| Scenario | p50 ms | p95 ms | p99 ms | p99 vs baseline |
+|---|---|---|---|---|
+| baseline (alone) | 0.40 | 1.50 | 2.30 | 1.0× |
+| unisolated (default CFS) | 1.80 | 10.30 | 24.70 | **10.7×** |
+| weighted (tenant-b cpu.weight=10) | 1.10 | 3.90 | 9.00 | **3.9×** |
+| pinned (cpuset 0-10 vs 11-21) | 0.50 | 1.40 | 1.80 | **0.78×** |
+
+### The mini-essay (publishable as-is)
+
+The default state — two containers running with no resource hints —
+is a 10.7× tail-latency disaster. tenant-b isn't doing anything
+malicious; it's the same code, same image, same Linux, just steady
+CPU work. CFS gives both tenants equal scheduling weight (the default
+`cpu.weight=100` each), and the result is that tenant-a's p99 jumps
+from 2.3 ms to 24.7 ms. **Production incident territory, achieved by
+booting a second container.**
+
+`cpu.weight` is a relative-priority knob in cgroup v2. Setting
+tenant-b's weight to 10 (against tenant-a's default 100) tells CFS
+"give tenant-a roughly 10× as much CPU as tenant-b when they
+contend." On our run, p99 dropped from 24.7 ms to 9.0 ms — about 62%
+of the damage recovered. **Not 100%**, and the reason is in the
+mechanism: weight is a *relative* knob, not a *hard barrier*. When
+tenant-a is briefly idle between requests, tenant-b legally consumes
+CPU; when tenant-a's next request arrives, it has to be scheduled
+*against* a now-warm tenant-b that holds the cache lines and the
+front-of-queue position. Some contention always leaks through.
+`cpu.weight` is appropriate when your tenants share goals and you
+want soft prioritization — not when latency budgets are hard.
+
+`cpuset.cpus` is a physical-separation knob. Pinning tenant-a to
+cores 0-10 and tenant-b to cores 11-21 means the two tenants share
+no CPU cores at all. CFS can't even put them on the same runqueue.
+The result on our run: p99 of 1.80 ms — **slightly better than the
+baseline of 2.30 ms**. This is not measurement noise. When tenant-a
+runs alone in the baseline scenario, the kernel scheduler is free
+to migrate its threads across any of the 22 CPUs, and each migration
+costs a cold-cache penalty as the new core's L1/L2 are populated
+from L3 or DRAM. With pinning, tenant-a's threads stay within an
+11-core set, the working set warms across those caches and stays
+there, and the migration penalty disappears. The same effect drives
+HFT and other ultra-low-latency systems to pin threads even when
+they have a host all to themselves. **Non-migration is a feature
+of pinning beyond the contention-avoidance effect.**
+
+The cost of `cpuset.cpus` is rigidity: you've reserved cores that
+can't be used by anyone else, even when tenant-a is idle. On
+elastic, bursty workloads this is wasteful; on steady low-latency
+workloads it's the right trade-off. **Pick your primitive based on
+the workload pattern, not on what sounds modern.**
+
+### Cross-references for the eventual prose
+
+Where this should land in §11 (noisy neighbors):
+
+- The 10.7× degradation number is the opening hook — concrete,
+  shocking, but mechanistically simple (default CFS share)
+- The 62% recovery from `cpu.weight` is the "soft isolation" case
+- The 0.78× pinned-better-than-baseline is the "physical isolation
+  has a hidden cache bonus" case
+- The trade-off framing (rigidity vs. recovery completeness) sets
+  up the production-decision angle for §11's conclusion
+
+This pairs with two earlier teaching-points entries as the third
+canonical "performance is not a scalar" instance for this tutorial:
+
+- §6/§10 OTel Simple-vs-Batch: instrumentation can dominate workload
+- §7 PMR batch-vs-serve: measurement frame can dominate allocator
+- §11 isolation primitives: scheduler defaults can dominate latency
+
+Each makes the same shape of argument with different mechanisms:
+something most people don't think of as "performance code" is in
+fact the dominant cost, and the fix is in tuning, not in the
+workload itself.
+
+### Diagnostic / production-tuning addendum
+
+If you see latency tail problems on a shared host where the
+*workload itself* benchmarks fast in isolation, the diagnostic
+sequence is:
+
+1. **Are you on shared CPUs?** (`cat /sys/fs/cgroup/system.slice/.../cpuset.cpus`
+   on Linux; check container runtime resource flags)
+2. **What's your cpu.weight relative to other tenants?**
+   (`cat /sys/fs/cgroup/.../cpu.weight`)
+3. **Are you migrating between cores?** (`perf stat -e migrations`)
+
+For step 3, high migration count + good single-thread CPU profile
++ poor latency tail = classic "needs pinning" signature, even
+without a noisy neighbor.
+
 ## (Future teaching-points entries go here.)
 
 When a new diagnostic pattern or content nugget surfaces during

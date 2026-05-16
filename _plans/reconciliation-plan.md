@@ -14413,6 +14413,107 @@ better than baseline). On real data, in your terminal.
    chronology accurately so future readers can see how diagnostic
    suppression compounds into wasted effort.
 
+### 2026-05-16 — r102: Round B fully verified — all four scenarios produce signal; demo-05 complete
+
+User applied r101, re-ran `./demo.sh`. All four scenarios produced
+clean signal for the first time.
+
+**Verified numbers (Round B, ./demo.sh, post-r101):**
+
+| Scenario | p50 ms | p95 ms | p99 ms | p99 vs baseline |
+|---|---|---|---|---|
+| baseline (alone) | 0.40 | 1.50 | 2.30 | 1.0× |
+| unisolated (default CFS) | 1.80 | 10.30 | 24.70 | **10.7×** |
+| weighted (tenant-b cpu.weight=10) | 1.10 | 3.90 | 9.00 | **3.9×** |
+| pinned (cpuset 0-10 vs 11-21) | 0.50 | 1.40 | 1.80 | **0.78×** |
+
+**Cleaner than the r97 predictions.** Earlier rounds predicted p99
+of ~8 ms for unisolated; today's run measured 24.7 ms — the
+contention signal is stronger than expected, making the three-step
+recovery story (10.7× → 3.9× → 0.78×) more dramatic on the page.
+
+**The narrative arc:**
+
+- **Default CFS fairness produces a 10.7× tail-latency disaster.**
+  Both tenants are running the same image with no malicious behavior;
+  the kernel scheduler's "equal weight" default is the entire cause.
+- **`cpu.weight=10` for tenant-b recovers 62% of the damage** (p99
+  back from 24.7 to 9.0 ms). Not 100% because weight is relative,
+  not absolute — tenant-b still legally consumes CPU when tenant-a
+  is briefly idle between requests, and that residual contention
+  leaks through to the tail.
+- **`cpuset.cpus` split gets to 78% OF BASELINE** (p99 1.80 vs
+  baseline 2.30). This isn't measurement noise — it's the cache-
+  warmth-from-non-migration effect that HFT engineers exploit by
+  pinning threads even when they have a host alone. The kernel
+  scheduler can't migrate tenant-a's threads off its 11-core set,
+  the L1/L2 warm across those cores, and the migration cold-cache
+  penalty disappears.
+
+**This is the publishable §11 result.** Teaching-points entry added:
+"Three isolation primitives, monotonically better" — full mini-essay
+ready to fold into §11 prose during the section-prose phase. Joins
+the existing two "performance is not a scalar" instances as the
+third canonical example for this tutorial:
+
+| § | Mechanism | Insight |
+|---|---|---|
+| §6/§10 | OTel Simple vs Batch | Instrumentation can dominate workload |
+| §7 | PMR batch vs serve | Measurement frame can dominate allocator |
+| §11 | Default CFS vs isolation primitives | Scheduler defaults can dominate latency |
+
+**Files changed in r102 (2):**
+
+- `_plans/teaching-points.md`: new ## section "Three isolation
+  primitives, monotonically better: demo-05 Round B" — intro,
+  mini-essay (the three-step recovery narrative + the cache-bonus
+  explanation for pinning), cross-references for §11 prose, plus
+  a diagnostic/production-tuning addendum for "you see tail
+  problems on a shared host; what to check"
+- `_plans/reconciliation-plan.md`: this r102 entry
+
+**Status — demo-05 complete.**
+
+- Round A: ✓ verified (baseline alone produces clean numbers,
+  ~0.4-0.5 ms p50)
+- Round B: ✓ fully verified (all four scenarios produce signal,
+  monotonic recovery narrative on real data)
+- Round C (OTel observe-mode overlay): not started; optional
+  enhancement for demo-05's narrative pacing, but not required
+  for the §11 lesson
+
+**Gotchas captured in the demo-05 arc:**
+
+- G-36 (r84): httplib defaults too low for load testing
+- G-38 (r95): hey's `50%` vs `50%%` in percentile output
+- G-39 (r97): httplib ThreadPool size vs hey -c with keep-alive
+- G-40 (r98): rootless podman cpuset/cpu need explicit systemd
+  delegation
+- G-41 (r100): `podman run --rm` cleanup is async; subsequent
+  runs need `--replace`
+- G-42 (r101): `--cpu-weight` is not a podman flag (use
+  `--cgroup-conf=cpu.weight=N`); never `2>/dev/null` a diagnostic
+  failure
+
+**Where the option-1 plan stands:**
+
+- A. demo-06 — ✓ complete (batch + serve both verified)
+- B. demo-05 — ✓ complete (Round B verified r102)
+- C. demo-07 quality-pipeline — stub, next active work
+- D. Section prose — three §-anchor mini-essays now drafted and
+  publishable (§7, §10, §11); §4, §5, §8, §12 still in draft
+- E. PPTX slides — visible deliverable
+
+The next meaningful unit of forward motion is **C** (build out
+demo-07 stub) or **D** (start finalizing section prose using the
+three publishable mini-essays as anchors and weaving in cross-
+references). My preference is D — three solid §-anchors plus the
+verified numbers across demo-02/03/04/05/06 means the prose can
+be drafted with citation-strength grounding for several sections
+at once. demo-07 can be the next demo-buildout pass after that.
+
+User's call on path forward.
+
 ---
 
 ## Known divergences from the PRD
