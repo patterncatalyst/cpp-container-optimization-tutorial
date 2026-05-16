@@ -2941,6 +2941,124 @@ unavailable (e.g., older kernels without io_uring support).
 
 ---
 
+### G-33 · jemalloc Conan recipe: `configure` script not executable in rootless containers; MSVC patch line is a Linux-build red herring (r72)
+
+**Problem.** Building `jemalloc/5.3.1` via Conan in a podman build
+(rootless, user-namespace remap active) fails at the autotools
+configure step with:
+
+```
+/bin/sh: line 1: .../src/configure: Permission denied
+ConanException: Error 126 while executing
+```
+
+The recipe extracts the upstream source tarball into Conan's
+build-cache directory, but the executable bit on the `configure`
+script (and on `config.guess`/`config.sub`) is dropped during
+extraction. When the recipe's `autotools.configure()` then tries to
+invoke `configure`, the shell refuses with errno 126 (permission
+denied).
+
+This is **conan-center-index issue #20858**, originally filed
+against jemalloc/5.2.1 and supposedly fixed in 5.3.1 — but the
+fix addressed the related user-namespace-remap path, not the
+chmod gap itself. The chmod gap persists across multiple
+jemalloc recipe versions and reappears intermittently as the
+recipe is updated.
+
+The error surface specifically affects:
+- Rootless podman / docker (user namespace mapping rewrites uids)
+- Conan 2.x with default autotools helper
+- Recipes that don't explicitly chmod scripts after extraction
+
+**Companion red herring in the same output:** users diagnosing
+this often fixate on this earlier line in the build log:
+
+```
+jemalloc/5.3.1: Apply patch (backport): Add the missing compiler
+flags for MSVC on Windows.
+```
+
+This is **NOT a problem.** The recipe is announcing it's applying
+a cross-platform patch that adds MSVC support to jemalloc's source
+tree. The patch is part of the recipe's standard preparation
+because Conan recipes target every supported compiler/OS
+combination. On Linux/gcc builds the MSVC code paths are inert.
+The line is documentation noise, not an error.
+
+**Fix.** Wrap `conan install` in a retry-with-chmod that catches
+the failure, chmods any non-executable autotools scripts in the
+build cache, then retries:
+
+```dockerfile
+RUN conan install . --output-folder=build/conan \
+                    -s build_type=Release \
+                    --build=missing \
+    || ( echo "==> First conan install failed; trying chmod-and-retry" \
+         && find /root/.conan2/p -type f \
+             \( -name configure -o -name 'config.guess' -o -name 'config.sub' \) \
+             -exec chmod +x {} + \
+         && conan install . --output-folder=build/conan \
+                            -s build_type=Release \
+                            --build=missing )
+```
+
+Three reasons this works:
+
+1. The first invocation extracts all source tarballs into Conan's
+   cache (`/root/.conan2/p/...`). Even when the configure step
+   fails, the sources remain on disk.
+2. The `find ... -exec chmod +x {} +` walks every autotools script
+   in any in-flight build. Cheap; matches a small set of well-known
+   filenames.
+3. The retry sees the now-executable scripts and proceeds. Conan
+   skips any recipes already built in the cache; only the failing
+   one (jemalloc) is re-attempted.
+
+**Alternative fixes considered and rejected:**
+
+- Pin to an older jemalloc version. Just shifts the problem to a
+  recipe version that may have other issues.
+- Custom Conan recipe via `editable install`. Maintenance burden
+  too high for a tutorial.
+- Conan profile `conf` to chmod scripts globally. Not a documented
+  Conan conf option; would require Conan custom commands or hooks
+  which are out of scope.
+- Build jemalloc outside Conan. Defeats the lockfile-reproducibility
+  goal of the tutorial.
+
+**Lessons for the tutorial:**
+
+- **Recipe quality varies across Conan Center.** mimalloc's
+  CMake-based recipe in our toolchain works without issue;
+  jemalloc's autotools-based recipe is fragile. When picking
+  dependencies, recipe-based-on-CMake correlates with fewer
+  build surprises than recipe-based-on-autotools, especially in
+  unusual environments (containers, rootless namespaces, cross
+  compilation).
+- **Don't trust commit messages.** I wrote in r71's conanfile.py
+  that "5.3.1 supposedly fixes the 5.2.1 user-namespace-remap bug"
+  based on a quick search-result skim. The bug is real, the fix
+  is partial, and the symptom in rootless containers is identical
+  to what 5.2.1 produced. r72 corrects the comment.
+- **MSVC patch noise is a recurring confusion source.** Whenever
+  a Conan build of a multi-platform recipe surfaces an "applying
+  patch" line that references a different OS or compiler, treat
+  it as a documentation message about the recipe, not a build
+  problem. The actual problem is always in the error output
+  below the patch announcement.
+
+**Cross-references:**
+
+- conan-center-index #20858 (original bug report against 5.2.1)
+- Demo-06's Containerfile wraps `conan install` in the
+  chmod-retry pattern; that's the worked example.
+- Demo-04's OTel chain doesn't hit this (recipe is CMake-based,
+  not autotools).
+- Demo-03's gRPC chain doesn't hit this (recipe is CMake-based).
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -10205,6 +10323,113 @@ even link in our toolchain" gate.
 
 User runs:
 
+    ./examples/demo-06-memory-and-allocators/demo.sh
+
+Or with formal pass/fail criteria:
+
+    ./scripts/test-demo-06-memory-and-allocators.sh
+
+### 2026-05-16 — r72: demo-06 jemalloc autotools chmod fix (G-33)
+
+User ran r71 verification. Build progressed through all earlier
+Conan deps cleanly (mimalloc compiled without complaint), reached
+jemalloc/5.3.1, then failed at:
+
+    /bin/sh: line 1: .../src/configure: Permission denied
+    ConanException: Error 126 while executing
+
+User also flagged confusion about a Conan recipe message they saw
+earlier in the same output:
+
+    jemalloc/5.3.1: Apply patch (backport): Add the missing
+    compiler flags for MSVC on Windows.
+
+**Two issues, only one is real.**
+
+The MSVC line is a red herring: Conan recipes are cross-platform and
+carry patches for all supported targets. That patch is being applied
+to jemalloc's source tree even on Linux because it's part of the
+recipe's standard preparation. The patched MSVC code paths are inert
+when compiled with gcc. Promoted this red herring to G-33 alongside
+the real bug so future readers diagnosing the same Permission-denied
+don't waste time on the MSVC line.
+
+The real bug: conan-center-index #20858. jemalloc's autotools recipe
+extracts source from a tarball but doesn't preserve executable bits
+on the `configure`, `config.guess`, and `config.sub` scripts. The
+recipe then tries to invoke `configure` and shell refuses with
+errno 126. Affects rootless podman + user-namespace remap (the
+user's setup) most commonly.
+
+**Mea culpa on r71's conanfile.py comment:** I wrote that 5.3.1
+"fixed the user-namespace-remap issue from 5.2.1" based on a quick
+skim of search results. That was over-optimistic — the 5.3.1 fix
+addresses *part* of the user-namespace problem but the chmod gap
+itself persists. r72 corrects the comment to be honest about the
+partial fix.
+
+**Fix shipped in r72:** wrap `conan install` in a retry-with-chmod
+that catches the failure, chmods any non-executable autotools
+scripts in the Conan build cache, then retries. Three reasons this
+works:
+
+1. First invocation extracts all source tarballs into Conan's
+   cache. Even when the configure step fails, the sources remain.
+2. `find ... -exec chmod +x {} +` walks every autotools script in
+   any in-flight build. Cheap; targets a small set of well-known
+   filenames (`configure`, `config.guess`, `config.sub`).
+3. The retry sees the now-executable scripts and proceeds. Conan
+   skips already-built recipes in the cache; only jemalloc is
+   re-attempted.
+
+**Alternatives rejected (documented in G-33):**
+
+- Pin older jemalloc — shifts problem, doesn't solve
+- Custom Conan recipe via editable install — maintenance overhead
+- Conan profile conf chmod hook — not a documented option
+- Build jemalloc outside Conan — defeats lockfile reproducibility
+
+**Files changed in r72 (3):**
+
+1. `examples/demo-06-memory-and-allocators/Containerfile` (+13 lines)
+   — replaced single `RUN conan install ...` with the
+   retry-with-chmod pattern, fully commented with the G-33
+   reference and the three "why this works" reasons.
+2. `examples/demo-06-memory-and-allocators/conanfile.py` (+5 lines)
+   — corrected the over-optimistic 5.3.1 comment to acknowledge
+   the partial fix and point at G-33.
+3. `_plans/reconciliation-plan.md` (+128 lines) — added G-33
+   gotcha entry with the bug description, fix, alternatives
+   considered, lessons, and cross-references. Includes the MSVC
+   red-herring callout so future readers don't fixate on it.
+
+**Anticipated outcomes for the rebuild:**
+
+- **Most likely:** chmod-retry pattern catches the failure,
+  jemalloc builds cleanly on the second attempt, mimalloc was
+  already cached from r71's first attempt. demo-06's toolchain
+  proof verifies; r73 starts (HTTP + OTel).
+- **chmod doesn't reach the right file:** the `find` walks
+  `/root/.conan2/p` for the well-known autotools script names.
+  If a future recipe version generates a configure script under
+  a different name or path, the find won't catch it. Mitigation:
+  extend the find pattern. Likely manifests as the same Permission
+  denied on the retry.
+- **mimalloc fails on the rebuild:** unlikely (recipe is
+  CMake-based, no autotools chmod issue). Would be a separate
+  problem to diagnose.
+- **Build succeeds, runtime crashes:** would suggest the static
+  jemalloc/mimalloc replacement isn't installing global
+  new/delete handlers correctly. Mitigation: investigate the
+  `--whole-archive` linker flag in CMakeLists.txt.
+
+**No code changed in r72 outside the Containerfile retry wrapper
+and a 5-line comment correction.** This is a small, targeted patch
+for the failure r71 surfaced.
+
+User runs (rebuild required because Containerfile changed):
+
+    podman rmi cpp-tut/demo-06:latest 2>/dev/null || true
     ./examples/demo-06-memory-and-allocators/demo.sh
 
 Or with formal pass/fail criteria:

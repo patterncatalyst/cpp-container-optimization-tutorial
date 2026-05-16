@@ -5,7 +5,11 @@ our UBI 9 + gcc-toolset-14 toolchain. Adds:
 
 - mimalloc/2.2.4   (Microsoft's allocator; CMake-based recipe)
 - jemalloc/5.3.1   (Facebook's allocator; autotools-based recipe;
-                    fixed user-namespace-remap issue from 5.2.1)
+                    addresses *some* of the user-namespace-remap
+                    issues from 5.2.1, but NOT the chmod-on-extract
+                    gap — see G-33 in the gotcha catalog. The
+                    Containerfile wraps `conan install` in a
+                    chmod-retry pattern to work around it.)
 
 v2 (r72) will add: opentelemetry-cpp + cpp-httplib for the LGTM-
 wired HTTP server entrypoint. Splitting v1/v2 keeps the risk surface

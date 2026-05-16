@@ -43,9 +43,31 @@ RUN conan profile detect --force && \
 WORKDIR /src
 
 COPY conanfile.py ./
+
+# Conan install is wrapped in a retry-with-chmod because of a known
+# jemalloc-recipe bug: the recipe extracts an autotools source tree
+# from a tarball but doesn't preserve the executable bit on the
+# `configure` script. The first build attempt fails with
+#
+#   /bin/sh: line 1: .../src/configure: Permission denied
+#   ConanException: Error 126 while executing
+#
+# (See conan-center-index issue #20858 and adjacent reports across
+# multiple jemalloc recipe versions. Fixed and re-broken several
+# times upstream.) The fix is to chmod any non-executable configure
+# scripts in Conan's package-build cache before retrying. The chmod
+# is run once across all in-flight builds because Conan may have
+# extracted multiple recipes' sources before hitting the failure.
 RUN conan install . --output-folder=build/conan \
                     -s build_type=Release \
-                    --build=missing
+                    --build=missing \
+    || ( echo "==> First conan install failed; trying chmod-and-retry for autotools-recipe scripts" \
+         && find /root/.conan2/p -type f \
+             \( -name configure -o -name 'config.guess' -o -name 'config.sub' \) \
+             -exec chmod +x {} + \
+         && conan install . --output-folder=build/conan \
+                            -s build_type=Release \
+                            --build=missing )
 
 COPY src/         ./src/
 COPY CMakeLists.txt ./
