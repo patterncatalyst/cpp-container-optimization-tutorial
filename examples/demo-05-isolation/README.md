@@ -34,13 +34,57 @@ p99 latency under each:
 A table on stdout with p50/p95/p99 for `tenant-a` under each scenario,
 plus the raw `hey` output in `results/`.
 
+## Cgroup v2 controller delegation (host setup, may be required)
+
+The `weighted` and `pinned` scenarios need rootless podman to be able
+to apply cgroup v2 `cpu` and `cpuset` controllers respectively. By
+default, most distros — including Fedora 44 in many install
+configurations — only delegate `memory` and `pids` to user slices.
+You may need a one-time host opt-in to delegate `cpu` and `cpuset`.
+
+### Check your current state
+
+```bash
+cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.subtree_control
+```
+
+You want this to contain at least `cpu cpuset memory io`. If it shows
+just `memory pids` (or similar), the `weighted` and `pinned` scenarios
+will skip cleanly with a warning, and you'll only see the
+`baseline` and `unisolated` numbers.
+
+### Enable full delegation (one-time, persists across reboots)
+
+```bash
+sudo mkdir -p /etc/systemd/system/user@.service.d/
+sudo tee /etc/systemd/system/user@.service.d/delegate.conf <<'EOF'
+[Service]
+Delegate=cpu cpuset io memory pids
+EOF
+sudo systemctl daemon-reload
+
+# Then log out and back in, or:
+sudo loginctl terminate-user "$USER"
+```
+
+After re-login, verify with the check command above. The
+`weighted` and `pinned` scenarios will work on the next `./demo.sh`
+run.
+
+The demo's `./demo.sh` detects the delegation state up front and
+prints a clear message if the controllers aren't available; scenarios
+that need missing controllers are skipped cleanly rather than crashing.
+
 ## Caveats
 
-- Rootless cgroups v2 must allow `cpu.weight` and `cpuset.cpus` delegation.
-  On Fedora 44 this works out of the box. On other distros you may need to
-  enable controllers in `/sys/fs/cgroup/<your-slice>/cgroup.subtree_control`.
-- NUMA pinning requires more than one NUMA node; the demo detects and
-  skips that scenario on single-node hosts.
+- NUMA pinning requires more than one NUMA node; the demo detects
+  single-node hosts and skips the NUMA portion of `pinned`. On a
+  single-NUMA-node host (most laptops), `pinned` still uses
+  `cpuset.cpus` to split CPU cores between tenants — that part works.
 - `--cpus` flag in podman is a wrapper around `cpu.max`; we use
   `--cpu-weight` (which maps to `cpu.weight` in cgroups v2) for the
   weighted scenario because that's the more interesting knob.
+- G-40 captured during r97/r98: rootless podman + cpuset.cpus needs
+  cpuset controller delegated to the user slice, not just available
+  on the host. Earlier documentation incorrectly suggested cpuset
+  worked without delegation; it doesn't.

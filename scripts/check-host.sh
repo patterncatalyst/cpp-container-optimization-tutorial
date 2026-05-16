@@ -84,15 +84,18 @@ fi
 DELEGATE_PATH="/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.subtree_control"
 if [[ -r "$DELEGATE_PATH" ]]; then
     DELEGATE="$(<"$DELEGATE_PATH")"
-    if [[ "$DELEGATE" == *cpu* && "$DELEGATE" == *memory* && "$DELEGATE" == *io* ]]; then
-        # cpuset/pids are nice-to-have but not strictly required: cpuset is
-        # only used by demo 5's pinned scenario via --cpuset-cpus on
-        # podman run, which works without user-slice delegation.
+    if [[ "$DELEGATE" == *cpu* && "$DELEGATE" == *cpuset* && "$DELEGATE" == *memory* && "$DELEGATE" == *io* ]]; then
+        # G-40 (r97/r98): cpuset IS required for demo-05's pinned scenario.
+        # An earlier comment here said cpuset "works without user-slice
+        # delegation" — that turned out to be wrong on Fedora 44 / podman
+        # 5.x. The `--cpuset-cpus` flag triggers crun to set cpuset.cpus
+        # on the container's cgroup, which fails with "controller cpuset
+        # is not available" if cpuset isn't in subtree_control.
         record ok "rootless cgroup delegation" "$DELEGATE"
     else
         record fail "rootless cgroup delegation" \
             "${DELEGATE:-empty}" \
-            "See §1 step 7 for the systemd Delegate= drop-in."
+            "Needs cpu, cpuset, memory, io. See §1 step 7 for the systemd Delegate= drop-in."
     fi
 else
     record fail "rootless cgroup delegation" \

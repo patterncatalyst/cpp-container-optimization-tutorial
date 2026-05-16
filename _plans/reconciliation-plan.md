@@ -13914,6 +13914,148 @@ r97's fix the baseline scenario should be clean and stable
 enough that Round B's four-scenario comparison signal won't be
 masked by the 0.18% stragglers we were tolerating.
 
+### 2026-05-16 — r98: Round B sub-1+sub-2 — unisolated signal clear; G-40 cgroup delegation gating
+
+User completed Round A verification + ran Round B sub-1 (unisolated)
++ Round B sub-2 (weighted + pinned). Three things landed:
+
+**1. r97 fix verified.** After bumping ThreadPool to 64:
+
+| Metric | Pre-r97 | Post-r97 |
+|---|---|---|
+| Total runtime | 20.05 sec | **0.13 sec** (153× faster) |
+| Requests/sec | 249 | **38,131** (153× higher) |
+| Errors | 9 (of 5000) | **0** (clean) |
+| p50 | 0.20 ms | 0.50 ms |
+| p99 | 1.20 ms | 2.00 ms |
+
+The latency-percentile increase (0.20 → 0.50 ms p50) is expected:
+the pre-r97 test had 9 connections hanging while 16 served, so
+the 4991 successful requests effectively ran on 16 workers; the
+post-r97 test had all 25 workers servicing successfully, which
+means slightly more contention on the httplib accept loop and the
+kernel TCP stack. The headline win is the wallclock collapse and
+the zero-error result. Round A acceptance criteria all met.
+
+**2. Round B sub-1 (unisolated) shows clean contention signal.**
+
+| Metric | Baseline | Unisolated | Degradation |
+|---|---|---|---|
+| p50 | 0.50 ms | 1.70 ms | **3.4×** |
+| p95 | 1.40 ms | 5.00 ms | **3.6×** |
+| p99 | 2.00 ms | 8.00 ms | **4.0×** |
+
+Distribution shape is informative: uniform 3-4× up-shift across
+the whole curve, no runaway tail (no 100ms+ outliers, no errors).
+This is the signature of memory-bandwidth saturation — different
+from CPU-time contention (which would show p99-heavy tail) or
+cache-line bouncing (which would show p50 unchanged but worse
+tail). tenant-b is doing 32MB/worker random-access XOR across all
+cores; tenant-a's 4096-element handler shares the same memory
+bus.
+
+Worth promoting to teaching-points as a §11 prose nugget — the
+shape of the contention curve tells you what kind of contention
+it is. This is the "performance is not a scalar" pattern again,
+but applied to *what's being measured* rather than *which mode
+you measure in*.
+
+**3. Round B sub-2 (weighted + pinned) failed at the cgroup
+delegation layer — G-40 captured.**
+
+`./demo.sh --scenario weighted`: graceful fallback (existing
+log_warn path triggered) — "rootless cgroup did not accept
+--cpu-weight; recording N/A."
+
+`./demo.sh --scenario pinned`: hard crash from crun:
+
+    Error: OCI runtime error: crun: controller `cpuset` is not
+    available under /sys/fs/cgroup/user.slice/user-25963.slice/
+    user@25963.service/user.slice/libpod-.../cgroup.controllers
+
+Same root cause for both: the host's user-slice cgroup.
+subtree_control doesn't include `cpu` or `cpuset` controllers.
+Default systemd configurations on most distros (including some
+Fedora 44 installs) delegate only `memory` and `pids` to user
+slices; `cpu`, `cpuset`, `io` require an explicit systemd
+drop-in to enable.
+
+**G-40: rootless podman + cpuset/cpu controllers need explicit
+systemd delegation.** Default user-slice cgroup config only
+delegates `memory pids`; the `--cpu-weight` and `--cpuset-cpus`
+podman flags need `cpu` and `cpuset` respectively, which require
+this systemd drop-in:
+
+    sudo mkdir -p /etc/systemd/system/user@.service.d/
+    sudo tee /etc/systemd/system/user@.service.d/delegate.conf <<EOF
+    [Service]
+    Delegate=cpu cpuset io memory pids
+    EOF
+    sudo systemctl daemon-reload
+    sudo loginctl terminate-user "$USER"
+
+After re-login the user slice has full delegation. Persists
+across reboots.
+
+**Important note for the gotcha catalog:** an earlier comment in
+`scripts/check-host.sh` claimed cpuset "works without user-slice
+delegation" — that was wrong, and demonstrably so on the user's
+Fedora 44 install. Comment corrected in r98.
+
+**Fixes shipped in r98 (3 files):**
+
+1. **`examples/demo-05-isolation/demo.sh`** — added upfront
+   delegation detection that reads `cgroup.subtree_control` and
+   sets `HAS_CPU_DELEGATED` and `HAS_CPUSET_DELEGATED` flags. If
+   either is 0, a clear warning prints at script start
+   explaining what's missing and pointing at the README. The
+   `run_weighted` and `run_pinned` functions check their
+   respective flags and skip cleanly with a results-file
+   placeholder. Also wrapped pinned's podman runs in error
+   handling so even if delegation seems present but a specific
+   constraint fails, the script doesn't crash mid-run.
+
+2. **`scripts/check-host.sh`** — added `cpuset` to the required
+   controllers list (was previously cpu/memory/io only with a
+   wrong comment claiming cpuset wasn't needed). Comment
+   corrected to note the empirical refutation from r97/r98.
+
+3. **`examples/demo-05-isolation/README.md`** — replaced the
+   optimistic "On Fedora 44 this works out of the box" caveat
+   with a concrete "Cgroup v2 controller delegation" section
+   that includes the check command, the fix command (systemd
+   drop-in), and verification steps. G-40 referenced
+   explicitly.
+
+**Files changed in r98 (4):**
+
+- `examples/demo-05-isolation/demo.sh`: +50 lines for the
+  delegation check + scenario gating + graceful pinned
+  fallback
+- `examples/demo-05-isolation/README.md`: new "Cgroup v2
+  controller delegation" section replacing the old caveat
+  bullet
+- `scripts/check-host.sh`: cpuset added to required list,
+  wrong comment corrected
+- `_plans/reconciliation-plan.md`: this r98 entry
+
+**Status after r98:**
+
+- Round A complete (r94 code + r95 parser + r97 ThreadPool)
+- Round B sub-1 (unisolated) complete, clean signal: 3-4×
+  uniform degradation under memory-bandwidth contention
+- Round B sub-2 (weighted + pinned) **blocked on user host
+  config** until delegation is enabled via the systemd drop-in.
+  After enable, both scenarios should produce numbers showing
+  cgroup isolation reclaiming most of the lost latency. The
+  demo runs cleanly with skip-messages either way; if the user
+  doesn't enable delegation, baseline + unisolated remain the
+  story and we move to Round C (OTel observe-mode overlay).
+
+**Decision point for user:** enable cgroup delegation for the
+full four-scenario story, OR proceed to Round C / D / E and
+revisit cgroup delegation when convenient. Both are reasonable.
+
 ---
 
 ## Known divergences from the PRD

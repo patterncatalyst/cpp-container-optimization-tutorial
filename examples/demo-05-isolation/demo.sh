@@ -39,6 +39,38 @@ require podman hey awk
 register_cleanup demo05-a demo05-b
 mkdir -p results
 
+# ── G-40 (r98): cgroup v2 controller delegation detection ────────────
+#
+# Rootless podman's `--cpu-weight` and `--cpuset-cpus` flags need their
+# respective cgroup v2 controllers (cpu, cpuset) delegated to the
+# user slice. Default systemd configurations on most distros only
+# delegate `memory pids` — cpu/cpuset/io require an explicit opt-in
+# via a systemd drop-in. See README's "Cgroup v2 controller
+# delegation" section for the fix.
+#
+# We detect available controllers up front and set flags so each
+# scenario can skip cleanly with a clear message rather than crash
+# with an opaque OCI runtime error mid-test.
+HAS_CPU_DELEGATED=0
+HAS_CPUSET_DELEGATED=0
+DELEGATE_PATH="/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.subtree_control"
+if [[ -r "$DELEGATE_PATH" ]]; then
+  DELEGATE_CONTENT="$(<"$DELEGATE_PATH")"
+  [[ "$DELEGATE_CONTENT" == *cpu* ]]    && HAS_CPU_DELEGATED=1
+  [[ "$DELEGATE_CONTENT" == *cpuset* ]] && HAS_CPUSET_DELEGATED=1
+else
+  DELEGATE_CONTENT=""
+fi
+
+if (( ! HAS_CPU_DELEGATED )) || (( ! HAS_CPUSET_DELEGATED )); then
+  log_warn "cgroup v2 controller delegation incomplete:"
+  log_warn "  current: ${DELEGATE_CONTENT:-(empty or unreadable)}"
+  log_warn "  cpu:    $((HAS_CPU_DELEGATED))  (needed for the 'weighted' scenario)"
+  log_warn "  cpuset: $((HAS_CPUSET_DELEGATED))  (needed for the 'pinned' scenario)"
+  log_warn "Scenarios that need missing controllers will be skipped cleanly."
+  log_warn "See README's 'Cgroup v2 controller delegation' section for the fix."
+fi
+
 log_step "Building both tenants"
 podman build --target tenant-a -t "$IMG_A" .
 podman build --target tenant-b -t "$IMG_B" .
@@ -116,6 +148,12 @@ run_unisolated() {
 
 run_weighted() {
   log_step "Scenario: weighted (tenant-b cpu.weight=10)"
+  if (( ! HAS_CPU_DELEGATED )); then
+    log_warn "skipping: cgroup v2 'cpu' controller not delegated to user slice"
+    echo "weighted: skipped (cgroup v2 cpu controller not delegated; see README)" \
+      > results/weighted.txt
+    return
+  fi
   start_a
   if start_b --cpu-weight=10 2>/dev/null; then
     bench_a weighted
@@ -129,24 +167,43 @@ run_weighted() {
 
 run_pinned() {
   log_step "Scenario: pinned (cpuset.cpus split)"
+  if (( ! HAS_CPUSET_DELEGATED )); then
+    log_warn "skipping: cgroup v2 'cpuset' controller not delegated to user slice"
+    echo "pinned: skipped (cgroup v2 cpuset controller not delegated; see README)" \
+      > results/pinned.txt
+    return
+  fi
   if [[ "$NODES" -lt 1 ]]; then
     log_warn "no NUMA info; skipping pinned"
+    echo "pinned: skipped (no NUMA info)" > results/pinned.txt
     return
   fi
   local total
   total=$(nproc)
   if (( total < 4 )); then
     log_warn "need at least 4 CPUs to pin; have $total — skipping pinned"
+    echo "pinned: skipped (only $total CPUs, need >= 4)" > results/pinned.txt
     return
   fi
   local half=$(( total / 2 ))
   local a_cpus="0-$((half - 1))"
   local b_cpus="$half-$((total - 1))"
   log_info "pinning tenant-a to $a_cpus, tenant-b to $b_cpus"
-  podman run --rm -d --name demo05-a --cpuset-cpus="$a_cpus" \
-    -p "${PORT}:8080" "$IMG_A" >/dev/null
-  podman run --rm -d --name demo05-b --cpuset-cpus="$b_cpus" "$IMG_B" >/dev/null
-  bench_a pinned
+  # Wrap both podman starts in error handling — if the cpuset controller
+  # is partly delegated but the specific cpuset constraint fails, we
+  # surface a clean N/A rather than letting `set -e` kill the run.
+  if podman run --rm -d --name demo05-a --cpuset-cpus="$a_cpus" \
+        -p "${PORT}:8080" "$IMG_A" >/dev/null 2>&1 \
+     && podman run --rm -d --name demo05-b --cpuset-cpus="$b_cpus" \
+        "$IMG_B" >/dev/null 2>&1; then
+    bench_a pinned
+  else
+    log_warn "podman rejected --cpuset-cpus; recording N/A"
+    log_warn "to see the underlying error, run:"
+    log_warn "  podman run --rm --cpuset-cpus=$a_cpus $IMG_A"
+    echo "pinned: skipped (podman --cpuset-cpus failed; rerun manually for the error)" \
+      > results/pinned.txt
+  fi
   stop_both
 }
 

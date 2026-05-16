@@ -1,47 +1,46 @@
 
 Summary:
-  Total:	20.0609 secs
-  Slowest:	0.0026 secs
+  Total:	0.1311 secs
+  Slowest:	0.0047 secs
   Fastest:	0.0001 secs
-  Average:	0.0003 secs
-  Requests/sec:	249.2414
+  Average:	0.0006 secs
+  Requests/sec:	38131.8819
   
-  Total data:	14970 bytes
+  Total data:	15000 bytes
   Size/request:	3 bytes
 
 Response time histogram:
   0.000 [1]	|
-  0.000 [3853]	|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
-  0.001 [754]	|■■■■■■■■
-  0.001 [267]	|■■■
-  0.001 [64]	|■
-  0.001 [22]	|
-  0.002 [4]	|
-  0.002 [5]	|
-  0.002 [11]	|
-  0.002 [6]	|
-  0.003 [3]	|
+  0.001 [2734]	|■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  0.001 [1396]	|■■■■■■■■■■■■■■■■■■■■
+  0.001 [644]	|■■■■■■■■■
+  0.002 [162]	|■■
+  0.002 [38]	|■
+  0.003 [9]	|
+  0.003 [11]	|
+  0.004 [4]	|
+  0.004 [0]	|
+  0.005 [1]	|
 
 
 Latency distribution:
-  10%% in 0.0001 secs
-  25%% in 0.0001 secs
-  50%% in 0.0002 secs
-  75%% in 0.0003 secs
-  90%% in 0.0005 secs
-  95%% in 0.0007 secs
-  99%% in 0.0011 secs
+  10%% in 0.0002 secs
+  25%% in 0.0003 secs
+  50%% in 0.0005 secs
+  75%% in 0.0008 secs
+  90%% in 0.0012 secs
+  95%% in 0.0014 secs
+  99%% in 0.0020 secs
 
 Details (average, fastest, slowest):
-  DNS+dialup:	0.0000 secs, 0.0000 secs, 0.0005 secs
+  DNS+dialup:	0.0000 secs, 0.0000 secs, 0.0004 secs
   DNS-lookup:	0.0000 secs, 0.0000 secs, 0.0000 secs
-  req write:	0.0000 secs, 0.0000 secs, 0.0016 secs
-  resp wait:	0.0002 secs, 0.0000 secs, 0.0009 secs
-  resp read:	0.0000 secs, 0.0000 secs, 0.0016 secs
+  req write:	0.0001 secs, 0.0000 secs, 0.0022 secs
+  resp wait:	0.0002 secs, 0.0000 secs, 0.0014 secs
+  resp read:	0.0002 secs, 0.0000 secs, 0.0023 secs
 
 Status code distribution:
-  [200]	4990 responses
+  [200]	5000 responses
 
-Error distribution:
-  [10]	Get "http://127.0.0.1:18501/": context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+
 
