@@ -13199,6 +13199,112 @@ factual corrections noted (Q2's "docs/ folder" and
 "verify-stacks/pre-pull at root" recollections turned out to not
 match current state).
 
+### 2026-05-16 — r91: statelessness page bug fixes (YAML + hot-links)
+
+User reviewed r90 site rendering and reported two distinct bugs
+on `/reference/statelessness/`:
+
+**BUG 1 — first card showed "Document" eyebrow with blank
+title/description, but inspecting the link revealed it pointed at
+Doc 03 (PMR).** The thesis of that doc opens "Doc 02
+established..." confirming it WAS doc 03 displayed in the wrong
+slot.
+
+Root cause: `03-pmr.md`'s frontmatter description had unescaped
+embedded double quotes that broke YAML parsing:
+
+```yaml
+description: "PMR as the in-language realization of "request brings its own memory, all releases together." The request arena RAII pattern..."
+```
+
+The inner `"request brings..."` quotes terminate the YAML
+double-quoted string prematurely. The Python transform script in
+r90 wrote `\"...\"` in an f-string thinking that would preserve
+backslash escapes — but `\"` in a Python string is literally a
+double-quote character, not a backslash-and-quote pair.
+
+When Jekyll's YAML parser fails on a document's frontmatter, it
+still includes the doc in the collection but the `order`,
+`title`, and `description` fields come back nil. Then:
+- `sort: "order"` placed the nil-ordered doc somewhere
+  unpredictable (apparently first)
+- The Liquid `case`/`when` on `doc.order` fell through to the
+  `else` branch with eyebrow "Document"
+- Title and description rendered blank
+
+Fix: switched description to single-quoted YAML so the embedded
+double-quoted phrase passes through verbatim:
+
+```yaml
+description: 'PMR as the in-language realization of "request brings its own memory, all releases together." The request arena RAII pattern...'
+```
+
+Audited the other 12 doc frontmatters with a quote-count check
+(`tr -cd '"' | wc -c` against each `description:` line) — only
+03-pmr.md was broken.
+
+**BUG 2 — 00-index.md "Reading order" and "At a glance" sections
+have no hot-links between docs.** Doc-to-doc references in the
+prose like "Doc 04" remain plain text instead of clickable links
+to `/reference/statelessness/04-process-scoped-state/`.
+
+Fix: wrote `/tmp/link-index-refs.py`, a regex-based linker that:
+1. Pre-expands range patterns like `Doc 02–03` to
+   `Doc 02–Doc 03` so both halves get linked (handles both
+   U+2013 en-dash and ASCII hyphen)
+2. Then matches plain `Doc NN` where NN is `01`-`11` and
+   replaces with Jekyll's `{% link %}` markdown tag form:
+
+```markdown
+[Doc 04]({% link _reference/statelessness/04-process-scoped-state.md %})
+```
+
+Result: 79 plain-text references in 00-index.md became 82
+markdown links (3 range patterns expanded into separate halves).
+At-a-glance bold section headers like "**Doc 01 — Stateless vs
+stateful...**" preserve their formatting; only the "Doc NN"
+portion is wrapped in the markdown link.
+
+**Cross-doc linking in the OTHER 11 body docs is captured in
+backlog as a separate item** — those have ~265 cross-references
+total ranging from 9 (Doc 08) to 53 (Doc 10). The linker script
+generalizes cleanly. Deferred because 00-index is the primary
+navigation entry into the collection and that's where the
+linking matters most for usability.
+
+**Files changed in r91 (3):**
+
+- `_reference/statelessness/03-pmr.md`:
+  description rewritten to use single-quoted YAML (the only doc
+  with embedded double quotes that broke YAML parsing)
+- `_reference/statelessness/00-index.md`:
+  79 plain-text Doc references converted to 82 Jekyll-link
+  markdown wraps via /tmp/link-index-refs.py (3 range patterns
+  expanded). Reading order section, At a glance section, Glossary,
+  Reading paths by scenario, State Architecture Table prose, and
+  Cross-cutting themes — every "Doc NN" reference is now a
+  clickable link to that doc's page.
+- `_plans/backlog.md`:
+  added "Cleanup: cross-doc linking in statelessness body docs"
+  entry with per-doc reference counts and the path to the linker
+  script for future use
+
+**Files NOT changed but worth noting:**
+
+- `/tmp/transform-statelessness.py` (the r90 generator): not
+  committed, lives in /tmp/. Future runs of this script for new
+  reference material should use single-quoted YAML for any
+  description containing embedded double quotes, or use
+  appropriate YAML escaping. Pattern to adopt going forward in
+  any frontmatter generator: prefer single-quoted YAML strings
+  when the value might contain embedded quotes; fall back to
+  double-quoted only when the value contains literal
+  apostrophes (which can be escaped as `''`).
+
+**No code changes, no rebuilds, no compose changes.** Pure site
+content fixes addressing user-reported display bugs from the r90
+landing.
+
 ---
 
 ## Known divergences from the PRD

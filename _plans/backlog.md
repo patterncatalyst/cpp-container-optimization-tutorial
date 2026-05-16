@@ -294,7 +294,48 @@ the binaries). Roll into the next demo-06 touch.
 
 ---
 
-## Cleanup: root-level scaffold leftover docs
+## Cleanup: cross-doc linking in statelessness body docs
+
+**Status:** Logged 2026-05-16 (r91). r91 added hot-links to all 82
+"Doc NN" references on the 00-index landing page; the other 11 body
+docs have ~265 cross-references in their prose ("see Doc 04",
+"covered in Doc 05's threading section", etc.) that remain plain
+text.
+
+Per-doc reference counts (from `grep -oE 'Doc [0-9]+' | wc -l`):
+
+```
+01-deployment-posture.md     32 refs
+02-raii.md                   14 refs
+03-pmr.md                    14 refs
+04-process-scoped-state.md   25 refs
+05-threading.md              15 refs
+06-twelve-factor.md          24 refs
+07-state-externalization.md  21 refs
+08-ephemeral-filesystem.md    9 refs
+09-health-checks.md          23 refs
+10-grpc-microservices.md     53 refs
+11-build-tooling.md          36 refs
+```
+
+The `/tmp/link-index-refs.py` script used in r91 generalizes
+cleanly — point it at any of these files and it will do the same
+substitution with the same regex handling for "Doc NN–NN" range
+patterns.
+
+**Effort estimate:** 5-10 minutes plus a careful review. The same
+script + a wrapper to apply it to each file. Cross-references in
+the body docs use the same "Doc NN" convention consistently
+throughout.
+
+**Why deferred:** Not blocking anything; the 00-index page is the
+primary navigation entry into the collection and that's where the
+linking matters most for usability. Body-doc readers tend to
+read sequentially or jump back to the index between docs.
+
+---
+
+
 
 **Status:** Logged 2026-05-16 during r90 planning per user observation.
 A few markdown files at the project root look like leftovers from the

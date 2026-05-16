@@ -1,6 +1,6 @@
 ---
 title: PMR's monotonic_buffer_resource as architectural statelessness
-description: "PMR as the in-language realization of "request brings its own memory, all releases together." The request arena RAII pattern, the canonical layered monotonic + unsynchronized_pool recipe, container-type choices, the lifetime trap counterexample, C++23 additions."
+description: 'PMR as the in-language realization of "request brings its own memory, all releases together." The request arena RAII pattern, the canonical layered monotonic + unsynchronized_pool recipe, container-type choices, the lifetime trap counterexample, C++23 additions.'
 order: 3
 layout: tutorial
 sectionid: reference
