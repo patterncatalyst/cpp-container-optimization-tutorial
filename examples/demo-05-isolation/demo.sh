@@ -81,8 +81,15 @@ podman build --target tenant-b -t "$IMG_B" .
 NODES=$(ls -1 /sys/devices/system/node 2>/dev/null | grep -c '^node[0-9]\+$' || echo 1)
 log_info "Detected $NODES NUMA node(s)"
 
-start_a()    { podman run --rm -d --name demo05-a -p "${PORT}:8080" "$IMG_A" >/dev/null; }
-start_b()    { podman run --rm -d --name demo05-b "$@" "$IMG_B" >/dev/null; }
+start_a()    { podman run --rm --replace -d --name demo05-a -p "${PORT}:8080" "$IMG_A" >/dev/null; }
+start_b()    { podman run --rm --replace -d --name demo05-b "$@" "$IMG_B" >/dev/null; }
+# G-41 (r100): `podman run --rm` schedules cleanup AFTER container exit,
+# but cleanup runs asynchronously — `podman stop` returns before it
+# completes. The next scenario's `start_a` can then race the cleanup
+# and hit "container name already in use" even with sleep 0.5 between
+# scenarios. `--replace` makes the run idempotent: if a container with
+# that name still exists (running or stopped), stop and remove it
+# first. Works on any podman 4.0+.
 stop_both()  { podman stop demo05-a demo05-b >/dev/null 2>&1 || true; sleep 0.5; }
 
 # Wait for tenant-a's HTTP server to be accepting connections. Replaces
@@ -193,9 +200,10 @@ run_pinned() {
   # Wrap both podman starts in error handling — if the cpuset controller
   # is partly delegated but the specific cpuset constraint fails, we
   # surface a clean N/A rather than letting `set -e` kill the run.
-  if podman run --rm -d --name demo05-a --cpuset-cpus="$a_cpus" \
+  # G-41 (r100): --replace handles async --rm cleanup races, same as start_a.
+  if podman run --rm --replace -d --name demo05-a --cpuset-cpus="$a_cpus" \
         -p "${PORT}:8080" "$IMG_A" >/dev/null 2>&1 \
-     && podman run --rm -d --name demo05-b --cpuset-cpus="$b_cpus" \
+     && podman run --rm --replace -d --name demo05-b --cpuset-cpus="$b_cpus" \
         "$IMG_B" >/dev/null 2>&1; then
     bench_a pinned
   else

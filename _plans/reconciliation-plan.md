@@ -14185,6 +14185,118 @@ The path-forward decision from r98 (enable delegation vs proceed
 to Round C / D / E) is unchanged; this round just productizes
 one of the two paths and makes it self-serve.
 
+### 2026-05-16 — r100: G-41 — podman run --rm cleanup is async; add --replace to all scenario starts
+
+User applied r99, verified delegation with `./scripts/cgroup-delegation.sh
+check` (all five controllers — cpu, cpuset, io, memory, pids — fully
+active), then ran `./demo.sh`. Baseline scenario completed cleanly
+(p50 0.50ms, p95 1.70ms, p99 2.50ms). Then the unisolated scenario
+failed immediately:
+
+    Error: creating container storage: the container name "demo05-a"
+    is already in use by ce50299...: that name is already in use, or
+    use --replace to instruct Podman to do so.
+
+**G-41: `podman run --rm` cleanup is asynchronous; subsequent runs
+with the same `--name` need `--replace` to be reliable.**
+
+Mechanism: when you `podman stop` a `--rm`-flagged container, podman
+schedules removal but returns from `stop` immediately. The actual
+removal happens via the conmon process and the cleanup hook, which
+takes some non-zero time (typically tens to hundreds of milliseconds
+for rootless slirp4netns containers — the network namespace teardown
+is the slow part). The `sleep 0.5` in `stop_both()` is supposed to
+cover this gap, but it doesn't always — especially on faster systems
+where the next `podman run` happens before cleanup completes, or on
+slower systems where 500ms is genuinely insufficient.
+
+The error message itself names the fix: `--replace`. This flag, on
+`podman run`, says "if a container with this name exists in any
+state, stop and remove it first, then start the new one." Adding
+this to every scenario start makes the script idempotent and robust
+against:
+- Async cleanup races between scenarios (the immediate bug)
+- Interrupted previous runs that left containers behind
+- Manual debugging where the user has a container running and
+  forgets to remove it before re-running ./demo.sh
+
+**Fix shipped in r100:**
+
+Three call sites in `examples/demo-05-isolation/demo.sh`:
+
+```bash
+# Before:
+start_a()    { podman run --rm -d --name demo05-a ... ; }
+start_b()    { podman run --rm -d --name demo05-b ... ; }
+# (and similar in run_pinned)
+
+# After:
+start_a()    { podman run --rm --replace -d --name demo05-a ... ; }
+start_b()    { podman run --rm --replace -d --name demo05-b ... ; }
+# (and similar in run_pinned)
+```
+
+Inline comment in `start_a()` documents the gotcha with the race
+explanation, so the next reader doesn't have to guess why `--replace`
+is there alongside `--rm`.
+
+**Why this didn't surface in demo-06:** demo-06's `compose-serve.yml`
+runs one set of containers for the duration of the hey load test and
+doesn't restart them between scenarios. There's no "scenario A's
+containers stopping while scenario B's same-name containers start"
+pattern to hit the race. demo-05 is the first demo where this
+pattern occurs, and only because Round B's design requires four
+scenario configurations of the same two-container pair.
+
+**Why this didn't surface earlier in demo-05 development:** Round A
+testing only ran one scenario at a time (`--scenario baseline`).
+Round B sub-1 (r98) had this latent bug, but the user only verified
+baseline + unisolated as separate runs, not as a single `./demo.sh`
+all-scenarios sequence.
+
+**Baseline numbers note:** the r100 run produced higher percentiles
+than the r97-predicted ones (p50 0.50 vs 0.20, p99 2.50 vs 1.20).
+Possible causes:
+- Run-to-run variance after re-login (different page cache state,
+  CPU governor state)
+- System load between sessions (other processes the user might be
+  running)
+- ThreadPool(64) creating slightly more thread-management overhead
+  even when only ~25 threads are active
+
+These numbers are still well within the "fast tenant-a alone"
+regime — the unisolated comparison from r98 (p50 1.70, p99 8.00)
+is still a 3-4× degradation against this new baseline. The
+isolation story is preserved. If the post-r100 full run still
+shows elevated baselines, we can investigate; otherwise, run-to-run
+variance is the simplest explanation.
+
+**Files changed in r100 (2):**
+
+- `examples/demo-05-isolation/demo.sh`: `--replace` added to all
+  four podman run sites (start_a, start_b, both run_pinned starts);
+  inline comment in start_a documenting G-41
+- `_plans/reconciliation-plan.md`: this r100 entry
+
+**No code changes to tenant binaries.** No image rebuild needed.
+Pure demo.sh fix.
+
+**Expected after r100 re-run:**
+
+Full four-scenario run completes without errors. Delegation is
+already enabled (verified r99). Pinned scenario runs with cpuset
+constraint. Summary should be all four lines:
+
+```
+baseline     p50= 0.X  ms  p95= ... p99= ...
+unisolated   p50= 1.X  ms  p95= ... p99= 6-8 ms
+weighted     p50= 0.6-1.2 ms  ...   p99= 3-5 ms
+pinned       p50= 0.3-0.5 ms  ...   p99= 1.5-2.5 ms
+```
+
+If those numbers land, **Round B is fully verified** and the
+isolation story is complete on real data.
+
 ---
 
 ## Known divergences from the PRD
