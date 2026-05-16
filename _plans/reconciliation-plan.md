@@ -3260,6 +3260,114 @@ container or user error.
 
 ---
 
+### G-36 · cpp-httplib defaults trigger Nagle + delayed-ACK pathology — every request takes ≥40 ms (r83)
+
+cpp-httplib by default doesn't set `TCP_NODELAY` on accepted
+sockets. For request/response protocols like HTTP, this produces
+a textbook TCP performance pathology: every request takes at
+least 40 milliseconds regardless of how trivial the server work
+is, because of the interaction between Nagle's algorithm
+(server-side, sender) and Linux's delayed-ACK (client-side,
+receiver).
+
+**Diagnostic signature in hey output:**
+
+```
+Slowest:      0.0444 secs        ← everything bunches at 40-44ms
+Average:      0.0410 secs
+
+Response time histogram:
+  0.044 [1938]  |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+  (other buckets nearly empty)
+
+Details:
+  resp wait:  0.0002 secs        ← server done in 200µs
+  resp read:  0.0407 secs        ← but client takes 40ms to read
+```
+
+If `resp_wait` is small but `resp_read` is ~40 ms (or ~200 ms on
+older/non-Linux systems), Nagle + delayed-ACK is the diagnosis.
+
+**Mechanism:**
+
+1. The server writes the HTTP response in multiple small `write()`
+   calls — typically status line, headers, then body. Nagle's
+   algorithm (`/proc/sys/net/ipv4/tcp_nagle` is on by default)
+   holds the second packet until ACK arrives for the first.
+2. The client's TCP stack uses delayed-ACK: it waits up to 40 ms
+   (Linux default, see `/proc/sys/net/ipv4/tcp_delack_min`)
+   hoping to piggyback the ACK on outgoing data.
+3. Since the client just sent a request and has nothing else to
+   send, the 40 ms delayed-ACK timer fires before any piggyback
+   opportunity arrives. ACK goes back. Server sends the second
+   packet. Client reads.
+4. Net effect: every request pays a 40 ms TCP coordination tax,
+   regardless of actual work.
+
+**Fix:**
+
+Disable Nagle on accepted sockets via `TCP_NODELAY`. cpp-httplib
+exposes this through `set_socket_options`:
+
+```cpp
+#include <netinet/tcp.h>
+#include <sys/socket.h>
+
+svr.set_socket_options([](httplib::socket_t sock) {
+    int yes = 1;
+    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+});
+```
+
+The `SO_REUSEADDR` re-set is mandatory: `set_socket_options`
+*replaces* httplib's default callback (which sets SO_REUSEADDR),
+so without re-setting it explicitly, rapid start/stop cycles
+will fail with `EADDRINUSE`.
+
+**Trade-off (TCP_NODELAY isn't always right):**
+
+Disabling Nagle means small writes go out as individual packets
+instead of being batched. For chatty protocols sending many tiny
+messages per connection (telnet, X11), Nagle is the right
+default — packet count overhead dominates. For HTTP-style
+request/response, minimum-RTT is more valuable than
+minimum-packet-count, so `TCP_NODELAY` is universally correct.
+Production HTTP servers (nginx, Apache, Go's `net/http`) all set
+it by default. cpp-httplib's omission is an embedded-use-case
+quirk.
+
+**Alternative: TCP_CORK + explicit flush**
+
+Linux offers `TCP_CORK` as a finer-grained alternative: while
+corked, all small writes accumulate; uncork sends them as one
+packet. Avoids Nagle entirely. cpp-httplib doesn't expose
+TCP_CORK directly, so `TCP_NODELAY` is the right tool here.
+
+**Diagnostic note (40ms vs 200ms):**
+
+The exact "Nagle tax" depends on the OS's delayed-ACK timer:
+- Linux: 40 ms (kernel `delack` timer, configurable via
+  `/proc/sys/net/ipv4/tcp_delack_min`)
+- macOS, BSDs: 200 ms historical Berkeley default
+- Windows: 200 ms historical default, tunable
+
+So if you see *exactly* 200 ms-per-request on a macOS or older
+system, same diagnosis, same fix.
+
+**Cross-references:**
+
+- John Nagle's original RFC: RFC 896 (1984)
+- Stuart Cheshire's classic "It's the Latency, Stupid":
+  https://www.stuartcheshire.org/rants/latency.html
+  (the canonical writeup of Nagle + delayed-ACK interaction)
+- Demo-06's r82→r83 sequence is the worked example: r82 fixed
+  the connection layer, r82's diagnostic output revealed the
+  per-packet layer, r83 fixed that. Each round peeled one layer
+  off the onion.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -11902,6 +12010,142 @@ under load (which is what r83's OTel histograms will visualize).
   variant we hit (we handle this with `|| true`), or httplib's
   set_keep_alive_* method signatures differ from v0.16.0's
   (unlikely; demo-04 uses the same version successfully).
+
+### 2026-05-16 — r83: TCP_NODELAY (Nagle's algorithm) — onion-peel layer 2 (G-36)
+
+User's r82 verification showed dramatic improvement on the
+connection-cycling pathology (10s tails gone, 78 → 99 req/s)
+but exposed the *next* layer of HTTP defaults misconfiguration:
+every request bunched at exactly 42 ms.
+
+The diagnostic signature was unambiguous:
+
+```
+Response time histogram:
+  0.044 [1938]  |■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+resp wait:  0.0002 secs   ← server done in 200µs
+resp read:  0.0407 secs   ← client takes 40ms to read 189 bytes
+```
+
+200 µs of server work, 40 ms of "read" — exactly the Linux
+delayed-ACK timeout. Classic Nagle + delayed-ACK interaction.
+
+**Mechanism (covered in detail in G-36 catalog entry):**
+
+cpp-httplib's default socket setup doesn't set TCP_NODELAY. The
+server writes the HTTP response in multiple small write() calls
+(status line, headers, body). Nagle's algorithm holds the second
+packet until ACK arrives for the first. The client's TCP stack
+uses delayed-ACK: 40 ms timer fires before any piggyback
+opportunity. Then ACK goes back, server sends second packet,
+client reads. Total: 40 ms tax on every request regardless of
+work.
+
+**Fix:**
+
+One block in `run_serve_mode()` after the existing keep-alive +
+thread-pool config:
+
+```cpp
+#include <netinet/tcp.h>  // TCP_NODELAY
+#include <sys/socket.h>   // setsockopt, SOL_SOCKET, SO_REUSEADDR
+
+svr.set_socket_options([](httplib::socket_t sock) {
+    int yes = 1;
+    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+});
+```
+
+Two subtle points worth knowing:
+
+1. **SO_REUSEADDR must be re-set explicitly.** `set_socket_options`
+   *replaces* httplib's default callback (which sets
+   SO_REUSEADDR). Without re-setting it, rapid start/stop cycles
+   fail with EADDRINUSE.
+
+2. **TCP_NODELAY's trade-off:** disables packet batching, so
+   chatty protocols get more packets. For HTTP request/response
+   it's universally correct (production servers — nginx, Apache,
+   Go net/http — all set it). cpp-httplib's omission is an
+   embedded-use-case quirk.
+
+Added comprehensive G-36 catalog entry covering the mechanism,
+diagnostic signature (40 ms on Linux, 200 ms on BSDs/older
+systems), trade-offs (TCP_NODELAY vs TCP_CORK), and references
+to Stuart Cheshire's classic "It's the Latency, Stupid"
+writeup.
+
+**The onion-peel pattern itself is teaching material:**
+
+| Round | Layer | Diagnostic | Symptom |
+|---|---|---|---|
+| r81 | conn cycling | 274ms avg, 10s tails | reopen storms, listen backlog fills |
+| r82 | conn pool size | 99 req/s, 42ms exact | thread pool too small, all reqs bunch |
+| r83 | TCP_NODELAY | (verifying) | each req pays 40ms delayed-ACK timeout |
+
+Each fix unmasks the next. The diagnostic-by-progressive-
+elimination pattern is itself a §10 (observability) and §13
+(networking) teaching point.
+
+**Files changed in r83 (3):**
+
+- `examples/demo-06-memory-and-allocators/src/main.cpp`:
+  added `#include <netinet/tcp.h>` and `<sys/socket.h>`;
+  expanded the httplib config block with a TCP_NODELAY
+  `set_socket_options` callback; rewrote the explanatory
+  comment block to cover both r82's connection-layer fixes
+  and r83's per-packet fix in a unified narrative.
+- `examples/demo-06-memory-and-allocators/README.md`:
+  rounds table extended with r83, r84+ reshuffled (was r83 OTel
+  now r84 OTel, etc.).
+- `_plans/reconciliation-plan.md`:
+  G-36 catalog entry (~110 lines) covering Nagle + delayed-ACK
+  mechanism, diagnostic, fix, alternatives, cross-references;
+  this r83 round entry.
+
+**Verification:**
+
+```bash
+podman rmi cpp-tut/demo-06:latest 2>/dev/null || true
+podman compose -f examples/demo-06-memory-and-allocators/compose-serve.yml up --build -d
+sleep 5
+hey -z 5s http://127.0.0.1:18601/run
+hey -z 5s http://127.0.0.1:18602/run
+hey -z 5s http://127.0.0.1:18603/run
+podman compose -f examples/demo-06-memory-and-allocators/compose-serve.yml down
+```
+
+Expected:
+- `Requests/sec`: thousands to tens-of-thousands per variant (vs
+  r82's 99). With 16-thread pool and ~200µs server work, ceiling
+  is roughly 80K req/s; 50-worker hey saturation hits before
+  that.
+- `Average`: sub-millisecond (vs r82's 41ms).
+- `resp_read` in the Details: now microseconds, not 40ms.
+- The histogram no longer has everything at one bucket — there
+  should be actual workload variance visible now, which is what
+  we want for the §7 allocator comparison.
+
+This is what should unmask whatever's actually going on
+allocator-wise under sustained load. With Nagle no longer
+dominating, the std vs PMR vs mimalloc differences should be
+visible in the hey output, not just in the synthetic batch run.
+
+**Anticipated:**
+
+- ~90%: TCP_NODELAY fix works, throughput jumps to thousands of
+  req/s, std/pmr/mimalloc latency distributions become
+  comparable. Final r83 outcome before r84's OTel work.
+- ~7%: another small httplib defaults issue surfaces (the layers
+  go deeper — TCP_QUICKACK on the client side could matter, but
+  that's hey's concern not ours; or per-connection memory limits).
+- ~3%: TCP_NODELAY doesn't help as much as expected — could
+  indicate the bottleneck moved into the workload itself or
+  the JSON serialization. Diagnose by hey's resp_wait vs
+  resp_read split: if resp_wait got bigger, server's the
+  bottleneck now (good — that's what we wanted to measure).
 
 ---
 

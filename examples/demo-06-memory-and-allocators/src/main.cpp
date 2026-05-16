@@ -50,6 +50,9 @@
 
 #include <httplib.h>
 
+#include <netinet/tcp.h>  // TCP_NODELAY constant
+#include <sys/socket.h>   // setsockopt, SOL_SOCKET, SO_REUSEADDR
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -279,11 +282,17 @@ int run_serve_mode(const Args& /*args*/, const demo06::WorkloadParams& params) {
 
     httplib::Server svr;
 
-    // ── httplib config knobs — r82 ───────────────────────────────
+    // ── httplib config knobs — r82 + r83 ─────────────────────────
     //
     // cpp-httplib's defaults are tuned for low-concurrency embedded
     // use; under any meaningful load they produce surprising
-    // backpressure. The defaults that hurt us:
+    // backpressure. r82 fixed the connection-cycling pathology
+    // (keep-alive too short + thread pool too small). r83 added
+    // the per-packet fix (Nagle's algorithm).
+    //
+    // ── r82: connection-level defaults ──────────────────────────
+    //
+    // The defaults that hurt:
     //
     //   keep_alive_max_count:   5       — each connection retired
     //                                     after 5 requests, forcing
@@ -294,20 +303,43 @@ int run_serve_mode(const Args& /*args*/, const demo06::WorkloadParams& params) {
     //                                   — too small for 50+ hey
     //                                     workers
     //
-    // r81's hey output showed the cost: 274ms average response
-    // time for 10µs of actual work, 10-second tail latencies, all
-    // because the listen backlog filled with reopen-storms and TCP
-    // retransmits kicked in.
+    // r81's hey output: 274ms average, 10-second tail latencies.
     //
-    // The bumps below are conservative — still way under what a
-    // production HTTP server would set, but enough that hey's
-    // default 50 concurrent workers don't trigger pathological
-    // queue thrashing. With these settings, hey -z 5s should
-    // produce throughput numbers that reflect the workload, not
-    // the connection-management overhead.
+    // ── r83: TCP_NODELAY (per-packet) ───────────────────────────
+    //
+    // r82 fixed the connection layer; r82's hey output then showed
+    // every request bunched at exactly 42ms, with server work
+    // taking 200µs but client reads taking 40ms. Smoking gun: the
+    // 40ms Linux delayed-ACK timeout.
+    //
+    // What's happening: httplib writes the HTTP response in
+    // multiple small write() calls (status, headers, body).
+    // Nagle's algorithm (on by default) holds the second packet
+    // until ACK for the first arrives. The client's TCP stack
+    // does delayed-ACK — waits up to 40ms hoping to piggyback the
+    // ACK on outgoing data. Since the client just sent a request
+    // and has nothing else to send, the 40ms timer fires before
+    // the ACK goes back. Server's second packet waited the whole
+    // 40ms.
+    //
+    // TCP_NODELAY disables Nagle on accepted sockets; small writes
+    // go out immediately. Trade-off: more packets on the wire for
+    // chatty protocols. For HTTP-style request/response, NODELAY
+    // is the right answer — minimum-RTT response is more valuable
+    // than minimum-packet-count.
+    //
+    // Note re SO_REUSEADDR: httplib's default callback sets it.
+    // Calling set_socket_options REPLACES the default callback,
+    // so we must re-set SO_REUSEADDR ourselves or rapid start/stop
+    // cycles will fail with EADDRINUSE.
     svr.set_keep_alive_max_count(1000);
     svr.set_keep_alive_timeout(60);
     svr.new_task_queue = [] { return new httplib::ThreadPool(16); };
+    svr.set_socket_options([](httplib::socket_t sock) {
+        int yes = 1;
+        setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+    });
 
     svr.Get("/healthz", [](const httplib::Request&, httplib::Response& res) {
         res.set_content("ok", "text/plain");
