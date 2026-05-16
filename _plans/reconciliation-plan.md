@@ -13067,6 +13067,138 @@ teaching-points are captured, the §7 + §10 prose almost writes
 itself from existing material), or E (the visible deliverable for
 the actual talk).
 
+### 2026-05-16 — r90: statelessness reference set integrated; cleanup items captured
+
+User uploaded `stateless-cpp-on-containers_tar.gz` — a 12-document
+reference set (~42,000 words) developed as deep research on the
+statelessness sidebar request originally logged in r71's backlog.
+Self-contained, professionally written, opinionated where appropriate
+(`> **Opinion.**` callouts mark positions taken), references all
+four canonical performance books plus Yonts, Geewax, Vernon, and
+the Twelve-Factor manifesto.
+
+Material covers:
+- 01 — Stateless vs stateful as deployment posture (vocabulary)
+- 02 — RAII as the foundation for safe stateful work
+- 03 — PMR's monotonic_buffer_resource as architectural statelessness
+- 04 — Process-scoped state that's still stateless (State
+  Architecture Table introduced here)
+- 05 — Threading and concurrency in a stateless service
+- 06 — 12-Factor adapted to C++
+- 07 — State externalization patterns
+- 08 — The ephemeral filesystem trap
+- 09 — Health checks as the public API of statelessness
+- 10 — Microservices with gRPC and C++ (capstone integration)
+- 11 — Build tooling appendix
+- Plus 00-index and ~67K of research notes (working drafts)
+
+**Integration approach:** new `reference` Jekyll collection (not
+folded into existing `_docs/`). Rationale:
+- The tutorial body (`_docs/`) is structured around the 15-section
+  PRD-driven outline; injecting 12 unrelated docs there would
+  disrupt the section numbering and tutorial reading flow.
+- A `reference` collection lets the material live as a navigable
+  sub-site that the tutorial body cross-references, without
+  competing for the prime real estate.
+- Mirrors how the Outline / Prerequisites / Plan / Diagrams /
+  Demos / Reference-books cards work on the homepage's "Reference"
+  section.
+
+The deeper question of whether to ALSO fold the material into the
+tutorial body (as §3.5 sidebar, §11 expansion, or its own
+§-numbered section) is unchanged from the r71 backlog item and
+explicitly preserved there.
+
+**Files changed in r90 (4 + 13 created):**
+
+NEW: `_reference/statelessness/` directory with 13 markdown files:
+- 12 transformed documents (`00-index.md` through `11-build-tooling.md`)
+- `research-notes.md` (~67K of working drafts; order=99 so it
+  sorts last in the card list as "Working notes")
+
+NEW: `reference/statelessness.html` — landing page at
+`/reference/statelessness/` with:
+- Hero (Twelve reference documents (~42,000 words)...)
+- Reading-order card grid (renders the 13 collection items
+  sorted by `order:` frontmatter field, with kind eyebrows by
+  topic area: Vocabulary / Request scope / Process scope /
+  Architecture / etc.)
+- Cross-cutting-themes prose (11 recurring themes from the README)
+- Stack-assumptions prose (toolchain table)
+- Reference-books prose (consolidated 8-book bibliography)
+- Provenance prose pointing at research-notes.md
+
+MODIFIED: `_config.yml`:
+- Added `reference` collection definition with
+  `permalink: /reference/:path/` (the `:path/` flag preserves the
+  subdirectory under `_reference/`, so `_reference/statelessness/
+  01-deployment-posture.md` lands at
+  `/reference/statelessness/01-deployment-posture/`)
+- Added `defaults:` entry making `reference` collection use
+  `layout: tutorial` and `sectionid: reference`
+
+MODIFIED: `index.html`:
+- Added a new "Statelessness reference set" `.doc-card` to the
+  homepage Reference section, after "Reference books cited" and
+  before the section's closing tag. Icon 🏛️, title and short
+  description, links to `/reference/statelessness/`.
+
+MODIFIED: `_plans/backlog.md`:
+- Updated existing "Optional segment: C++ and statelessness for
+  services" entry to note r90 landed the reference material;
+  the tutorial-body-integration question is preserved separately
+- New entry: "Cleanup: demo-06's ./demo.sh (batch mode) hasn't
+  been verified since r88" — flag for next demo-06 touch
+- New entry: "Cleanup: root-level scaffold leftover docs" —
+  PUSHING-TO-GITHUB.md is a clear leftover from scaffold
+  generation; STARTING-WITH-CLAUDE.md and GETTING-STARTED.md
+  are borderline (genuine project-specific value but at root);
+  noted that user's recall of "docs folder exists" and
+  "verify-stacks.sh/pre-pull.sh at root" was incorrect (already
+  cleaned up; only _docs/ exists, and scripts are in /scripts/)
+
+MODIFIED: `_plans/reconciliation-plan.md`:
+- This r90 entry
+
+**Transform script** (not committed, ran from /tmp/):
+
+Wrote a small Python script (`/tmp/transform-statelessness.py`)
+that reads each `XX-name_r01.md` from the extracted upload, looks
+up frontmatter metadata from a Python dict, prepends a Jekyll
+frontmatter block with `title`, `description`, `order`, `layout`,
+`sectionid`, and writes the result to `_reference/statelessness/
+XX-name.md` (filename normalized to drop the `_r01` revision
+suffix since the URL would be ugly with it). The dict's
+descriptions are 200-300 chars each, drawn from the at-a-glance
+summaries in the original 00-index.md doc.
+
+Internal cross-references in the source docs use "Doc 04" prose
+form rather than markdown links, so no link rewriting was needed.
+
+**Statelessness reference set is self-contained**:
+
+The collection works as a navigable sub-site at
+`/reference/statelessness/`. From the homepage, click the
+"Statelessness reference set" card under Reference. The landing
+page shows all 13 cards sorted by `order:` frontmatter. Click any
+card to read the document. Each document renders via the
+`layout: tutorial` Jekyll layout, which provides the same prev/
+next pager, TOC, and chrome as the main tutorial.
+
+**Q1 and Q2 cleanup capture (from user):**
+
+User asked about three orthogonal concerns:
+1. `./demo.sh` for demo-06 hasn't been run since r88 (only
+   compose commands)
+2. Several root-level files look like scaffold leftovers
+3. The statelessness archive should be integrated
+
+Q3 is the body of r90's work above. Q1 and Q2 are captured in
+backlog.md as forward-looking items with effort estimates and the
+factual corrections noted (Q2's "docs/ folder" and
+"verify-stacks/pre-pull at root" recollections turned out to not
+match current state).
+
 ---
 
 ## Known divergences from the PRD

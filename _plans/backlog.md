@@ -10,9 +10,16 @@ it here.
 
 ## Optional segment: C++ and statelessness for services
 
-**Status:** Logged 2026-05-11 (mid-r71) per user request. Not in the
-option-1 scope. Candidate for a §3.5 sidebar, a §11 expansion, or
-its own §-numbered optional section.
+**Status:** Logged 2026-05-11 (mid-r71) per user request.
+**Updated 2026-05-16 (r90):** the deep-research reference material
+(twelve documents, ~42,000 words) was integrated into the site as
+`/reference/statelessness/` collection. The remaining open question
+is whether to *also* fold the material into the tutorial body
+proper — as a §3.5 sidebar, a §11 expansion, or its own §-numbered
+optional section — vs. leave it as a self-contained reference set
+that the tutorial body cross-references. The tutorial-body
+integration is still in this backlog item; the
+reference-collection landing is shipped.
 
 **Why this belongs in the tutorial:** statelessness is one of the
 load-bearing assumptions of modern container orchestration (Kubernetes
@@ -255,4 +262,79 @@ touched. Not worth a dedicated round.
 
 ---
 
-## (Other backlog items go here as they come up.)
+## Cleanup: demo-06's `./demo.sh` (batch mode) hasn't been verified since r88
+
+**Status:** Logged 2026-05-16 during r90 planning. User noted that
+the entire r80-r88 work on demo-06 has been driven via `podman
+compose` commands directly; the original `./demo.sh` (batch-mode
+comparison via `run-all.sh` inside a single container) was last
+touched in r82 (subscription-manager fix) and never re-run after
+the OTel work landed.
+
+The batch-mode path should still work — it doesn't go through the
+HTTP server, doesn't initialize OTel (env var unset), and only
+exercises the 3 binaries' stdout-JSON output mode. But "should
+still work" isn't "verified to still work."
+
+**To verify:**
+
+```bash
+cd examples/demo-06-memory-and-allocators/
+./demo.sh                        # default: 200 iters per variant
+./demo.sh --iterations 1000      # bigger sample
+./demo.sh --clean                # rebuild path
+```
+
+Expected: comparison table printed, identical hash across variants
+(matching r79's verified `0xac09f54afe8c6152`), no librhsm
+warnings (r82 fix), no errors.
+
+**Effort estimate:** 5 minutes (image is already cached; just runs
+the binaries). Roll into the next demo-06 touch.
+
+---
+
+## Cleanup: root-level scaffold leftover docs
+
+**Status:** Logged 2026-05-16 during r90 planning per user observation.
+A few markdown files at the project root look like leftovers from the
+initial skeleton generation that have outlived their usefulness.
+
+Audit results (from `ls -la` of project root):
+
+**`PUSHING-TO-GITHUB.md`** — clearly a leftover. Describes the
+first-time push of a freshly-scaffolded project to GitHub. The repo
+is well past that point. Two options:
+1. Move to `_docs/` under a "Project history / scaffold" section if
+   we want to preserve the procedural record
+2. Delete outright — git history preserves it
+
+**`STARTING-WITH-CLAUDE.md`** — borderline. Describes what to put
+in front of the AI assistant when working on the project. It IS
+project-specific and useful (PRD.md → reconciliation-plan.md →
+relevant section, etc.), but the file format is "first-time onboard
+to using Claude with this project," which suggests it could live
+under `_docs/contributing/` or similar. Currently excluded from
+Jekyll build via `_config.yml`. Possibly keep at root since it's
+meta about the development process.
+
+**`GETTING-STARTED.md`** — keep at root. Genuine user-facing entry
+point (host setup, run instructions, etc.). Currently excluded from
+Jekyll build. Reasonable cleanup: link to it from `README.md` and
+`index.html` if not already.
+
+**User's observations that turned out NOT to need cleanup** (logged
+for completeness, no action needed):
+- "We have a `docs/` folder still" — searched; only `_docs/` exists.
+  Likely confused with the underscored Jekyll collection name.
+- "`verify-stacks.sh` and `pre-pull.sh` in main project" — already in
+  `/scripts/`, not at root.
+
+**Effort estimate:** 10-30 minutes depending on which path is chosen
+for `PUSHING-TO-GITHUB.md` (delete vs preserve). Not blocking
+anything.
+
+---
+
+
+(Other backlog items go here as they come up.)

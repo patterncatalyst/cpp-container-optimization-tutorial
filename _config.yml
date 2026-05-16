@@ -33,7 +33,9 @@ kramdown:
 # ── Collections ───────────────────────────────────────────────────────────────
 # `docs` is the tutorial body. `plans` is the reconciliation plan and
 # similar project-management material — included in the build so it can
-# be cross-linked, but not advertised in the main nav.
+# be cross-linked, but not advertised in the main nav. `reference` is
+# auxiliary reference material (statelessness compendium and similar
+# deep-research documents), organized under subdirectories.
 collections:
     docs:
         output: true
@@ -41,6 +43,9 @@ collections:
     plans:
         output: true
         permalink: /plans/:name/
+    reference:
+        output: true
+        permalink: /reference/:path/
 
 defaults:
     - scope:
@@ -55,6 +60,12 @@ defaults:
       values:
           layout: plan
           sectionid: plans
+    - scope:
+          path: ""
+          type: reference
+      values:
+          layout: tutorial
+          sectionid: reference
 
 # ── Plugins ───────────────────────────────────────────────────────────────────
 plugins:

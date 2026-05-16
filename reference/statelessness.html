@@ -1,0 +1,143 @@
+---
+layout: default
+title: "Statelessness reference: C++20/23 services on containers"
+description: "Twelve reference documents (~42,000 words) on C++20/23 service design for Linux containers, focused on statelessness as a deployment property — what makes a service safe to kill, replace, and replicate at the orchestrator's discretion."
+permalink: /reference/statelessness/
+---
+
+<section class="hero hero--compact">
+    <div class="container">
+        <span class="hero__eyebrow">Reference · Statelessness</span>
+        <h1>C++20/23 services on containers.</h1>
+        <p class="hero__lead">
+            Twelve reference documents (~42,000 words) on C++20/23
+            service design for Linux containers, focused on
+            <em>statelessness as a deployment property</em> — what
+            makes a service safe to kill, replace, and replicate
+            at the orchestrator's discretion, and how the C++
+            language features, library choices, and operational
+            patterns either support that property or quietly
+            undermine it.
+        </p>
+        <p class="hero__lead">
+            Companion to the main tutorial; cross-references back
+            into §3 (RAII), §7 (Memory), §9 (Networking), and §11
+            (Noisy neighbors) where the topics overlap.
+        </p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <h2 class="section-heading">Reading order</h2>
+        <p class="section-sub">
+            Sequential reading is the default — each document builds on
+            the prior. If time is limited, the irreducible minimum is
+            <strong>01</strong> (vocabulary), <strong>04</strong> (the
+            State Architecture Table), and <strong>10</strong> (the
+            integration). These three cover the architectural shape
+            without the depth on individual mechanisms.
+        </p>
+
+        <div class="cards">
+            {%- assign statelessness_docs = site.reference
+                | where: "sectionid", "reference"
+                | sort: "order" -%}
+            {%- for doc in statelessness_docs -%}
+                {%- if doc.path contains "statelessness/" -%}
+                    {%- case doc.order -%}
+                        {%- when 0 -%}{%- assign kind = "Map" -%}
+                        {%- when 1 -%}{%- assign kind = "Vocabulary" -%}
+                        {%- when 2, 3 -%}{%- assign kind = "Request scope" -%}
+                        {%- when 4, 5 -%}{%- assign kind = "Process scope" -%}
+                        {%- when 6 -%}{%- assign kind = "Architecture" -%}
+                        {%- when 7 -%}{%- assign kind = "External state" -%}
+                        {%- when 8 -%}{%- assign kind = "Filesystem" -%}
+                        {%- when 9 -%}{%- assign kind = "Health" -%}
+                        {%- when 10 -%}{%- assign kind = "Capstone" -%}
+                        {%- when 11 -%}{%- assign kind = "Tooling" -%}
+                        {%- when 99 -%}{%- assign kind = "Working notes" -%}
+                        {%- else -%}{%- assign kind = "Document" -%}
+                    {%- endcase -%}
+                    <a class="card" href="{{ doc.url | relative_url }}">
+                        <div class="card__eyebrow">{{ kind }}</div>
+                        <h3 class="card__title">
+                            {%- if doc.order < 99 -%}
+                            <span class="card__num">{{ doc.order | prepend: '0' | slice: -2, 2 }}</span>
+                            {%- endif -%}
+                            {{ doc.title }}
+                        </h3>
+                        <p class="card__desc">{{ doc.description }}</p>
+                    </a>
+                {%- endif -%}
+            {%- endfor -%}
+        </div>
+    </div>
+</section>
+
+<section class="section" style="background: var(--bg-soft);">
+    <div class="container container-prose">
+        <h2 class="section-heading">Cross-cutting themes</h2>
+        <p>Eleven themes recur across the documents; they're worth keeping in mind across topics.</p>
+        <ol>
+            <li>Orchestrator state ≠ language state — statelessness is a deployment configuration choice</li>
+            <li>Podman primary, Kubernetes noted where it materially differs</li>
+            <li>Request-scope vs process-scope is the practical seam, enforced by RAII</li>
+            <li>Threading is the third axis of statelessness (TLS, coroutines, gRPC threading model)</li>
+            <li>RAII has a performance side, not just a correctness side</li>
+            <li><code>std::</code> containers need explicit choices in a service context</li>
+            <li>OS container requests and limits shape C++ behaviour in non-obvious ways</li>
+            <li>"Container" is overloaded vocabulary — <code>std::</code> containers, OS containers, Kubernetes containers</li>
+            <li>C++ pays a "globals tax" that 12-factor languages don't</li>
+            <li>gRPC C++ is the through-line for the example service</li>
+            <li>OTel + Grafana provides external observability that makes statelessness work</li>
+        </ol>
+
+        <h2 class="section-heading">Stack assumptions</h2>
+        <ul>
+            <li><strong>Language:</strong> C++20 portable baseline; C++23 features called out where they help</li>
+            <li><strong>Compiler:</strong> GCC 14+ (preferred) or Clang 18+ with libc++</li>
+            <li><strong>Build:</strong> Conan 2.x, CMake 3.27+, Ninja</li>
+            <li><strong>Runtime:</strong> Linux with cgroups v2</li>
+            <li><strong>Services:</strong> gRPC C++ (callback API), OpenTelemetry C++ SDK</li>
+            <li><strong>Backing services:</strong> PostgreSQL (libpqxx), Redis (redis-plus-plus), Kafka (librdkafka)</li>
+            <li><strong>Orchestration:</strong> Podman + podman-compose (primary), Kubernetes (noted where it materially differs)</li>
+            <li><strong>Observability:</strong> Grafana stack — Loki for logs, Tempo for traces, Mimir for metrics</li>
+        </ul>
+
+        <h2 class="section-heading">Reference books</h2>
+        <p>The patterns and recommendations draw from a small number of well-thought-out sources. Each document's annotated bibliography calls out the chapters most relevant to that topic. Consolidated list:</p>
+        <ul>
+            <li>Iglberger, <em>C++ Software Design</em> (Addison-Wesley, 2022)</li>
+            <li>Yonts, <em>100 C++ Mistakes and How to Avoid Them</em> (Manning, 2024)</li>
+            <li>Enberg, <em>Latency: Reduce Delay in Software Systems</em> (Pragmatic, 2024)</li>
+            <li>Andrist &amp; Sehr, <em>C++ High Performance</em>, 2nd edition (Packt, 2020)</li>
+            <li>Ghosh, <em>Building Low Latency Applications with C++</em> (Packt, 2023)</li>
+            <li>Geewax, <em>API Design Patterns</em> (Manning, 2021)</li>
+            <li>Vernon, <em>Implementing Domain-Driven Design</em> (Addison-Wesley, 2013) — for the Outbox pattern</li>
+            <li><em>The Twelve-Factor App</em> (Heroku, 2011/2017) — <code>12factor.net</code></li>
+        </ul>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container container-prose">
+        <h2 class="section-heading">Provenance</h2>
+        <p>
+            This reference set was developed as a companion to the
+            <em>Optimizing C++ on Containers</em> tutorial; it grew out of
+            a sidebar request during demo-06 development on the topic of
+            statelessness — a topic the four main reference books treat
+            obliquely (each from its own angle) but no single one
+            integrates with the OS-container deployment realities. The
+            <a href="{{ '/reference/statelessness/research-notes/' | relative_url }}">research notes</a>
+            preserve the working drafts and per-document framing decisions.
+        </p>
+        <p>
+            Documents use an <code>_rNN</code> revision suffix in their
+            source filenames (omitted from URLs here); the initial baseline
+            is <code>_r01</code>. Subsequent revisions bump the suffix with
+            prior revisions retained in git history.
+        </p>
+    </div>
+</section>
