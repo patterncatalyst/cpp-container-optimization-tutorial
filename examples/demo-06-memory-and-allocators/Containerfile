@@ -8,7 +8,7 @@
 #   demo06-svc-pmr        std::pmr (monotonic_buffer + sync_pool_resource)
 #   demo06-svc-mimalloc   mimalloc static-linked, replaces global new/delete
 #
-# Two execution modes:
+# Three execution modes:
 #
 #   Batch (default):  ./demo06-svc-XXX [iters [depth [branch [values]]]]
 #                     Runs N iterations, prints JSON stats to stdout.
@@ -20,12 +20,24 @@
 #                       GET /healthz       — liveness
 #                       GET /info          — variant + defaults
 #                       GET /run?iters=N   — runs workload, returns JSON
-#                     Used by compose-serve.yml (r81+) and the
-#                     OTel-instrumented compose flow (r82+).
+#                     Used by compose-serve.yml.
 #
-# Build cost: ~3-5 min on a clean cache (mimalloc CMake build is
-# fast; cpp-httplib is single-header). Cached: ~30 seconds (just
-# our app code).
+#   Observe (r85+):   Same binary, same --serve flag. The serve mode
+#                     additionally checks $OTEL_EXPORTER_OTLP_ENDPOINT;
+#                     if set, it initializes the OpenTelemetry SDK and
+#                     emits a span per /run, a request counter, a
+#                     latency histogram, and an INFO log per request.
+#                     Used by compose-observe.yml (overlay onto the
+#                     LGTM observability stack).
+#
+# Build cost (r85+):
+# - First clean build: 30-60 min (Conan rebuilds opentelemetry-cpp,
+#   grpc, protobuf, abseil, openssl from source against gnu17).
+# - Subsequent rebuilds (same conanfile): ~30 seconds for our app
+#   code. The Conan cache keeps the giant transitive deps.
+# - If you only need batch mode and never observe mode, you could
+#   delete the opentelemetry-cpp lines from conanfile.py to save
+#   that initial wait — but the build cost is one-time.
 
 FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
 
@@ -39,10 +51,37 @@ RUN rm -f /etc/yum.repos.d/redhat.repo && \
     sed -i 's/^enabled=1/enabled=0/' \
         /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
 
+# Build basics + perl modules required by openssl's Configure script.
+# r85 added the perl-* modules: Conan builds openssl from source as
+# a transitive dep of opentelemetry-cpp's gRPC exporter; openssl's
+# Configure uses these modules at build time. UBI 9 ships a minimal
+# perl; each module needs a separate package. The list comes from
+# openssl/INSTALL.md required-perl-modules — preempting all of them
+# saves "add one module, rebuild, hit next" iteration (the demo-04
+# arc that produced G-15/G-16/G-17).
+#
+# `which` is used by Conan's autotools detection; without it, some
+# autoconf-based deps decide they can't find tools and fail
+# configure with cryptic messages.
 RUN dnf install -y --quiet --setopt=install_weak_deps=False \
         gcc-toolset-14 \
         cmake ninja-build git python3-pip \
         which \
+        perl-FindBin \
+        perl-IPC-Cmd \
+        perl-Data-Dumper \
+        perl-Pod-Html \
+        perl-Pod-Usage \
+        perl-File-Compare \
+        perl-File-Copy \
+        perl-File-Path \
+        perl-Time-Piece \
+        perl-Getopt-Long \
+        perl-Digest-SHA \
+        perl-threads \
+        perl-threads-shared \
+        perl-Thread-Queue \
+        perl-Term-ANSIColor \
     && dnf clean all \
     && rm -rf /var/cache/dnf/*
 
@@ -68,16 +107,36 @@ RUN mkdir -p src/third_party && \
     curl -fsSL -o src/third_party/httplib.h \
         "https://raw.githubusercontent.com/yhirose/cpp-httplib/${HTTPLIB_VERSION}/httplib.h"
 
-COPY conanfile.py ./
+COPY conanfile.py conan.lock ./
 
-# Single conan install — no compatibility layers needed for the
-# 3-way build. Mimalloc is CMake-based, so neither the chmod
-# workaround (G-33) nor the GCC 14 flag injection (G-34) are
-# required here. Both gotcha-catalog entries remain valuable
-# documentation for any future autotools-based dep we might add.
-RUN conan install . --output-folder=build/conan \
-                    -s build_type=Release \
-                    --build=missing
+# r85 adds OTel — the dep graph is now huge (grpc, protobuf, abseil,
+# opentelemetry-cpp, openssl, mimalloc) and we want reproducibility.
+# Same lockfile pattern as demo-04: if conan.lock is non-empty, use
+# it; otherwise resolve fresh.
+#
+# Why the [ -s conan.lock ] check + rm:
+# - The committed conan.lock is intentionally empty in this repo
+#   (a placeholder; regenerate via scripts/regenerate-demo-06-lockfile.sh
+#   when ready to pin against a specific install snapshot).
+# - Conan 2.x auto-detects a `conan.lock` in the working directory
+#   and tries to parse it even when --lockfile isn't passed. An
+#   empty file fails JSON parsing and aborts the install. So we
+#   rm the empty placeholder before falling back to fresh resolve.
+# - See G-31 in the gotcha catalog for the full story.
+RUN if [ -s conan.lock ]; then \
+        echo "==> Using committed conan.lock for reproducible install"; \
+        conan install . --output-folder=build/conan \
+                        -s build_type=Release \
+                        --lockfile=conan.lock \
+                        --build=missing ; \
+    else \
+        echo "==> conan.lock is empty placeholder; resolving graph fresh"; \
+        echo "==> Run scripts/regenerate-demo-06-lockfile.sh to pin"; \
+        rm -f conan.lock ; \
+        conan install . --output-folder=build/conan \
+                        -s build_type=Release \
+                        --build=missing ; \
+    fi
 
 COPY src/         ./src/
 COPY CMakeLists.txt ./

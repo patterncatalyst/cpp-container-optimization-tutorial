@@ -130,8 +130,96 @@ cold-cache costs.
 
 Real services don't always look like batch microbenchmarks. The
 allocator that wins in a tight loop may not win the same way under
-realistic request handling patterns. r83's OpenTelemetry histograms
-will let you see this distribution across hundreds of requests.
+realistic request handling patterns. r85's OpenTelemetry histograms
+let you see this distribution across hundreds of requests.
+
+## Observe mode (r85+)
+
+The third execution mode wires OpenTelemetry through the same
+serve-mode binary. Same `--serve` flag (or `DEMO06_MODE=serve`); the
+binary checks `OTEL_EXPORTER_OTLP_ENDPOINT` at startup and
+initializes traces, metrics, and logs export via OTLP/gRPC if it's
+set. Without that env var, the binary runs identically to plain
+serve mode — the OTel SDK never initializes, so there's no runtime
+cost or noise.
+
+The `compose-observe.yml` file overlays the OTel env vars onto
+`compose-serve.yml`'s three services and joins them to the
+`tutorial-obs` network where the LGTM observability bundle lives.
+
+```bash
+podman compose \
+    -f compose-serve.yml \
+    -f compose-observe.yml \
+    -f ../../observability/compose.yml \
+    up --build
+```
+
+Three `-f` files in order — compose merges them with later files
+overlaying earlier ones:
+
+1. `compose-serve.yml` defines the three demo services
+2. `compose-observe.yml` adds OTel env + joins them to `tutorial-obs`
+3. `../../observability/compose.yml` defines the LGTM bundle (Grafana,
+   Loki, Tempo, Prometheus/Mimir, OTel Collector, all in one image)
+
+Once up, drive traffic the same way as plain serve mode:
+
+```bash
+hey -z 30s http://127.0.0.1:18601/run
+hey -z 30s http://127.0.0.1:18602/run
+hey -z 30s http://127.0.0.1:18603/run
+```
+
+Then open Grafana at <http://localhost:3000> and explore:
+
+- **Tempo** (Explore → Tempo): traces from each `demo06-svc-*`
+  service. Each `/run` is a span with `iters` and `variant`
+  attributes; useful for spot-checking individual requests.
+- **Mimir** (Explore → Mimir, or PromQL via Prometheus at
+  :9090): metric `demo06_request_duration_milliseconds_bucket{}`
+  tagged by `variant` (std/pmr/mimalloc). The PromQL
+  `histogram_quantile(0.99, sum(rate(...)) by (le, variant))`
+  shows the per-allocator p99 over time; the latency distribution
+  story for §7 prose comes from here.
+- **Loki** (Explore → Loki): structured logs from each request,
+  tagged with service name. Useful when you want to correlate a
+  specific request span to its log line.
+
+### What to look for
+
+The whole point of demo-06's OTel layer is to make the
+**per-allocator tail-latency distribution** visible across many
+requests instead of inferring from single `curl` invocations.
+Specifically:
+
+- p50 across the three variants should track each other closely
+  (small differences from each allocator's fast path)
+- p99 may diverge — this is where allocator strategy bites
+- p99.9+ shows tail behavior (deferred reclamation, arena
+  rebalancing, kernel page management); whichever allocator has
+  the cleanest tail under sustained load is a real result worth
+  presenting
+
+If you don't have Grafana time, the same data is available via
+the Prometheus UI at <http://localhost:9090> with PromQL queries
+directly. Less polished, faster for ad-hoc investigation.
+
+### Build time warning (r85+)
+
+The first build with OTel enabled takes **30-60 minutes** on a
+clean Conan cache. Conan rebuilds opentelemetry-cpp, grpc,
+protobuf, abseil, and openssl from source against our
+gcc-toolset-14 / gnu17 profile. Subsequent rebuilds with the same
+dep set are ~30 seconds (just our app code) — the Conan cache
+keeps the giant transitive deps.
+
+If you only need batch mode or plain serve mode and never want to
+wait for the OTel build, you can delete the opentelemetry-cpp
+lines from `conanfile.py` and the corresponding pieces in
+`CMakeLists.txt`. The init_otel function is gated on the env var
+anyway, so an OTel-less build runs identically in batch and serve
+modes.
 
 ## What the numbers say
 
@@ -208,8 +296,8 @@ Round C (cgroups, huge pages, threads toggles) is planned.
 | r81 | HTTP server mode (`--serve`); cpp-httplib vendored; compose-serve.yml | shipped |
 | r82 | 3 polish fixes: subscription-manager warning, httplib keep-alive + thread pool, cache-sensitivity README note | shipped |
 | r83 | TCP_NODELAY (Nagle's algorithm fix) — unmasked by r82's keep-alive fix; 40ms-per-request was Linux delayed-ACK timeout | partial — typo `httplib::socket_t` vs global `socket_t`, build failed |
-| **r84** | **Fix r83 typo — generic-lambda (`auto sock`) avoids version-specific namespace question** | **shipped** |
-| r85 | OTel traces/metrics/logs export to LGTM; compose-observe.yml | planned |
+| r84 | Fix r83 typo — generic-lambda (`auto sock`) avoids version-specific namespace question | shipped (18,469 req/s verified) |
+| **r85** | **OTel traces/metrics/logs export to LGTM via OTLP/gRPC; conditional on `OTEL_EXPORTER_OTLP_ENDPOINT`; compose-observe.yml overlay** | **shipped** |
 | r86+ | Layer toggles: `HUGE_PAGES`, cgroup `memory.high`, `THREADS` | planned |
 
 ## The two PMR bugs worth promoting to §7 prose

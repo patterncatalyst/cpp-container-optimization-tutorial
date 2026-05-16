@@ -12278,6 +12278,174 @@ than trust the namespace I'd expect.
   go deep). At this point we're getting close enough to baseline
   TCP that further issues are unlikely.
 
+### 2026-05-16 — r85: OTel + LGTM integration — Round B sub-3 (the big one)
+
+User's r84 verification was decisive — **18,469 req/s, p50 200 µs,
+p99 400 µs**, ~205× throughput improvement over r82. The HTTP-defaults
+onion was fully peeled. Time for the big round: OpenTelemetry
+traces + metrics + logs export to LGTM via OTLP/gRPC. Same dep
+chain as demo-04, same gotchas avoided.
+
+**Two distinct concerns wrapped into one ship:**
+
+User asked for two things explicitly:
+
+1. Proceed with r85's OTel integration
+2. Capture the "what could cause tail-latency stalls" content
+   (5 mechanisms — allocator deferred work, CFS scheduler, TCP
+   retransmits, page faults, container runtime) before it
+   disappears into the chat scrollback
+
+Both done in r85. The teaching-points content gets a new home:
+`_plans/teaching-points.md`, a running collection of mini-essays
+and diagnostic patterns surfaced during build-out that should be
+promoted into prose sections during the Section Prose buildout
+phase. First entry is the tail-latency-causes mini-essay with
+suggested §10 home, cross-references to §7/§11/§13 and the
+Latency / C++HP / Cheshire references, and a diagnostic-signature
+table.
+
+**Files changed in r85 (9):**
+
+- `_plans/teaching-points.md` **(NEW)** — forward-looking content
+  capture. First entry: "Tail-latency causes in an otherwise-fast
+  HTTP server." Structure for future entries (suggested-home /
+  trigger / mini-essay / cross-references) so the buildout phase
+  has clean source material.
+
+- `examples/demo-06-memory-and-allocators/conanfile.py` —
+  replaced. Adds opentelemetry-cpp/1.14.2 + the demo-04-proven
+  override chain (grpc/1.54.3, protobuf/3.21.12,
+  abseil/20230125.3). Options: with_otlp_grpc=True,
+  with_otlp_http=False, with_zipkin=False (drops libcurl, G-17),
+  openssl/*:no_fips=True (drops Digest::SHA perl module dep, G-16).
+
+- `examples/demo-06-memory-and-allocators/conan.lock` —
+  unchanged 0-byte placeholder; the Containerfile fallback logic
+  treats empty as "resolve fresh."
+
+- `examples/demo-06-memory-and-allocators/Containerfile` —
+  updated header comment for 3 modes (Batch/Serve/Observe);
+  added 15 perl modules for openssl build (G-15/G-16); added
+  conan.lock fallback logic with rm-before-install (G-31).
+
+- `examples/demo-06-memory-and-allocators/CMakeLists.txt` —
+  added CMAKE_CXX_LINK_EXECUTABLE override for
+  --start-group/--end-group bracketing (G-23, mutual circular
+  deps in OTel + gRPC + protobuf + abseil); added
+  find_package(opentelemetry-cpp); linked the umbrella target
+  `opentelemetry-cpp::opentelemetry-cpp` to all 3 binaries.
+  Coexists with mimalloc's --whole-archive bracket without
+  conflict (different linker mechanism, different scope).
+
+- `examples/demo-06-memory-and-allocators/src/main.cpp` —
+  added OTel SDK includes (~17 lines, the same set demo-04 uses
+  including the explicit processor.h includes for G-29 incomplete-
+  type fix). Added namespace aliases for otel/otlp/sdk_{t,m,l}.
+  Added init_otel() helper (~75 lines, parameterized by
+  service_name; lifted from demo-04 nearly verbatim with comments
+  about API/SDK version compat from G-19/G-20). Added env-var
+  gating: `OTEL_EXPORTER_OTLP_ENDPOINT` presence enables OTel
+  init; without it, the SDK stays uninitialized and the
+  instrumented /run handler's calls hit no-op global providers
+  cheaply. Rewrote /run handler to:
+    * Start a span "run" with iters/variant attributes
+    * Increment demo06.requests counter with variant+route labels
+    * Record demo06.request.duration histogram in ms with variant label
+    * Emit "/run handled" Info-level log
+    * End the span
+
+- `examples/demo-06-memory-and-allocators/compose-observe.yml`
+  **(NEW)** — overlay onto compose-serve.yml. For each of the 3
+  services: sets OTEL_EXPORTER_OTLP_ENDPOINT=http://lgtm:4317,
+  OTEL_SERVICE_NAME=demo06-svc-X, OTEL_RESOURCE_ATTRIBUTES with
+  variant tag; joins them to the `tutorial-obs` external network
+  where LGTM lives; adds depends_on: lgtm. Usage commented in the
+  file header — `podman compose -f compose-serve.yml -f
+  compose-observe.yml -f ../../observability/compose.yml up --build`.
+
+- `examples/demo-06-memory-and-allocators/README.md` — new "Observe
+  mode (r85+)" section between "Why serve-mode numbers differ" and
+  "What the numbers say." Covers: 3-file compose command, what to
+  look for in Tempo / Mimir / Loki, the per-allocator tail
+  distribution as the §7 prose hook, and the 30-60 min first-build
+  warning. Rounds table extended with r85.
+
+- `_plans/reconciliation-plan.md` — this entry.
+
+**Anticipated outcomes:**
+
+- ~80%: works first try. Demo-04 r28-r52 archaeology covered every
+  gotcha we'd hit on the OTel side; copying that conanfile +
+  CMakeLists pattern means we inherit those wins. First-build
+  walltime 30-60 min as expected. Hey-driven traffic produces
+  visible histograms in Grafana within ~10 seconds (5-second
+  PeriodicExportingMetricReader interval + LGTM ingestion).
+
+- ~15%: a recipe revision drift (G-25/G-26 territory) — Conan
+  Center may have yanked one of the pinned versions since demo-04
+  was last built. One follow-up round to update conanfile.py's
+  override versions. Diagnostic: `conan install` failing with
+  "no recipe revision found" or similar.
+
+- ~5%: a deeper issue — mimalloc + OTel-cpp interaction we hadn't
+  seen because demo-04 doesn't use mimalloc. Both link as static
+  archives; both intercept process-init machinery (mimalloc for
+  malloc replacement, OTel for SDK setup); they could in
+  principle conflict. Most likely diagnostic: mimalloc variant
+  crashes at startup or OTel exporter never registers from the
+  mimalloc variant. Fix would be link-order or constructor-order
+  tweaks.
+
+**Verification path:**
+
+```bash
+# Clean rebuild — first build takes 30-60 min
+podman rmi cpp-tut/demo-06:latest 2>/dev/null || true
+
+# Bring up LGTM + 3 instrumented services
+podman compose \
+    -f examples/demo-06-memory-and-allocators/compose-serve.yml \
+    -f examples/demo-06-memory-and-allocators/compose-observe.yml \
+    -f observability/compose.yml \
+    up --build -d
+
+# Wait for LGTM to be ready (~20-30 seconds for cold start)
+sleep 30
+
+# Drive traffic into all 3 variants — 30s each for histogram data
+hey -z 30s http://127.0.0.1:18601/run
+hey -z 30s http://127.0.0.1:18602/run
+hey -z 30s http://127.0.0.1:18603/run
+
+# Open Grafana
+xdg-open http://localhost:3000 &
+
+# After exploring, tear down
+podman compose \
+    -f examples/demo-06-memory-and-allocators/compose-serve.yml \
+    -f examples/demo-06-memory-and-allocators/compose-observe.yml \
+    -f observability/compose.yml \
+    down
+```
+
+Expected in Grafana:
+- **Tempo**: traces from each `demo06-svc-{std,pmr,mimalloc}`
+  service, each /run a span with iters/variant attributes
+- **Mimir/Prometheus** (:9090): metrics `demo06_requests_total{}`
+  and `demo06_request_duration_milliseconds_bucket{}` tagged by
+  `variant`. PromQL `histogram_quantile(0.99,
+    sum(rate(demo06_request_duration_milliseconds_bucket[1m]))
+        by (le, variant))` shows per-allocator p99 over time.
+- **Loki**: structured logs from each request, tagged with
+  service_name.
+
+**The OTel SDK init is gated on OTEL_EXPORTER_OTLP_ENDPOINT**, so
+the binary still works correctly with `compose-serve.yml` alone
+(no LGTM, no telemetry) and with `compose-observe.yml` overlay (LGTM
+ingests). Same binary, two deployment shapes — useful for the
+talk's framing of "observability as opt-in instrumentation layer."
+
 ---
 
 ## Known divergences from the PRD

@@ -1,0 +1,77 @@
+# Demo-06 observe-mode overlay (r85+).
+#
+# An OVERLAY on top of compose-serve.yml — adds OTel environment
+# variables to each of the 3 services and joins them to the
+# `tutorial-obs` network where the LGTM bundle lives. Doesn't
+# repeat the service definitions; relies on compose-serve.yml as
+# the base.
+#
+# Usage:
+#
+#   podman compose \
+#       -f examples/demo-06-memory-and-allocators/compose-serve.yml \
+#       -f examples/demo-06-memory-and-allocators/compose-observe.yml \
+#       -f observability/compose.yml \
+#       up --build
+#
+# The three -f files are merged in order, later files overlaying
+# earlier ones. So the final picture is:
+#
+#   - compose-serve.yml:    defines demo06-svc-{std,pmr,mimalloc},
+#                           port mappings, the tutorial-demo06 net
+#   - compose-observe.yml:  adds OTEL_* env vars, joins services
+#                           to tutorial-obs network, depends_on lgtm
+#   - observability/compose.yml: defines the lgtm service itself
+#
+# Then in Grafana (http://localhost:3000):
+#   Explore → Tempo → query traces by service.name
+#   Explore → Mimir → demo06.requests, demo06.request.duration
+#   Explore → Loki  → {service_name="demo06-svc-std"}, etc.
+#
+# Build cost on first run: 30-60 min (Conan compiles
+# opentelemetry-cpp + grpc + protobuf + abseil + openssl from
+# source). Subsequent rebuilds: ~30 seconds (just our app code).
+# See Containerfile header for the full cost story.
+
+services:
+
+  demo06-svc-std:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://lgtm:4317"
+      OTEL_SERVICE_NAME:          "demo06-svc-std"
+      OTEL_RESOURCE_ATTRIBUTES:   "deployment.environment=tutorial,variant=std"
+    networks:
+      - tutorial-demo06
+      - obs
+    depends_on:
+      - lgtm
+
+  demo06-svc-pmr:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://lgtm:4317"
+      OTEL_SERVICE_NAME:          "demo06-svc-pmr"
+      OTEL_RESOURCE_ATTRIBUTES:   "deployment.environment=tutorial,variant=pmr"
+    networks:
+      - tutorial-demo06
+      - obs
+    depends_on:
+      - lgtm
+
+  demo06-svc-mimalloc:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://lgtm:4317"
+      OTEL_SERVICE_NAME:          "demo06-svc-mimalloc"
+      OTEL_RESOURCE_ATTRIBUTES:   "deployment.environment=tutorial,variant=mimalloc"
+    networks:
+      - tutorial-demo06
+      - obs
+    depends_on:
+      - lgtm
+
+# Declare the obs network here so this file is valid standalone.
+# compose merges this with observability/compose.yml's identical
+# declaration without conflict.
+networks:
+  obs:
+    name: tutorial-obs
+    external: false

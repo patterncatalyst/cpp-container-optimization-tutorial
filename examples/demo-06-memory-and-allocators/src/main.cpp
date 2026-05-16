@@ -53,6 +53,37 @@
 #include <netinet/tcp.h>  // TCP_NODELAY constant
 #include <sys/socket.h>   // setsockopt, SOL_SOCKET, SO_REUSEADDR
 
+// ── OTel includes (r85) ────────────────────────────────────────────────
+//
+// Conditional gating happens at runtime via the
+// OTEL_EXPORTER_OTLP_ENDPOINT env var check in run_serve_mode.
+// The headers themselves are always pulled in because the binary
+// is linked against opentelemetry-cpp unconditionally — the static
+// link means there's no runtime cost beyond a few KB of code.
+// Mode selection: with no env var set, init_otel() is never
+// called and the global providers stay as no-op stubs.
+//
+// Why the explicit processor.h includes (G-29): factory Create()
+// methods return std::unique_ptr<T> where T is forward-declared in
+// the factory header but not fully defined there. The unique_ptr
+// destructor needs the complete type at the call site.
+#include "opentelemetry/exporters/otlp/otlp_grpc_exporter_factory.h"
+#include "opentelemetry/exporters/otlp/otlp_grpc_log_record_exporter_factory.h"
+#include "opentelemetry/exporters/otlp/otlp_grpc_metric_exporter_factory.h"
+#include "opentelemetry/logs/provider.h"
+#include "opentelemetry/metrics/provider.h"
+#include "opentelemetry/sdk/logs/logger_provider_factory.h"
+#include "opentelemetry/sdk/logs/processor.h"
+#include "opentelemetry/sdk/logs/simple_log_record_processor_factory.h"
+#include "opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h"
+#include "opentelemetry/sdk/metrics/meter_provider.h"
+#include "opentelemetry/sdk/metrics/view/view_registry.h"
+#include "opentelemetry/sdk/resource/resource.h"
+#include "opentelemetry/sdk/trace/processor.h"
+#include "opentelemetry/sdk/trace/simple_processor_factory.h"
+#include "opentelemetry/sdk/trace/tracer_provider_factory.h"
+#include "opentelemetry/trace/provider.h"
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -63,10 +94,17 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <memory_resource>
 #include <string>
 #include <thread>
 #include <vector>
+
+namespace otel  = opentelemetry;
+namespace otlp  = otel::exporter::otlp;
+namespace sdk_t = otel::sdk::trace;
+namespace sdk_m = otel::sdk::metrics;
+namespace sdk_l = otel::sdk::logs;
 
 namespace {
 
@@ -263,6 +301,85 @@ int run_batch_mode(const Args& args, const demo06::WorkloadParams& params) {
 std::atomic<bool> g_stop{false};
 void on_signal(int) { g_stop = true; }
 
+// ── OTel SDK init (r85) ────────────────────────────────────────────────
+//
+// Lifted from demo-04's init_otel (~75 lines) with the
+// service_name parameterized so all three variants share one
+// function. Long-term: should be hoisted to a shared
+// `examples/common/otel_setup.hpp` so demo-04 and demo-06 (and
+// any future OTel-using demo) share one source of truth. For r85
+// we inline-copy; the lift-to-shared-header is a follow-up round.
+//
+// The function is a no-op if OTEL_EXPORTER_OTLP_ENDPOINT is unset.
+// run_serve_mode below checks that env var before calling init_otel,
+// so we don't pay any OTel init cost (or get spammed with retry
+// warnings) when running compose-serve.yml without LGTM.
+//
+// Why nostd::shared_ptr and .release() patterns (G-19, G-20):
+// OTel-cpp's API/SDK split means factory return types differ by
+// version. The pattern below works across 1.14.x and 1.16+. See
+// the inline comments and demo-04's main.cpp for the full
+// version-compat archaeology.
+void init_otel(const std::string& service_name) {
+    auto resource = otel::sdk::resource::Resource::Create({
+        {"service.name",         service_name},
+        {"service.version",      "0.1.0"},
+        {"deployment.environment", "tutorial-demo-06"}
+    });
+
+    namespace nostd = otel::nostd;
+
+    // ── Tracing ────────────────────────────────────────────────
+    {
+        otlp::OtlpGrpcExporterOptions opts;
+        auto exporter  = otlp::OtlpGrpcExporterFactory::Create(opts);
+        auto processor = sdk_t::SimpleSpanProcessorFactory::Create(std::move(exporter));
+        auto provider_unique =
+            sdk_t::TracerProviderFactory::Create(std::move(processor), resource);
+        nostd::shared_ptr<otel::trace::TracerProvider> provider(provider_unique.release());
+        otel::trace::Provider::SetTracerProvider(provider);
+    }
+
+    // ── Metrics ────────────────────────────────────────────────
+    // 5-second export interval is the OTel-cpp default for the
+    // periodic exporter. Tutorial-friendly: short enough to see
+    // hey-driven traffic show up in Grafana within ~10 seconds.
+    {
+        otlp::OtlpGrpcMetricExporterOptions opts;
+        auto exporter = otlp::OtlpGrpcMetricExporterFactory::Create(opts);
+
+        sdk_m::PeriodicExportingMetricReaderOptions reader_opts;
+        reader_opts.export_interval_millis = std::chrono::milliseconds(5000);
+        auto reader = sdk_m::PeriodicExportingMetricReaderFactory::Create(
+            std::move(exporter), reader_opts);
+
+        auto views = std::unique_ptr<sdk_m::ViewRegistry>(new sdk_m::ViewRegistry());
+        auto sdk_provider = std::shared_ptr<sdk_m::MeterProvider>(
+            new sdk_m::MeterProvider(std::move(views), resource));
+        sdk_provider->AddMetricReader(
+            std::shared_ptr<sdk_m::MetricReader>(std::move(reader)));
+
+        nostd::shared_ptr<otel::metrics::MeterProvider> api_provider(
+            static_cast<otel::metrics::MeterProvider*>(sdk_provider.get()));
+        // Leak to static so the std::shared_ptr-owned sdk_provider
+        // stays alive for process lifetime. The nostd::shared_ptr
+        // doesn't own; this is the init-once pattern from demo-04.
+        static auto leak [[maybe_unused]] = sdk_provider;
+        otel::metrics::Provider::SetMeterProvider(api_provider);
+    }
+
+    // ── Logs ────────────────────────────────────────────────
+    {
+        otlp::OtlpGrpcLogRecordExporterOptions opts;
+        auto exporter  = otlp::OtlpGrpcLogRecordExporterFactory::Create(opts);
+        auto processor = sdk_l::SimpleLogRecordProcessorFactory::Create(std::move(exporter));
+        auto provider_unique =
+            sdk_l::LoggerProviderFactory::Create(std::move(processor), resource);
+        nostd::shared_ptr<otel::logs::LoggerProvider> provider(provider_unique.release());
+        otel::logs::Provider::SetLoggerProvider(provider);
+    }
+}
+
 int run_serve_mode(const Args& /*args*/, const demo06::WorkloadParams& params) {
     std::cerr << "[demo06] variant=" << kVariantName
               << " mode=serve"
@@ -276,6 +393,28 @@ int run_serve_mode(const Args& /*args*/, const demo06::WorkloadParams& params) {
     // warmup at the cost of slightly slower startup.
     std::cerr << "[demo06] warming up (50 iters)...\n";
     for (int i = 0; i < 50; ++i) (void)run_iteration(params);
+
+    // ── OTel init (r85) ──────────────────────────────────────────
+    //
+    // Gate on OTEL_EXPORTER_OTLP_ENDPOINT being present. Without
+    // it, the OTel SDK is never initialized — the global providers
+    // stay as no-op stubs and the /run handler's telemetry calls
+    // are cheap (each call hits a static no-op TracerProvider /
+    // MeterProvider / LoggerProvider). This is the same gating
+    // pattern that lets compose-serve.yml run without LGTM and
+    // compose-observe.yml run with LGTM, off the same binary.
+    const char* otel_endpoint = std::getenv("OTEL_EXPORTER_OTLP_ENDPOINT");
+    const bool otel_enabled = (otel_endpoint != nullptr && otel_endpoint[0] != '\0');
+    if (otel_enabled) {
+        std::string svc = "demo06-svc-";
+        svc += kVariantSlug;
+        std::cerr << "[demo06] OTel enabled (endpoint=" << otel_endpoint
+                  << ", service=" << svc << ")\n";
+        init_otel(svc);
+    } else {
+        std::cerr << "[demo06] OTel disabled "
+                     "(OTEL_EXPORTER_OTLP_ENDPOINT unset)\n";
+    }
 
     std::signal(SIGTERM, on_signal);
     std::signal(SIGINT,  on_signal);
@@ -362,19 +501,64 @@ int run_serve_mode(const Args& /*args*/, const demo06::WorkloadParams& params) {
         res.set_content(buf, "application/json");
     });
 
-    svr.Get("/run", [&params](const httplib::Request& req, httplib::Response& res) {
-        int iters = 1;
-        if (req.has_param("iters")) {
-            iters = std::atoi(req.get_param_value("iters").c_str());
-        }
-        // Bounded for safety — a misconfigured load generator with
-        // iters=10000000 would tie up the server.
-        if (iters < 1)     iters = 1;
-        if (iters > 10000) iters = 10000;
+    // ── OTel handles for the /run instrumentation ────────────────
+    //
+    // When otel_enabled is false, the global providers return
+    // no-op tracer/meter/logger handles and the per-request calls
+    // below are cheap. When true, they emit spans / counter
+    // increments / histogram records / log records to OTLP/gRPC.
+    auto tracer = otel::trace::Provider::GetTracerProvider()
+                      ->GetTracer("demo06");
+    auto meter  = otel::metrics::Provider::GetMeterProvider()
+                      ->GetMeter("demo06");
+    auto logger = otel::logs::Provider::GetLoggerProvider()
+                      ->GetLogger("demo06");
+    auto request_counter = meter->CreateUInt64Counter(
+        "demo06.requests", "Number of /run requests handled");
+    auto latency_hist = meter->CreateDoubleHistogram(
+        "demo06.request.duration", "Request latency", "ms");
 
-        auto s = run_iterations(iters, params);
-        res.set_content(stats_to_json(s), "application/json");
-    });
+    svr.Get("/run",
+        [&params, tracer, meter, logger, request_counter, latency_hist]
+        (const httplib::Request& req, httplib::Response& res) {
+            auto t0 = std::chrono::steady_clock::now();
+            auto span = tracer->StartSpan("run");
+            otel::trace::Scope scope(span);
+
+            int iters = 1;
+            if (req.has_param("iters")) {
+                iters = std::atoi(req.get_param_value("iters").c_str());
+            }
+            // Bounded for safety — a misconfigured load generator
+            // with iters=10000000 would tie up the server.
+            if (iters < 1)     iters = 1;
+            if (iters > 10000) iters = 10000;
+
+            span->SetAttribute("iters",   iters);
+            span->SetAttribute("variant", kVariantSlug);
+
+            auto s = run_iterations(iters, params);
+            res.set_content(stats_to_json(s), "application/json");
+
+            auto t1 = std::chrono::steady_clock::now();
+            double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+
+            // Metrics — both counter and histogram tagged with the
+            // variant slug so Mimir/Prometheus can split by allocator.
+            request_counter->Add(1, {
+                {"variant", kVariantSlug},
+                {"route",   "/run"}
+            });
+            latency_hist->Record(ms,
+                {{"variant", kVariantSlug}},
+                otel::context::Context{});
+
+            logger->EmitLogRecord(
+                otel::logs::Severity::kInfo,
+                "/run handled");
+
+            span->End();
+        });
 
     std::cerr << "[demo06] listening on :8080 (variant=" << kVariantSlug << ")\n";
 
