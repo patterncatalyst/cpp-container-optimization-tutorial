@@ -285,6 +285,7 @@ loses the container before it can read `stdout/stderr`.
 containers. Capture both state and logs in the failure path before
 tearing down manually:
 
+{% raw %}
     podman inspect "$name" --format='
         status:   {{.State.Status}}
         exit:     {{.State.ExitCode}}
@@ -293,6 +294,7 @@ tearing down manually:
         finished: {{.State.FinishedAt}}'
     podman logs "$name" 2>&1 | tail -30
     podman rm -f "$name"
+{% endraw %}
 
 The startup → exit timestamps in the inspect output usually tell
 you within microseconds whether the binary even reached `main()`.
@@ -394,8 +396,10 @@ kills the script.
 **Fix.** Use `podman images --filter "reference=..."` instead of
 `grep`, which understands both prefix shapes:
 
+{% raw %}
     podman images --filter "reference=cpp-tut/demo-01:*" \
                    --format "{{.Repository}}:{{.Tag}} {{.Size}}"
+{% endraw %}
 
 If you need shell pattern matching specifically, accept both
 prefixes:
@@ -4539,7 +4543,9 @@ design — `--rm` + ~6s lifetime each. Podman Desktop's UI polling
 interval misses them. The fix is to use a different observation
 tool, not a different demo design:
 
+{% raw %}
     watch -n 0.5 'podman ps --format "table {{.Names}}\t{{.Status}}"'
+{% endraw %}
 
 That'll show them flashing by during the benchmark phase. Worth
 mentioning in §3 prose so future readers don't trip over the
@@ -5067,8 +5073,8 @@ issue/fix entries the way hummingbird's gotchas section does.
    now they show the section kind alone in the eyebrow and
    embed `00 Outline` directly in the title with a new
    `.card__num` span styled in red monospace. The two-digit
-   pad is done with `{{ doc.order | prepend: '0' | slice:
-   -2, 2 }}`. Lines up the column edge between cards.
+   pad is done with `{% raw %}{{ doc.order | prepend: '0' | slice:
+   -2, 2 }}{% endraw %}`. Lines up the column edge between cards.
 
 2. **Inline section headers in tutorial prose render in red.**
    `.tutorial__main h2` and `.tutorial__main h3` rules in
@@ -5242,7 +5248,9 @@ User also flagged two things:
 
    Usage in Markdown:
 
+{% raw %}
        {% include section.html n=4 %}
+{% endraw %}
 
 4. **`_docs/02-introduction.md` updated.**
 
@@ -5278,7 +5286,7 @@ User also flagged two things:
 No demo or build-script changes; no other doc changes.
 The Gotchas section, the demo verification matrices, and
 the round log are untouched. Future stub fills can use
-the same `{% include section.html n=N %}` pattern; r26
+the same `{% raw %}{% include section.html n=N %}{% endraw %}` pattern; r26
 defines the convention.
 
 ### 2026-05-09 — r27: insert §3 RAII & Container Resource Discipline; renumber §3-§14 → §4-§15
@@ -5340,7 +5348,7 @@ questions have an answer.
 **Cross-reference fix-up:**
 
 Because the `section.html` include resolves by `order:`
-front-matter, every `{% include section.html n=N %}`
+front-matter, every `{% raw %}{% include section.html n=N %}{% endraw %}`
 call became wrong the moment the orders shifted —
 `n=3` used to mean Container Strategy, now resolves to
 RAII. Two prose files needed bumping:
@@ -5441,7 +5449,7 @@ authoring deferred.
    plus the lab tip cover the conceptual ground; a full
    demo with measured EMFILE-vs-clean comparison would
    be a strong addition. Candidate slot: bundle into
-   {% include section.html n=8 %}'s I/O demo material
+   {% raw %}{% include section.html n=8 %}{% endraw %}'s I/O demo material
    (where `unique_fd` shows up wrapping `io_uring` fds),
    or a standalone demo-NN if time permits.
 
@@ -7298,7 +7306,7 @@ and didn't catch.
 3. **RAII diagram embed.** §3 (RAII & Container Resource
    Discipline) had a hand-authored
    `diagrams/03-raii-discipline.svg` from r27 but the
-   doc page didn't `{% include excalidraw.html %}` it,
+   doc page didn't `{% raw %}{% include excalidraw.html %}{% endraw %}` it,
    so it didn't render. Added the embed right after the
    opening framing paragraph, with a caption that
    matches the SVG's aria-label.
@@ -7311,7 +7319,7 @@ and didn't catch.
    `git mv`'d to match the new section numbers (e.g.,
    `03-image-strategy-multistage.svg` →
    `04-image-strategy-multistage.svg`). But the
-   `{% include excalidraw.html name="..." %}` calls
+   `{% raw %}{% include excalidraw.html name="..." %}{% endraw %}` calls
    inside the doc pages still referenced the OLD
    filenames. So §4 through §14 each rendered the
    include's "diagram hasn't been drawn yet"
@@ -13253,11 +13261,13 @@ Fix: wrote `/tmp/link-index-refs.py`, a regex-based linker that:
    `Doc 02–Doc 03` so both halves get linked (handles both
    U+2013 en-dash and ASCII hyphen)
 2. Then matches plain `Doc NN` where NN is `01`-`11` and
-   replaces with Jekyll's `{% link %}` markdown tag form:
+   replaces with Jekyll's `{% raw %}{% link %}{% endraw %}` markdown tag form:
 
+{% raw %}
 ```markdown
 [Doc 04]({% link _reference/statelessness/04-process-scoped-state.md %})
 ```
+{% endraw %}
 
 Result: 79 plain-text references in 00-index.md became 82
 markdown links (3 range patterns expanded into separate halves).
@@ -13304,6 +13314,106 @@ linking matters most for usability.
 **No code changes, no rebuilds, no compose changes.** Pure site
 content fixes addressing user-reported display bugs from the r90
 landing.
+
+### 2026-05-16 — r92: GitHub Actions Jekyll build broke on r91's plan documentation
+
+**Symptom:** `bundle exec jekyll build` exit code 1 on push of r91.
+Liquid Exception "Could not find document '' in tag 'link'" pointing
+at `_plans/reconciliation-plan.md`. Also a flurry of Liquid warnings
+about `.State.Status`, `.Repository`, `.Tag`, `.Size`, `.Names`,
+`.Status` — Go-template format directives from `podman inspect` and
+`podman ps` shell examples that Liquid was mis-parsing as its own
+expression syntax.
+
+**Root cause:** Liquid runs BEFORE kramdown in Jekyll's render
+pipeline. Backticks in markdown source do NOT escape Liquid syntax —
+Liquid sees the raw text, finds template tags, tries to evaluate
+them. The r91 plan entry documented Jekyll's link-tag syntax by
+showing the bare empty form inside inline-code backticks. Liquid
+saw the link tag with empty argument, tried to find a document at
+path `""`, failed with the fatal error above. Build crashed at that
+file before processing anything else.
+
+The Go-template warnings were pre-existing in the plan from earlier
+rounds — Liquid renders them as empty/null and continues, so they
+hadn't been fatal. Worth fixing at the same time as the fatal.
+
+**Fix pattern:** wrap all Liquid-trapping syntax in plan
+documentation with raw blocks (Jekyll's `raw` / `endraw` tag pair).
+Liquid skips processing the enclosed content and emits it verbatim;
+kramdown then sees the literal text and renders it as code. Two
+wrap forms used:
+
+1. **Inline** (for backtick'd inline code spans): backtick, open-raw
+   tag, the Liquid example, close-raw tag, backtick.
+2. **Block** (for indented or fenced code blocks containing Liquid
+   syntax): open-raw tag on its own line, the code block as-is,
+   close-raw tag on its own line.
+
+**Locations fixed in r92 (12 spots in `_plans/reconciliation-plan.md`):**
+
+The five `.State.X` directives in a podman-inspect indented code
+block; the `.Repository` / `.Tag` / `.Size` directives in a
+podman-images indented block; the `.Names` / `.Status` directives in
+a watch-podman-ps block; the `doc.order` Liquid expression spanning
+two backtick'd source lines; an indented include-tag example; four
+inline include-tag references in backticks; one bare include-tag
+that was actually in prose (would have evaluated against the live
+section helper!); and the two link-tag references in the r91 entry
+itself (the fatal empty form and the markdown-block example).
+
+**Defensive audit performed:**
+
+Ran a Python AST-style scan across all `*.md` files outside
+`_reference/` for unwrapped Liquid patterns. The audit found
+patterns in `_docs/*.md` and `examples/demo-03-io-uring-grpc/
+security/README.md`, all of which are **intentional and correct**:
+the `_docs/` files use Jekyll-rendering include tags deliberately
+(diagram includes, section-link helpers, site-config references)
+and have been building fine for many rounds; `examples/` is in
+`_config.yml`'s exclude list and never processed.
+
+**Sanity checks before commit:**
+
+- Re-ran the unwrapped-Liquid audit on `_plans/reconciliation-plan.md`
+  after the 12 fixes: zero unwrapped Liquid patterns remaining
+- Extracted all 11 Jekyll-link target paths from
+  `_reference/statelessness/00-index.md` and verified each one
+  resolves to an existing file under `_reference/statelessness/`
+  (01-deployment-posture.md through 11-build-tooling.md)
+- Verified the r92 plan entry itself does NOT contain literal
+  Liquid syntax — descriptions are all prose to avoid recursive
+  self-breakage (the issue r91's doc had with documenting its own
+  link-tag syntax in literal form)
+
+**Lesson for the catalog:**
+
+Liquid eats syntax in markdown sources before kramdown even sees
+them. **Backticks are NOT a Liquid escape.** When documenting
+Jekyll/Liquid templating in plan or doc prose, always wrap the
+example in raw blocks. This applies to expression syntax with double
+braces and to tag syntax with brace-percent delimiters. The subtle
+case: expression syntax with mismatched braces or invalid content
+generates a Liquid *warning* (non-fatal); tag syntax with arguments
+that fail to resolve generates a Liquid *fatal* that takes out the
+whole build. The latter is what bit r91.
+
+The OTHER subtle case (which is why r92 itself is prose-only with no
+literal Liquid examples): once you decide to wrap with raw blocks,
+you cannot then DOCUMENT the raw-block syntax inside another raw
+block — Liquid sees the first close-raw tag and ends the outer wrap
+early. So plan entries explaining the fix have to use prose
+descriptions of the example syntax, not literal source.
+
+**Files changed in r92 (1):**
+
+- `_plans/reconciliation-plan.md`: 12 spots wrapped in raw blocks
+  as described above; no content removed; only raw-block wrappers
+  added. Plus this r92 entry itself, deliberately written in
+  prose-only form to avoid the recursive self-breakage problem.
+
+**No code changes, no rebuilds, no compose changes.** Pure site
+content fix to restore the Jekyll build.
 
 ---
 
