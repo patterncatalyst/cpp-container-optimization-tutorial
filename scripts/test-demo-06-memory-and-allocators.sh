@@ -3,9 +3,9 @@
 #
 # Pass criteria:
 #   1. Image builds successfully
-#   2. All 4 binaries exist in the image at /usr/local/bin/
+#   2. All 3 binaries exist in the image at /usr/local/bin/
 #   3. Each binary runs and produces valid JSON output
-#   4. All 4 variants produce the same result_hash (allocator
+#   4. All 3 variants produce the same result_hash (allocator
 #      correctness — alloc choice supposed to be invisible to results)
 #   5. Iteration count matches the requested value
 #
@@ -27,7 +27,7 @@ cd "$DEMO"
 podman build -t "$IMAGE" -f Containerfile .
 
 log_step "Phase 2 — verifying all 4 binaries exist"
-for v in std pmr mimalloc jemalloc; do
+for v in std pmr mimalloc; do
     if ! podman run --rm --entrypoint /bin/sh "$IMAGE" \
             -c "test -x /usr/local/bin/demo06-svc-$v" 2>/dev/null; then
         log_err "demo06-svc-$v missing or not executable in image"
@@ -40,7 +40,7 @@ log_step "Phase 3 — running each variant (small workload for speed)"
 ITERATIONS=50
 
 results=()
-for v in std pmr mimalloc jemalloc; do
+for v in std pmr mimalloc; do
     json=$(podman run --rm --entrypoint "/usr/local/bin/demo06-svc-$v" \
         "$IMAGE" "$ITERATIONS" 5 3 6)
     if ! echo "$json" | jq -e '.variant and .iterations and .result_hash' >/dev/null 2>&1; then
@@ -61,11 +61,11 @@ log_step "Phase 4 — cross-variant hash agreement"
 hashes=$(printf '%s\n' "${results[@]}" | jq -r .result_hash | sort -u)
 hash_count=$(echo "$hashes" | wc -l)
 if (( hash_count == 1 )); then
-    log_ok "All 4 variants produced hash $hashes"
+    log_ok "All 3 variants produced hash $hashes"
 else
     log_err "Variants disagreed on result hash (should be invisible to alloc choice):"
     echo "$hashes" | sed 's/^/    /' >&2
     exit 1
 fi
 
-log_ok "test-demo-06 PASS — 4-way toolchain proof verified"
+log_ok "test-demo-06 PASS — 3-way toolchain proof verified"

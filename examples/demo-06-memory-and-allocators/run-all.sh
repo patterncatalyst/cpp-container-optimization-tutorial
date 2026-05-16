@@ -9,8 +9,7 @@
 #   ALLOC=std        → run demo06-svc-std only
 #   ALLOC=pmr        → run demo06-svc-pmr only
 #   ALLOC=mimalloc   → run demo06-svc-mimalloc only
-#   ALLOC=jemalloc   → run demo06-svc-jemalloc only
-#   ALLOC unset      → run all four in sequence
+#   ALLOC unset      → run all three in sequence
 #
 # Iteration count + workload params come via $ITERATIONS, $DEPTH,
 # $BRANCH, $VALUES env vars (with sensible defaults).
@@ -35,7 +34,7 @@ run_one() {
 if [[ -n "${ALLOC:-}" ]]; then
     run_one "$ALLOC"
 else
-    for v in std pmr mimalloc jemalloc; do
+    for v in std pmr mimalloc; do
         run_one "$v"
     done
 fi

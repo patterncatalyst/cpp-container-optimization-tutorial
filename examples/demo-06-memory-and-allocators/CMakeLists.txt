@@ -12,7 +12,6 @@ add_compile_options(-O3 -DNDEBUG)
 
 # Find Conan-managed deps.
 find_package(mimalloc CONFIG REQUIRED)
-find_package(jemalloc CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 
 # Shared sources — workload is independent of allocator choice.
@@ -57,24 +56,7 @@ target_link_options(demo06-svc-mimalloc PRIVATE
     "-Wl,--no-whole-archive"
 )
 
-# ── Variant 4: jemalloc static-linked ─────────────────────────────────
-# jemalloc's static lib needs the linker to actually USE its symbols
-# (otherwise libc's malloc wins). --whole-archive forces inclusion.
-# The Conan target name is `jemalloc::jemalloc`.
-add_executable(demo06-svc-jemalloc ${SHARED_SOURCES})
-target_compile_definitions(demo06-svc-jemalloc PRIVATE ALLOC_TYPE_JEMALLOC)
-target_include_directories(demo06-svc-jemalloc PRIVATE src)
-target_link_libraries(demo06-svc-jemalloc PRIVATE
-    jemalloc::jemalloc
-    Threads::Threads
-)
-target_link_options(demo06-svc-jemalloc PRIVATE
-    "-Wl,--whole-archive"
-    "$<TARGET_FILE:jemalloc::jemalloc>"
-    "-Wl,--no-whole-archive"
-)
-
 install(TARGETS
-    demo06-svc-std demo06-svc-pmr demo06-svc-mimalloc demo06-svc-jemalloc
+    demo06-svc-std demo06-svc-pmr demo06-svc-mimalloc
     RUNTIME DESTINATION bin
 )

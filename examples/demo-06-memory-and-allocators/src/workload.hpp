@@ -42,12 +42,11 @@ struct WorkloadParams {
     std::uint64_t seed    = 0xC0FFEE'BA5E'F00DULL;
 };
 
-// ── Variant 1 & 3 & 4: std::allocator-based node ─────────────────────
-// Used by demo06-svc-std (default glibc malloc), demo06-svc-mimalloc
-// (mimalloc replaces global new/delete), and demo06-svc-jemalloc
-// (jemalloc replaces global new/delete). The source code is
-// identical across these three variants; the allocator difference
-// is purely linkage-driven.
+// ── Variants 1 & 3: std::allocator-based node ────────────────────────
+// Used by demo06-svc-std (default glibc malloc) and demo06-svc-mimalloc
+// (mimalloc replaces global new/delete via static-link). The source
+// code is identical across these two variants; the allocator
+// difference is purely linkage-driven.
 
 struct Node {
     std::string         label;

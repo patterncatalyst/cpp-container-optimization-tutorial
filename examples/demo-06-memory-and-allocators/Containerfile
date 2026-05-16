@@ -1,31 +1,32 @@
 # Demo-06 — memory management & allocator comparison.
 #
-# Builds FOUR variants of the same C++ binary, each linked with a
-# different allocator. Compared side-by-side on the synthetic
-# JSON-shaped workload via demo.sh:
+# Builds THREE variants of the same C++ binary, each compiled with
+# different allocator behavior. Compared side-by-side on the
+# synthetic JSON-shaped workload via demo.sh:
 #
 #   demo06-svc-std        std::allocator (default glibc malloc)
 #   demo06-svc-pmr        std::pmr (monotonic_buffer + sync_pool_resource)
 #   demo06-svc-mimalloc   mimalloc static-linked, replaces global new/delete
-#   demo06-svc-jemalloc   jemalloc static-linked, replaces global new/delete
 #
-# r71 scope: toolchain proof. Each binary runs the workload N times
-# in a row, prints per-iteration timings to stdout. No HTTP, no OTel,
-# no cgroup/huge_pages layers — those land in r72-r74.
+# r75 scope: toolchain proof, 3-way fallback after the jemalloc
+# attempt didn't land (see r71-r74 round entries in the plan for
+# the full story; short version: GCC 14 conformance strictness vs
+# jemalloc's pre-2024 C source code, mitigation flags wouldn't
+# propagate through Conan's autotools toolchain in any mechanism
+# we tried).
 #
-# Build cost: ~10-15 min on a clean cache because mimalloc and
-# jemalloc both rebuild from source under our gcc-toolset-14 profile.
-# Cached: ~30 seconds (just our app code).
+# §7 prose includes a paragraph describing jemalloc as an
+# alternative to mimalloc, citing Latency Ch. 3 and Ghosh Ch. 5,
+# without requiring it to build here.
+#
+# Build cost: ~3-5 min on a clean cache (mimalloc CMake build is
+# fast). Cached: ~30 seconds (just our app code).
 
 FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
 
-# Standard dnf set from demo-03/04 with one addition: autoconf +
-# automake + libtool because jemalloc is autotools-based and pre-
-# checks the toolchain before doing the Conan-orchestrated configure.
 RUN dnf install -y --quiet --setopt=install_weak_deps=False \
         gcc-toolset-14 \
         cmake ninja-build git python3-pip \
-        autoconf automake libtool \
         which \
     && dnf clean all \
     && rm -rf /var/cache/dnf/*
@@ -35,7 +36,9 @@ ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
 
 RUN pip install --quiet "conan~=2.0"
 
-# Profile-detection (G-27 two-layer pattern).
+# Profile-detection (G-27 two-layer pattern from demo-04: detect
+# gnu17 for dependency C++ builds, override our app to C++23 at
+# the CMake-target level).
 RUN conan profile detect --force && \
     sed -i 's|^compiler.cppstd=.*|compiler.cppstd=gnu17|' \
         /root/.conan2/profiles/default
@@ -44,75 +47,14 @@ WORKDIR /src
 
 COPY conanfile.py ./
 
-# ── Build compatibility layers for jemalloc/5.3.1 ─────────────────────
-#
-# Building jemalloc/5.3.1 (released 2022) in our environment hits two
-# independent compatibility conflicts. Both are documented with their
-# fix-vs-workaround label so future maintainers understand the
-# trade-offs.
-#
-# CONFLICT 1 — GCC 14 conformance strictness (G-34, fix at right layer):
-#   GCC 14 turned several long-standing warnings into errors-by-default:
-#   implicit function declarations, implicit-int returns, old-style K&R
-#   function definitions, incompatible pointer types, int↔pointer
-#   conversions. jemalloc's pre-2024 C sources use several of these
-#   older idioms; under GCC 14 the build halts on the first one with
-#   errors like:
-#       malloc_io.h: error: old-style parameter declarations ...
-#       ctl.c: error: expected declaration specifiers ... before 'tsd_t'
-#
-#   Fix at the right layer: tell GCC 14 to behave like GCC 13 regarding
-#   these specific idioms, FOR THE JEMALLOC BUILD ONLY. This is the
-#   documented GCC 14 migration pattern at:
-#       https://gcc.gnu.org/gcc-14/porting_to.html
-#   and matches Fedora/Debian/openSUSE practice for pre-2024 C packages.
-#
-#   Mechanism note (r73 → r74): the first attempt used `ENV CFLAGS=...`
-#   in the Containerfile but this did NOT propagate through to the
-#   actual compile step. Conan 2's AutotoolsToolchain generates a
-#   conanbuild.sh that sets CFLAGS from profile + conf, shadowing the
-#   env-level CFLAGS we set. The correct Conan-native mechanism is
-#   `-c tools.build:cflags=[...]` on the conan install command, which
-#   the toolchain reads and adds to its generated CFLAGS. Same flags,
-#   right mechanism.
-#
-#   Our C++23 app code is unaffected — these are C-language flags
-#   only, and our app builds via CMake (not autotools). Mimalloc is
-#   also CMake-based and doesn't pick up these flags either; only
-#   jemalloc's autotools build is affected.
-#
-# CONFLICT 2 — Conan recipe chmod gap (G-33, workaround at build-step layer):
-#   Separately, jemalloc's Conan recipe extracts source from a tarball
-#   without preserving the executable bit on `configure`. The autotools
-#   helper then fails with errno 126 (Permission denied). This bug is
-#   in the recipe itself, not in jemalloc; the retry-with-chmod below
-#   is a workaround at the build-step layer rather than a fix at the
-#   recipe layer. A real fix would require forking the Conan recipe,
-#   which exceeds tutorial scope. Documented as G-33.
-#
-# UX note: the first build attempt will ALWAYS print a scary-looking
-# "configure: Permission denied" error, then the retry catches it and
-# continues. This is the workaround pattern in action — we can't
-# prevent the first failure without forking the recipe. Subsequent
-# builds reuse Conan's cache and don't hit either conflict.
-
-# The Conan conf to inject GCC 14 compatibility flags via Conan's
-# AutotoolsToolchain. Defined once and referenced by both the
-# initial attempt and the retry path below.
-ENV CONAN_COMPAT_CFLAGS='tools.build:cflags=["-Wno-error=implicit-function-declaration","-Wno-error=implicit-int","-Wno-error=incompatible-pointer-types","-Wno-error=int-conversion","-Wno-error=old-style-definition"]'
-
+# Single conan install — no compatibility layers needed for the
+# 3-way build. Mimalloc is CMake-based, so neither the chmod
+# workaround (G-33) nor the GCC 14 flag injection (G-34) are
+# required here. Both gotcha-catalog entries remain valuable
+# documentation for any future autotools-based dep we might add.
 RUN conan install . --output-folder=build/conan \
                     -s build_type=Release \
-                    --build=missing \
-                    -c "$CONAN_COMPAT_CFLAGS" \
-    || ( echo "==> First conan install failed; trying chmod-and-retry for autotools-recipe scripts" \
-         && find /root/.conan2/p -type f \
-             \( -name configure -o -name 'config.guess' -o -name 'config.sub' \) \
-             -exec chmod +x {} + \
-         && conan install . --output-folder=build/conan \
-                            -s build_type=Release \
-                            --build=missing \
-                            -c "$CONAN_COMPAT_CFLAGS" )
+                    --build=missing
 
 COPY src/         ./src/
 COPY CMakeLists.txt ./
@@ -124,12 +66,11 @@ RUN cmake -S . -B build -G Ninja \
     && strip --strip-all \
         build/demo06-svc-std \
         build/demo06-svc-pmr \
-        build/demo06-svc-mimalloc \
-        build/demo06-svc-jemalloc
+        build/demo06-svc-mimalloc
 
 # ════════════════════════════════════════════════════════════════════════
-# Runtime: ubi-minimal with libstdc++ (allocators are static-linked).
-# All four binaries land in /usr/local/bin so the demo's compose can
+# Runtime: ubi-minimal with libstdc++ (mimalloc is static-linked).
+# All three binaries land in /usr/local/bin so the demo's compose can
 # select which to exec.
 # ════════════════════════════════════════════════════════════════════════
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
@@ -142,14 +83,13 @@ RUN microdnf install -y --setopt=install_weak_deps=0 \
 COPY --from=builder /src/build/demo06-svc-std      /usr/local/bin/demo06-svc-std
 COPY --from=builder /src/build/demo06-svc-pmr      /usr/local/bin/demo06-svc-pmr
 COPY --from=builder /src/build/demo06-svc-mimalloc /usr/local/bin/demo06-svc-mimalloc
-COPY --from=builder /src/build/demo06-svc-jemalloc /usr/local/bin/demo06-svc-jemalloc
 
-# r71: no exposed ports; the binaries are pure CPU/memory workloads
-# launched via podman exec and printing to stdout. r72 will add the
+# r75: no exposed ports; the binaries are pure CPU/memory workloads
+# launched via podman exec and printing to stdout. r76+ will add the
 # HTTP server entrypoint and expose port 8080.
 
 # Default entrypoint is a thin wrapper that picks the allocator
-# variant from $ALLOC, or runs all four sequentially if unset.
+# variant from $ALLOC, or runs all three sequentially if unset.
 COPY run-all.sh /usr/local/bin/run-all.sh
 RUN chmod +x /usr/local/bin/run-all.sh
 

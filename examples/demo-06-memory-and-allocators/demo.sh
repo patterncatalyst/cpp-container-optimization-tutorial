@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Demo-06 — memory management & allocator comparison.
 #
-# r71 v1: build the 4-variant image, run all four binaries in
+# r75 v1 3-way: build the 3-variant image, run all three binaries in
 # sequence inside one container, parse the JSON output, print a
 # comparison table. No HTTP, no OTel, no cgroup pressure yet —
 # those land in r72-r74.
@@ -45,10 +45,10 @@ fi
 echo "==> Building $IMAGE (first run: ~10-15 min on a clean cache)"
 podman build -t "$IMAGE" -f Containerfile .
 
-# ── Run all four variants ─────────────────────────────────────────────
+# ── Run all three variants ────────────────────────────────────────────
 
 echo
-echo "==> Running 4 variants × $ITERATIONS iterations"
+echo "==> Running 3 variants × $ITERATIONS iterations"
 echo "    depth=$DEPTH branch=$BRANCH values=$VALUES"
 echo
 

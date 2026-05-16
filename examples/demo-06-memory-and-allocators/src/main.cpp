@@ -1,11 +1,11 @@
-// Demo-06 — main entry point (r71 v1: no HTTP, no OTel, no layers).
+// Demo-06 — main entry point (r75 v1 3-way: no HTTP, no OTel, no layers).
 //
-// One main.cpp, four binaries. The ALLOC_TYPE_* compile-time
-// define selects which variant this binary is. For mimalloc and
-// jemalloc, the allocator replacement happens via the linker
-// (CMakeLists.txt's --whole-archive trick); the source code is
-// identical to ALLOC_TYPE_STD because the global new/delete
-// substitution is invisible at the language level.
+// One main.cpp, three binaries. The ALLOC_TYPE_* compile-time
+// define selects which variant this binary is. For mimalloc, the
+// allocator replacement happens via the linker (CMakeLists.txt's
+// --whole-archive trick); the source code is identical to
+// ALLOC_TYPE_STD because the global new/delete substitution is
+// invisible at the language level.
 //
 // For PMR, the source code is genuinely different: it threads a
 // std::pmr::polymorphic_allocator through the workload via the
@@ -13,8 +13,13 @@
 // backed by a stack buffer, falling back to a synchronized
 // pool_resource backed by the global allocator.
 //
+// (r71-r74 attempted to add jemalloc as a fourth variant; see
+// those plan entries for the build-toolchain incompatibility
+// story. §7 prose describes jemalloc as an alternative to mimalloc
+// without requiring the binary to build.)
+//
 // Output: a single line of JSON to stdout per invocation. demo.sh
-// captures these from each of the four binaries and prints a
+// captures these from each of the three binaries and prints a
 // comparison table.
 
 #include "workload.hpp"
@@ -40,8 +45,6 @@ namespace {
     constexpr const char* kVariantName = "std::pmr (monotonic+sync_pool)";
 #elif defined(ALLOC_TYPE_MIMALLOC)
     constexpr const char* kVariantName = "mimalloc";
-#elif defined(ALLOC_TYPE_JEMALLOC)
-    constexpr const char* kVariantName = "jemalloc";
 #else
     #error "demo-06 main.cpp must be compiled with one of ALLOC_TYPE_*"
 #endif
@@ -96,7 +99,7 @@ std::uint64_t run_iteration(const demo06::WorkloadParams& p) {
     // memory — that's the arena's job).
 }
 
-#else  // ALLOC_TYPE_STD / MIMALLOC / JEMALLOC — all use std types
+#else  // ALLOC_TYPE_STD / MIMALLOC — both use std types
 
 std::uint64_t run_iteration(const demo06::WorkloadParams& p) {
     auto root = demo06::build_tree(p);

@@ -10824,6 +10824,145 @@ Or with formal pass/fail:
 
     ./scripts/test-demo-06-memory-and-allocators.sh
 
+### 2026-05-16 — r75: demo-06 drop jemalloc → 3-way (std + PMR + mimalloc); toolchain proof regains the critical path
+
+User ran r74 verification. Same `tsd_t` / `old-style parameter
+declarations` cascade as r73, byte-identical for the third time.
+`-c tools.build:cflags` conf didn't propagate through either —
+likely because the jemalloc recipe explicitly resets CFLAGS in
+its build() method, overriding both env and toolchain-conf
+mechanisms.
+
+Pattern recognition: we'd spent r71-r74 (three sub-rounds) fighting
+a single dependency without converging. Each round my confidence
+was high that the next mechanism would work; each round the
+errors came back identical. That's a strong signal that we'd
+exceeded the cost-benefit threshold for this dep.
+
+Presented user with four options:
+- F1: drop jemalloc, ship 3-way (recommendation)
+- F2: try tools.build:extra_cflags
+- F3: try jemalloc/5.2.1 (older version)
+- F4: fork the Conan recipe (heaviest, ~5-10 hours)
+
+User chose F1. Reasoning:
+- The pedagogical story (std::allocator → std::pmr → mimalloc) is
+  complete with 3 variants.
+- Mimalloc already demonstrates the "linked-in global allocator
+  replacement" concept. jemalloc would add breadth but no new
+  concept.
+- The Latency book's "general-purpose allocator tax" thesis is
+  fully demonstrable with three variants.
+- §7 prose can describe jemalloc's design (per-arena vs
+  segment-based) without requiring the binary to build, citing
+  Latency Ch. 3 and Ghosh Ch. 5.
+
+**Files changed in r75 (8):**
+
+1. `conanfile.py` — rewrote to 3-way, dropped jemalloc/5.3.1
+   requirement and its options block. Header docstring documents
+   the 4→3 decision with full reasoning and the gotcha-catalog
+   cross-refs to G-33 and G-34.
+
+2. `Containerfile` — simplified dramatically. Dropped:
+   - autoconf/automake/libtool dnf packages (not needed for
+     CMake-based mimalloc)
+   - `CONAN_COMPAT_CFLAGS` env var (no autotools dep means no
+     GCC 14 conformance issue)
+   - chmod-retry pattern (no autotools dep means no chmod-on-
+     extract issue)
+   - the ~70 lines of compatibility-layer commentary
+   The Containerfile is now 89 lines (was 137), and the
+   `RUN conan install` is a single clean invocation.
+   Build cost: ~3-5 min on clean cache (was 10-15 min when
+   jemalloc was being built); cached: still ~30 sec.
+
+3. `CMakeLists.txt` — removed `find_package(jemalloc CONFIG REQUIRED)`
+   and the entire `demo06-svc-jemalloc` target with its
+   `--whole-archive` linker block (~17 lines deleted). The
+   `install(TARGETS ...)` line now lists 3 binaries.
+
+4. `src/main.cpp` — removed `ALLOC_TYPE_JEMALLOC` branch in
+   compile-time variant name dispatch. Updated header comment
+   to reference 3 variants and explain the jemalloc removal
+   with cross-ref to r71-r74. The `#else` comment for the std-
+   types path now says `STD / MIMALLOC` instead of
+   `STD / MIMALLOC / JEMALLOC`.
+
+5. `src/workload.hpp` — comment block for std-types Node now
+   says "Variants 1 & 3" instead of "Variants 1 & 3 & 4", and
+   reflects the 2-variant linkage-driven distinction.
+
+6. `run-all.sh` — selection comment dropped `ALLOC=jemalloc`,
+   default loop dropped jemalloc from `for v in ...`.
+
+7. `demo.sh` — header comment, section header, and progress
+   message updated from "4 variants" to "3 variants".
+
+8. `scripts/test-demo-06-memory-and-allocators.sh` — phase 2,
+   phase 3, phase 4, and final PASS line all updated to
+   3-way (loop variables, assertion text, "All 3 binaries",
+   "All 3 variants").
+
+Plus `examples/demo-06-memory-and-allocators/README.md` — opening
+table dropped jemalloc row, added an explanatory note about the
+removal with cross-ref to r71-r74 + G-33/G-34, expected output
+sample no longer includes jemalloc line, rounds table now
+accurately reflects r71-r75 history including the failed jemalloc
+attempts as "superseded."
+
+**Honest accounting on the iteration cost:**
+
+| Round | Issue | Approach | Status |
+|---|---|---|---|
+| r71 | Initial 4-way attempt | First build | failed at jemalloc configure |
+| r72 | jemalloc chmod gap (G-33) | retry-with-chmod workaround | got past configure |
+| r73 | jemalloc GCC 14 strictness (G-34) | ENV CFLAGS (wrong mechanism) | failed at make |
+| r74 | Same as r73 | tools.build:cflags conf (right Conan mechanism for this case but recipe overrides it) | failed at make again |
+| r75 | (recognize sunk cost) | drop jemalloc, ship 3-way | shipped |
+
+Net round cost: 4 sub-rounds spent on jemalloc before recognizing
+we were on the wrong path. In retrospect I should have flagged the
+"drop jemalloc" option earlier — by r73's failure that was clearly
+the practical answer, but I didn't surface it until r74. Going
+forward, when iterating on a single dep with no convergence after
+2-3 rounds, the "is this dep necessary?" question should be
+explicit in my response rather than implicit.
+
+The gotcha-catalog entries G-33 and G-34 remain valuable
+documentation for anyone hitting similar issues with autotools-
+based Conan recipes or pre-2024 C code under GCC 14. The
+reconciliation-plan history records the iteration honestly.
+
+**Anticipated outcomes for the r75 rebuild:**
+
+- **Very likely (~95%):** mimalloc compiles cleanly under our
+  CMake-based recipe + gcc-toolset-14, the three binaries link,
+  cross-variant hash check passes. demo-06 toolchain proof
+  finally completes. r76 starts (HTTP + OTel).
+- **Possible (~3%):** mimalloc's `--whole-archive` interaction
+  with our linker setup has an edge case. Symptom: link error.
+  Fix: re-examine CMakeLists.txt's link options.
+- **Possible (~2%):** cross-variant hash divergence between std
+  and PMR paths (no jemalloc now to also disagree). Same fix:
+  examine build_node_pmr.
+
+**Plan position after r75:**
+
+Round A (demo-06) is nearly done. r76 = HTTP + OTel (small;
+copies the demo-04 pattern). r77 = layer toggles (MAP_HUGETLB +
+cgroup memory.high + thread count). r78+ = verification. Then
+Round B starts (demo-05 isolation).
+
+User runs (rebuild required because Containerfile changed):
+
+    podman rmi cpp-tut/demo-06:latest 2>/dev/null || true
+    ./examples/demo-06-memory-and-allocators/demo.sh
+
+Or with formal pass/fail:
+
+    ./scripts/test-demo-06-memory-and-allocators.sh
+
 ---
 
 ## Known divergences from the PRD
