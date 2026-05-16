@@ -172,7 +172,7 @@ it doesn't move.
 
 ## Demo
 
-[`examples/demo-06-quality-pipeline/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-06-quality-pipeline)
+[`examples/demo-07-quality-pipeline/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-07-quality-pipeline)
 includes a hermetic build path: builds a library twice in
 identical builder containers and asserts the artefacts are
 byte-identical, then deliberately introduces an ABI break and

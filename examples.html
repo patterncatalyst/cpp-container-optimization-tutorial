@@ -100,9 +100,25 @@ permalink: /examples/
             </a>
 
             <a class="card"
-               href="https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-06-quality-pipeline"
+               href="https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-06-memory-and-allocators"
                rel="noopener">
-                <div class="card__eyebrow">Demo 06 · <strong>§11, §12</strong></div>
+                <div class="card__eyebrow">Demo 06 · <strong>§7</strong></div>
+                <h3 class="card__title">Memory &amp; allocators</h3>
+                <p class="card__desc">
+                    Side-by-side latency comparison of <code>std::allocator</code>,
+                    <code>std::pmr::synchronized_pool_resource</code>, and
+                    <code>mimalloc</code> on an allocator-stressful workload.
+                    Layered with <code>MAP_HUGETLB</code> and cgroup
+                    <code>memory.high</code> pressure. OTel-instrumented;
+                    histograms reach the LGTM stack.
+                </p>
+                <div class="card__meta"><span>Source ↗</span></div>
+            </a>
+
+            <a class="card"
+               href="https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-07-quality-pipeline"
+               rel="noopener">
+                <div class="card__eyebrow">Demo 07 · <strong>§11, §12</strong></div>
                 <h3 class="card__title">Quality &amp; ABI pipeline</h3>
                 <p class="card__desc">
                     cppcheck and clang-tidy as build stages, gtest+gmock

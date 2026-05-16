@@ -144,7 +144,7 @@ incident.
 
 ## Demo
 
-[`examples/demo-06-quality-pipeline/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-06-quality-pipeline)
+[`examples/demo-07-quality-pipeline/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-07-quality-pipeline)
 runs cppcheck and clang-tidy as part of the build, runs the
 googletest suite, builds an ASan-instrumented variant for the
 sanitizer pass, and (optionally) starts the service and attaches a

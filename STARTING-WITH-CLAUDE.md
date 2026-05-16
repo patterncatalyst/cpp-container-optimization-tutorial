@@ -59,9 +59,9 @@ In this exact order:
   assistant has read all of them. Each one used in this tutorial
   must be reproducible from the demos and traceable to the
   observed effect.
-- **Reference-book content**. The three reference books (Andrist
-  & Sehr, Iglberger, Enberg) are pointed-at, not summarized. If the
-  assistant produces a "summary" of a chapter, treat it as a
+- **Reference-book content**. The four reference books (Andrist
+  & Sehr, Iglberger, Enberg, Ghosh) are pointed-at, not summarized.
+  If the assistant produces a "summary" of a chapter, treat it as a
   warning sign and rewrite as a pointer.
 
 ---

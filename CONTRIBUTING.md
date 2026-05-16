@@ -16,7 +16,7 @@ doesn't enforce it (yet) but reviewers will ask you to amend if not.
 
 - `<type>` from the table below.
 - `<scope>` is **optional** but expected on `demo:`, `docs:`, `obs:`,
-  and any change scoped to one section. Use `demo-01` ... `demo-06`
+  and any change scoped to one section. Use `demo-01` ... `demo-07`
   for demo work, `§3` ... `§14` for section work, or omit when the
   change spans many areas.
 - `<short summary>` is one line, **imperative mood**, ≤ 72 chars,

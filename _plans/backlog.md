@@ -1,0 +1,173 @@
+# Tutorial Backlog
+
+Things we want to add eventually but aren't in the current option-1
+plan. The reconciliation plan is round-by-round history; this file
+is "let's not forget about this." When a backlog item gets pulled
+into a real round, move it into reconciliation-plan.md and remove
+it here.
+
+---
+
+## Optional segment: C++ and statelessness for services
+
+**Status:** Logged 2026-05-11 (mid-r71) per user request. Not in the
+option-1 scope. Candidate for a §3.5 sidebar, a §11 expansion, or
+its own §-numbered optional section.
+
+**Why this belongs in the tutorial:** statelessness is one of the
+load-bearing assumptions of modern container orchestration (Kubernetes
+scaling, blue-green deploys, autoscaling-by-load), but it doesn't get
+treated explicitly in any of the four source books because they're
+focused on the C++ side, not the operational side. The C++ angle —
+how the language's RAII discipline, exception-safety guarantees, and
+the recent additions in C++17/20/23 interact with the
+"forget-on-restart" model — is worth a deliberate segment.
+
+The topic cuts across §3 (RAII), §4 (containers), §7 (memory), §9
+(networking), and §11 (isolation) without sitting cleanly in any one
+of them. That argues for a dedicated optional segment (a §3.5
+sidebar, or an §X bonus chapter the speaker can include or skip
+based on audience interest).
+
+**Subtopics with enough material for prose:**
+
+1. **Stateless vs stateful as a deployment posture, not a code
+   property.** The C++ language doesn't impose either. The same
+   binary can be "stateless" (replicas behind a load balancer,
+   restart-tolerant) or "stateful" (singleton with in-memory cache,
+   restart-painful). The decision lives in operational assumptions,
+   not in the language. C++ devs coming from monolith backgrounds
+   often miss this — they expect the binary to be one or the other.
+
+2. **RAII as the foundation for safe stateful work inside a
+   "stateless" service.** Even a stateless service has state during
+   request processing (per-request buffers, parsed objects,
+   connection-pool checkouts). RAII discipline draws the boundary
+   between request-scoped state (dies with the request) and
+   process-scoped state (dies with the process, which the
+   orchestrator can recreate freely). The discipline is what makes
+   "stateless service" practical to build.
+
+3. **PMR's monotonic_buffer_resource as the architectural embodiment
+   of request-scoped stateless allocation.** Direct callback to
+   demo-06: each request brings its own arena, all allocations
+   release together, no persistent state crosses request boundaries.
+   The "stateless" property is enforced *by construction* in the
+   memory model. This is the right pedagogical moment to introduce
+   the PMR pattern as more than a performance optimization.
+
+4. **Process-scoped state that's still stateless from the
+   orchestrator's view.** Connection pools, DNS caches, the gRPC
+   channel manager, the OTel provider singletons. These live for the
+   process lifetime, are absolutely shared mutable state from a C++
+   perspective, but are *not* state the orchestrator has to preserve
+   across restarts — the new process recreates them in O(seconds).
+   The distinction between "state that needs replicated/persisted"
+   and "state that's just expensive to rebuild" matters.
+
+5. **The 12-factor app principles as adapted to C++.** Most of the
+   12-factor advice is language-neutral (config via env vars,
+   stateless processes, treat-logs-as-streams, etc.) but a few items
+   collide with C++ realities:
+   - **III. Config via env.** C++'s `std::getenv` is fine, but C++
+     idioms favor compile-time config (constexpr / templates). The
+     12-factor philosophy is fundamentally runtime-config-first;
+     reconciling that with C++'s compile-time optimization story
+     takes some care.
+   - **VI. Stateless processes.** The OTel provider singleton, the
+     gRPC channel cache, mimalloc's internal arena state — all
+     "process-level state" the C++ runtime maintains. Compatible
+     with 12-factor because the orchestrator doesn't need to know
+     about them, but the C++ dev needs to NOT rely on them
+     surviving restarts.
+   - **IX. Disposability** (fast startup + graceful shutdown).
+     C++ excels at fast startup if you avoid global-constructor
+     pile-ups (a known pitfall — heavy initialization at process
+     start delays the first request and complicates orchestration's
+     health checks). Graceful shutdown via SIGTERM is what demo-03's
+     main() demonstrates.
+
+6. **State externalization patterns in C++.** When the service
+   genuinely has state that must survive restart, the standard
+   pattern is to externalize: Redis, PostgreSQL, S3, Kafka.
+   The C++ angle is the connection-pool RAII pattern, the
+   "fail-fast vs retry-with-backoff" decision on connection loss,
+   and the exception-safety implications of state-mutating
+   operations across a network boundary.
+
+7. **The ephemeral filesystem trap.** Container root filesystems
+   are ephemeral by default; writes to `/var`, `/tmp`, or `/log`
+   disappear on restart. C++ devs coming from monolithic
+   deployments where "just write a log file" was correct need to
+   internalize that the same code in a container produces data
+   that's invisible to the operator. Demo-03's production compose
+   (`compose.production.yml`) uses `read_only: true` precisely to
+   make this trap fail loudly instead of silently.
+
+8. **Health checks as the public-API of statelessness.** A truly
+   stateless service can answer "are you alive?" without any
+   external dependencies — same answer every time. A
+   pretending-stateless service might answer "yes" based on
+   internal cache state that's not what the orchestrator expects.
+   The C++ angle: where do you put the health check endpoint?
+   Demo-03 puts it inside the same binary on a separate port;
+   demo-04 puts it on the same HTTP server as the workload.
+   Both work; the trade-off (separate-port = isolation,
+   same-port = simplicity) is worth discussing.
+
+**Source material that already covers adjacent ground:**
+
+- Andrist & Sehr, *C++ High Performance* 2e, Ch. 12 (concurrency)
+  — touches on process-shared state without using the word
+  "stateless"
+- Iglberger, *C++ Software Design*, Ch. 6 (the Strategy pattern
+  discussion intersects "swappable backend" which is the C++
+  realization of state externalization)
+- Enberg, *Latency*, throughout — implicitly assumes statelessness
+  for replicas; doesn't address it explicitly
+- Ghosh, *Building Low Latency Applications with C++*, ch. 2 (the
+  market-data publisher and order gateway components are concrete
+  examples of stateless-by-design message processors) and ch. 10
+  (the client-side gateway is stateful by necessity — the contrast
+  is instructive)
+
+**No external sources are 12-factor-for-C++ specifically.** Most
+12-factor writing assumes Go/Python/Ruby. There's an opening for
+the tutorial to be the first careful treatment of how the 12-factor
+principles interact with C++'s compile-time vs runtime configuration
+duality, RAII discipline, and the specific singletons C++ libraries
+tend to create (OTel providers, gRPC channel caches, allocator
+state).
+
+**Pedagogical structure when we eventually write this:**
+
+A 30-45 minute optional segment in the deck, or a 1500-2000 word
+prose section. Either way, the structure should be:
+
+1. Open with the operational definition of stateless (forget-on-
+   restart, scale-by-replica, no-cross-request-memory). Make the
+   point that this is an operational property, not a language one.
+2. Show what RAII discipline contributes to making "stateless"
+   buildable. Cite Iglberger Ch. 3 on scoped resource management.
+3. Walk through the 12-factor principles with C++ asterisks where
+   they apply.
+4. Demo connection: point at PMR's monotonic_buffer_resource (demo-
+   06) as the in-language architectural support for request-scoped
+   statelessness.
+5. Production gotchas: ephemeral filesystem, global-constructor
+   pile-up, hidden state in singletons.
+6. Health-check patterns and what "alive" actually means.
+
+**Cross-reference status:** none of the current §3, §4, §7, §9, §11
+prose mentions statelessness explicitly. When this gets pulled in,
+cross-references should be added bidirectionally (each affected §
+points to the optional segment; the segment points back at each §'s
+relevant subsection).
+
+**Effort estimate:** 2-3 rounds. Less than a demo build-out. Could
+fit between Round D and Round E of the option-1 plan if the user
+wants it included, or be a standalone post-PPTX round.
+
+---
+
+## (Other backlog items go here as they come up.)

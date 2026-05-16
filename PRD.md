@@ -227,7 +227,8 @@ under `scripts/test-<demo>.sh` for CI verification.
 | 3 | io-uring-grpc       | io_uring TCP echo + async gRPC service with `SO_REUSEPORT`; `hey` for load — §7, §8                                            | `podman compose up` (2 services)        |
 | 4 | observability       | The full stack: Grafana + Prometheus + Tempo + Loki + Mimir; OTel-instrumented C++ service; `perf record` + `bpftrace` probes  | `podman compose up` (full stack)        |
 | 5 | isolation           | Noisy neighbor: two C++ services contending for CPU + memory + I/O; `--cpuset-cpus`, `cpu.weight`, NUMA pinning, veth latency  | `podman compose up` (2 tenants + load)  |
-| 6 | quality-pipeline    | cppcheck + clang-tidy + googletest/gmock + abidiff + hermetic Conan/CMake build + gdbserver sidecar — §11, §12                 | `podman build` + `podman run` (CI-shaped) |
+| 6 | memory-and-allocators | `std::allocator` vs `std::pmr::synchronized_pool_resource` vs `mimalloc`, MAP_HUGETLB + cgroup memory.high pressure, OTel latency histograms — §7 (added in r70; was promised by §7 prose but had no demo until now) | `podman compose up` (LGTM stack + svc) |
+| 7 | quality-pipeline    | cppcheck + clang-tidy + googletest/gmock + abidiff + hermetic Conan/CMake build + gdbserver sidecar — §11, §12 (moved from slot 6 in r70)                | `podman build` + `podman run` (CI-shaped) |
 
 ### Languages and tools
 
@@ -423,7 +424,8 @@ substitution.
 | Demo 3 (io-uring-grpc) working end-to-end                       | 10-14 hours      | [x]   |
 | Demo 4 (observability) compose stack up + OTel C++ wired        | 12-16 hours      | [x]   |
 | Demo 5 (isolation) two-tenant scenario reproducible             | 8-10 hours       | [ ]   |
-| Demo 6 (quality-pipeline) including abidiff and gdbserver       | 10-12 hours      | [ ]   |
+| Demo 6 (memory-and-allocators) PMR + huge pages + mimalloc       | 10-14 hours      | [ ]   |
+| Demo 7 (quality-pipeline) including abidiff and gdbserver       | 10-12 hours      | [ ]   |
 | All §3-§14 sections drafted (zero-draft)                        | 30-40 hours      | [ ]   |
 | 13 Excalidraw diagrams drafted, paired SVG exported             | 8-12 hours       | [ ]   |
 | All demo test scripts pass under `test-all-demos.sh`            | 4-6 hours        | [ ]   |
@@ -471,7 +473,7 @@ substitution.
 | 2026-05-09 | Six demos rather than twelve smaller ones                                  | Each demo has enough surface area to teach; twelve becomes a navigation problem            |
 | 2026-05-09 | C++23 as the language target with C++20 fallbacks called out               | Aligns with the "now" in §2's "why now"; GCC 14 supports the relevant features             |
 | 2026-05-09 | Grafana stack (Prometheus + Tempo + Loki + Mimir) for observability        | Single vendor's open-source stack; one compose file; one auth model; readers learn it once |
-| 2026-05-09 | The three reference books are pointed-at, not summarized                   | Both honest about what this tutorial *is* (a runnable companion) and respects authors' work |
+| 2026-05-09 | The four reference books are pointed-at, not summarized                    | Both honest about what this tutorial *is* (a runnable companion) and respects authors' work |
 | 2026-05-09 | One Excalidraw diagram per section minimum, paired SVG + JSON              | Source-available, scales for the PPTX, editable without proprietary tooling                |
 
 ---

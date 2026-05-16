@@ -59,13 +59,14 @@ See [PRD.md](PRD.md) §3 for the complete non-goals list.
 │   ├── demo-03-io-uring-grpc/
 │   ├── demo-04-observability/
 │   ├── demo-05-isolation/
-│   └── demo-06-quality-pipeline/
+│   ├── demo-06-memory-and-allocators/
+│   └── demo-07-quality-pipeline/
 ├── observability/           ← compose stack: Grafana/Prom/Tempo/Loki/Mimir
 ├── scripts/                 ← test-template + per-demo + aggregator
 └── .github/workflows/       ← Pages build + demo CI
 ```
 
-## The six demos
+## The seven demos
 
 Every demo is self-contained and runs via a single `./demo.sh` from
 its directory. Each has a corresponding `scripts/test-demo-NN-*.sh`
@@ -78,16 +79,18 @@ that the aggregator `scripts/test-all-demos.sh` runs in CI.
 | 3 | [`demo-03-io-uring-grpc`](examples/demo-03-io-uring-grpc/)     | `io_uring` echo + async gRPC + `SO_REUSEPORT`, `hey` load gen           |
 | 4 | [`demo-04-observability`](examples/demo-04-observability/)     | The full Grafana stack + OTel-instrumented C++ + `bpftrace` probes      |
 | 5 | [`demo-05-isolation`](examples/demo-05-isolation/)             | Two-tenant noisy neighbor: cpu.weight, io.weight, cpuset, NUMA          |
-| 6 | [`demo-06-quality-pipeline`](examples/demo-06-quality-pipeline/) | cppcheck + clang-tidy + gtest + abidiff + gdbserver sidecar             |
+| 6 | [`demo-06-memory-and-allocators`](examples/demo-06-memory-and-allocators/) | `std::allocator` vs `std::pmr` vs mimalloc, MAP_HUGETLB, cgroup memory.high |
+| 7 | [`demo-07-quality-pipeline`](examples/demo-07-quality-pipeline/) | cppcheck + clang-tidy + gtest + abidiff + gdbserver sidecar             |
 
 ## Reference materials
 
 The tutorial points readers at, but does not summarize or
-displace, three reference works:
+displace, four reference works:
 
 - Andrist & Sehr, *C++ High Performance, 2nd Edition*
 - Iglberger, *C++ Software Design*
 - Enberg, *Latency: Reduce delay in software systems*
+- Ghosh, *Building Low Latency Applications with C++*
 
 Each section ends with a "for deeper coverage" pointer to specific
 chapters. The tutorial is a runnable companion, not a replacement.

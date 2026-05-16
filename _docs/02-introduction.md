@@ -392,7 +392,7 @@ a different scale. {% include section.html n=12 %} owns the deep dive; §2 intro
 - **Static analysis.** `cppcheck`, `clang-tidy`, `clang-analyzer`,
   ABI-diff via `abidiff`. Runs at build time; finds bugs
   the compiler doesn't. Cheap to add to CI; expensive to
-  retrofit on a legacy code base. {% include section.html n=12 %} + demo-06.
+  retrofit on a legacy code base. {% include section.html n=12 %} + demo-07.
 - **Process-attach debuggers.** `gdb`, `gdbserver`. Attach to
   a running process, set a breakpoint, inspect state. In a
   container, `gdb` from a sidecar pod with `SYS_PTRACE`
@@ -451,6 +451,12 @@ For deeper grounding before you continue:
   measurement discipline this tutorial assumes you have.
 - Iglberger, *C++ Software Design*, ch. 1-2 — how design
   decisions become performance decisions.
+- Ghosh, *Building Low Latency Applications with C++*, ch. 1-3 —
+  the trading-systems framing of "how fast is fast enough?" and
+  the C++ building blocks for low-latency work. Where Enberg
+  treats latency as a general-systems problem, Ghosh anchors it
+  to a domain where microseconds are money — a useful concretizer
+  for readers who haven't worked in latency-critical fields before.
 
 ## What's next
 

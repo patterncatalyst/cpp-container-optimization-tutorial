@@ -1,0 +1,89 @@
+# Demo-06 — memory management & allocator comparison.
+#
+# Builds FOUR variants of the same C++ binary, each linked with a
+# different allocator. Compared side-by-side on the synthetic
+# JSON-shaped workload via demo.sh:
+#
+#   demo06-svc-std        std::allocator (default glibc malloc)
+#   demo06-svc-pmr        std::pmr (monotonic_buffer + sync_pool_resource)
+#   demo06-svc-mimalloc   mimalloc static-linked, replaces global new/delete
+#   demo06-svc-jemalloc   jemalloc static-linked, replaces global new/delete
+#
+# r71 scope: toolchain proof. Each binary runs the workload N times
+# in a row, prints per-iteration timings to stdout. No HTTP, no OTel,
+# no cgroup/huge_pages layers — those land in r72-r74.
+#
+# Build cost: ~10-15 min on a clean cache because mimalloc and
+# jemalloc both rebuild from source under our gcc-toolset-14 profile.
+# Cached: ~30 seconds (just our app code).
+
+FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
+
+# Standard dnf set from demo-03/04 with one addition: autoconf +
+# automake + libtool because jemalloc is autotools-based and pre-
+# checks the toolchain before doing the Conan-orchestrated configure.
+RUN dnf install -y --quiet --setopt=install_weak_deps=False \
+        gcc-toolset-14 \
+        cmake ninja-build git python3-pip \
+        autoconf automake libtool \
+        which \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf/*
+
+ENV PATH="/opt/rh/gcc-toolset-14/root/usr/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
+
+RUN pip install --quiet "conan~=2.0"
+
+# Profile-detection (G-27 two-layer pattern).
+RUN conan profile detect --force && \
+    sed -i 's|^compiler.cppstd=.*|compiler.cppstd=gnu17|' \
+        /root/.conan2/profiles/default
+
+WORKDIR /src
+
+COPY conanfile.py ./
+RUN conan install . --output-folder=build/conan \
+                    -s build_type=Release \
+                    --build=missing
+
+COPY src/         ./src/
+COPY CMakeLists.txt ./
+
+RUN cmake -S . -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_TOOLCHAIN_FILE=build/conan/conan_toolchain.cmake \
+    && cmake --build build -j"$(nproc)" \
+    && strip --strip-all \
+        build/demo06-svc-std \
+        build/demo06-svc-pmr \
+        build/demo06-svc-mimalloc \
+        build/demo06-svc-jemalloc
+
+# ════════════════════════════════════════════════════════════════════════
+# Runtime: ubi-minimal with libstdc++ (allocators are static-linked).
+# All four binaries land in /usr/local/bin so the demo's compose can
+# select which to exec.
+# ════════════════════════════════════════════════════════════════════════
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
+
+RUN microdnf install -y --setopt=install_weak_deps=0 \
+        libstdc++ \
+    && microdnf clean all \
+    && rm -rf /var/cache/yum
+
+COPY --from=builder /src/build/demo06-svc-std      /usr/local/bin/demo06-svc-std
+COPY --from=builder /src/build/demo06-svc-pmr      /usr/local/bin/demo06-svc-pmr
+COPY --from=builder /src/build/demo06-svc-mimalloc /usr/local/bin/demo06-svc-mimalloc
+COPY --from=builder /src/build/demo06-svc-jemalloc /usr/local/bin/demo06-svc-jemalloc
+
+# r71: no exposed ports; the binaries are pure CPU/memory workloads
+# launched via podman exec and printing to stdout. r72 will add the
+# HTTP server entrypoint and expose port 8080.
+
+# Default entrypoint is a thin wrapper that picks the allocator
+# variant from $ALLOC, or runs all four sequentially if unset.
+COPY run-all.sh /usr/local/bin/run-all.sh
+RUN chmod +x /usr/local/bin/run-all.sh
+
+ENTRYPOINT ["/usr/local/bin/run-all.sh"]

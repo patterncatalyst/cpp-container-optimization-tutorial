@@ -49,8 +49,11 @@ jobs:
       - name: Run demo-02 smoke test
         run: bash scripts/test-demo-02-stl-layout.sh
 
-      - name: Run demo-06 smoke test
-        run: bash scripts/test-demo-06-quality-pipeline.sh
+      - name: Run demo-06 smoke test (memory-and-allocators)
+        run: bash scripts/test-demo-06-memory-and-allocators.sh
+
+      - name: Run demo-07 smoke test (quality-pipeline)
+        run: bash scripts/test-demo-07-quality-pipeline.sh
 
   full-suite:
     if: contains(github.event.pull_request.labels.*.name, 'run-full-suite')

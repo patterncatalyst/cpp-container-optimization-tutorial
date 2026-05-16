@@ -72,7 +72,8 @@ on a clean Fedora 44 host; that's what the verification pass turns
 | 3  | io-uring-grpc       | [x]              | [x]                      | 2026-05-10 (r67)             | 3 servers in one binary (gRPC callback API + direct liburing + Asio io_uring); load: gRPC 4.85K RPS p99=30.92ms, io_uring 274K req/s p99=181µs, Asio 349K req/s p99=110µs; ships compose.production.yml with custom seccomp + custom SELinux module |
 | 4  | observability       | [x]              | [x]                      | 2026-05-10 (r52)             | Full LGTM stack (Grafana+Loki+Tempo+Mimir bundled in otel-lgtm:0.8.1); OTel-cpp traces+metrics+logs all reach the stack; Conan lockfile pinned in r53-r54 for reproducibility |
 | 5  | isolation           | [ ]              | [ ]                      | —                            | 2-tenant noisy neighbor; cgroup weights                 |
-| 6  | quality-pipeline    | [ ]              | [ ]                      | —                            | cppcheck + clang-tidy + gtest + abidiff + gdbserver     |
+| 6  | memory-and-allocators | [ ]            | [ ]                      | —                            | std::allocator vs std::pmr vs mimalloc, +MAP_HUGETLB, +cgroup pressure (added in r70; §7 demo) |
+| 7  | quality-pipeline    | [ ]              | [ ]                      | —                            | cppcheck + clang-tidy + gtest + abidiff + gdbserver (moved from slot 6 in r70) |
 
 `scripts/test-all-demos.sh` aggregates the six per-demo test
 scripts; it does **not** fail-fast (per skeleton convention),
@@ -9927,6 +9928,288 @@ User reruns:
 
     # or:
     ./scripts/test-demo-03-production.sh
+
+### 2026-05-10 — r68: teardown.sh — full host-state revert
+
+User asked for a script to put podman/host back to pre-tutorial state.
+Shipped `scripts/teardown.sh` (235 lines). Interactive prompts per
+step, `--yes` for non-interactive, `--dry-run` for preview,
+`--prune-cache` for the deep clean. Idempotent. Defensively refuses
+to delete tracked files in security/ (preserves the committed
+reference `seccomp-iouring.json` even if regenerated locally).
+Doesn't touch system packages, shell config, host SELinux state,
+sysctls, firewall, or anything outside containers.
+
+No round-entry-worthy diagnosis or discovery; just a utility ship.
+
+### 2026-05-10 — r69: dead scaffolding cleanup + matrix/PRD sync
+
+User: "i applied r68 and yes, let's fold in the removal before we
+forget."
+
+Removed:
+- `examples/demo-02-memory-and-stl/` (5 files, 370 lines, dead
+  since r55's rename to `demo-02-stl-layout`)
+- `scripts/test-demo-02-memory-and-stl.sh` (36 lines, stub never
+  updated after rename)
+
+Synced with reality:
+- PRD demo-02 row renamed + scope corrected (was overselling
+  PMR/huge pages/mimalloc that the actual demo doesn't do)
+- PRD checklist: demos 2, 3, 4 marked [x] (verified r59, r67, r52)
+- Plan section verification matrix: demos 2-4 rows updated with
+  verified status, dates, and one-line summaries
+
+Kept intentionally:
+- r55's plan entry that documents the original rename (history,
+  not stale reference)
+- Matrix's "renamed from memory-and-stl in r55" note (rename
+  trail stays visible)
+
+### 2026-05-10 — r70: 6 demos → 7 demos — restore PMR/huge-pages/mimalloc as demo-06; quality-pipeline becomes demo-07
+
+User flagged that the r69 PRD scope correction had quietly orphaned
+material they wanted: "I definitely don't want to lose PMR/huge
+pages/mimalloc. Should we replace demo-06 with this?"
+
+Counter-proposal accepted: keep demo-06 (quality-pipeline) by
+moving it to a new demo-07 slot, and use the demo-06 slot for the
+memory-and-allocators content. Net result: 7 demos covering 7
+distinct §-zones.
+
+The reasoning:
+
+§7 (memory management) currently has 178 lines of prose and no
+demo. Memory management is one of the highest-impact optimization
+domains for C++; Enberg's *Latency* book leans on allocator
+measurements as a core teaching tool. A book the reader has on
+their shelf is *measuring* allocators; the tutorial should be too.
+
+Demo-06 (quality-pipeline) was the weakest demo spec — cppcheck,
+clang-tidy, sanitizers, googletest, abidiff are tools applied to
+existing code, not workloads that produce latency numbers. They're
+naturally prose-and-CI material rather than visual demos. The
+content is fine, but the demo framing was always a stretch.
+
+**Restructure executed in r70:**
+
+1. `git mv examples/demo-06-quality-pipeline → examples/demo-07-quality-pipeline`
+   (14 files, 214+ lines of source preserved)
+2. `git mv scripts/test-demo-06-quality-pipeline.sh → scripts/test-demo-07-quality-pipeline.sh`
+3. Created `examples/demo-06-memory-and-allocators/` with README
+   documenting planned scope (PMR + mimalloc + huge pages + cgroup
+   pressure)
+4. Created `scripts/test-demo-06-memory-and-allocators.sh`
+   placeholder (exits 0 with notice)
+5. Updated all forward-looking cross-references:
+   - PRD.md demo table (insert new row 6, renumber to 7)
+   - PRD.md checklist (insert + renumber)
+   - Plan matrix (insert + renumber)
+   - README.md tree diagram + demo table ("six demos" → "seven demos")
+   - examples.html (insert new card, renumber existing)
+   - _docs/02-introduction.md (narrative "demo-06" → "demo-07")
+   - _docs/12-analysis-debugging.md (link)
+   - _docs/13-reproducibility-abi.md (link)
+   - CONTRIBUTING.md (commit scope range)
+   - .github/workflows/demos.yml (rename CI step, add demo-06 step)
+   - Internal refs inside the moved dir (Containerfile tags,
+     compose.debug.yml image names, abi-reference README,
+     main.cpp's "hello from demo-06" string, moved test script's
+     internal vars)
+6. r68/r69 retro-entered in plan (this section); r70 entry here.
+
+**Cross-references intentionally NOT changed:**
+- Plan historical entries (r41, r45, r12 etc.) that reference
+  "demo-06" — those were accurate at the time. Plan is history,
+  not state.
+
+**Final demo layout:**
+
+```
+demo-01  image-strategy           → §4   verified r20
+demo-02  stl-layout               → §6   verified r59
+demo-03  io-uring-grpc            → §9   verified r67
+demo-04  observability            → §10  verified r52
+demo-05  isolation                → §11  stub
+demo-06  memory-and-allocators    → §7   stub (NEW — round A.2)
+demo-07  quality-pipeline         → §12  stub (moved from slot 6)
+```
+
+**Planned scope for demo-06 (memory-and-allocators), captured in
+its README** (full build-out scheduled for round A.2 of the
+option-1 plan):
+
+- Three allocator variants in one binary, switched at runtime via
+  env var: std::allocator (baseline glibc), std::pmr
+  (synchronized_pool_resource + monotonic_buffer_resource upstream),
+  mimalloc (linked, not LD_PRELOAD)
+- Allocator-stressful workload: synthetic JSON-like parse-and-build
+  per request (small allocations, nested vectors/strings)
+- Three optional layers, each toggleable via env: MAP_HUGETLB,
+  cgroup memory.high pressure, thread count (single vs N to
+  exercise PMR's synchronized vs unsynchronized resource)
+- OTel-instrumented like demo-03 and demo-04; latency histograms
+  reach the LGTM stack
+- Custom load generator parameterized over allocator + config
+
+Source-material cross-references documented in the README: Andrist
+& Sehr Ch. 7, Enberg Ch. 3, Iglberger Ch. 7 (Bridge/PIMPL
+intersects PMR lifetime model).
+
+**Option-1 plan updated for the new demo count:**
+
+| Round | What | Effort |
+|---|---|---|
+| A.1 (next) | demo-01 image strategy build-out | 4-7 sub-rounds |
+| A.2 | demo-06 memory-and-allocators build-out | 6-8 sub-rounds |
+| B | demo-05 isolation | 4-7 sub-rounds |
+| C | demo-07 quality-pipeline finish + §12 prose | 4-6 sub-rounds |
+| D | Section prose §4, §5, §7, §8, §11, §13, §14, §15 | 4-6 rounds |
+| E | PPTX slides | 3-4 rounds |
+| Total | | ~25-38 rounds (was 18-29 before adding A.2) |
+
+**No code changed in r70.** This is the structural rename + cross-
+reference sync; no demos built or modified, no §-content written.
+The build-out is the next round.
+
+User: "I would like the switch but move the current demo 06 quality
+pipeline to a demo 07 along with the prose rich section 12. That
+should round out the demos. Then let's start."
+
+r70 ships the rename; Round A.1 starts next.
+
+### 2026-05-11 — r71: Round A first ship — demo-06 4-way allocator toolchain proof
+
+User-confirmed design (3 single-select questions):
+- **Q1 allocator variants:** 4-way (`std::allocator`, `std::pmr`,
+  mimalloc, jemalloc). The widest Latency-book comparison.
+- **Q2 workload:** synthetic JSON parse-and-build per request
+  (deep nesting, mixed lifetime). Allocator-stressful by design.
+- **Q3 layers:** all three (MAP_HUGETLB + cgroup memory.high +
+  thread count). Full Latency-book story.
+
+Aside (re-corrected pre-flight): in r70's planning I had Round A
+listed as "demo-01 image strategy build-out (A.1)" + "demo-06
+memory-and-allocators (A.2)". I was wrong — **demo-01 was already
+verified at r20** and the matrix update I did myself in r69 said
+so. r71 corrects: Round A is just demo-06; total plan drops from
+25-38 rounds to ~21-31.
+
+**r71 scope: toolchain proof.** Get the 4-way binary build working
+before piling on HTTP + OTel + layered toggles. mimalloc and
+jemalloc are both new Conan deps for this repo; their linkage onto
+our UBI 9 + gcc-toolset-14 + Conan-managed-grpc-chain toolchain
+is the riskiest unknown. Splitting r71 (toolchain) from r72+
+(features) gives us small failure surfaces to diagnose if
+something goes wrong.
+
+**Conan version selections** (verified via Conan Center web search):
+- `mimalloc/2.2.4` — recent stable. CMake-based recipe.
+- `jemalloc/5.3.1` — recent stable. Autotools-based recipe.
+  (Avoids the 5.2.1 user-namespace-remap bug documented in
+  conan-center-index #20858.)
+
+**Allocator hookup strategy:** four separate binaries, one per
+variant. ALLOC_TYPE_* compile-time define selects PMR vs std::
+types in source. For mimalloc and jemalloc, the global new/delete
+replacement happens via linker `--whole-archive`. PMR is the only
+variant with genuinely different source code (uses
+`std::pmr::polymorphic_allocator` and a per-request
+`monotonic_buffer_resource` arena).
+
+**Files shipped (9 files, 951 lines):**
+
+1. `examples/demo-06-memory-and-allocators/conanfile.py` (61 lines)
+   - mimalloc + jemalloc deps with allocator-specific options
+   - Documented why static linkage, why no `je_` prefix, why
+     `enable_stats=True` (cheap, useful for demo)
+2. `examples/demo-06-memory-and-allocators/Containerfile` (89 lines)
+   - UBI 9 + gcc-toolset-14 (G-27 two-layer pattern)
+   - autoconf+automake+libtool added for jemalloc's autotools pre-checks
+   - Four binaries built and stripped, copied to ubi-minimal runtime
+3. `examples/demo-06-memory-and-allocators/CMakeLists.txt` (80 lines)
+   - 4 add_executable targets, shared source
+   - mimalloc and jemalloc via `--whole-archive` link options
+     (the static-lib-must-actually-be-used trick)
+   - ALLOC_TYPE_* compile defines select PMR vs std types
+4. `examples/demo-06-memory-and-allocators/src/workload.hpp` (101 lines)
+   - `Node` struct for std-types path
+   - `PmrNode` struct for PMR path (uses
+     `std::pmr::polymorphic_allocator<std::byte>`)
+   - `WorkloadParams` with seed + tree-shape knobs
+   - `RunStats` for cross-variant comparison
+5. `examples/demo-06-memory-and-allocators/src/workload.cpp` (176 lines)
+   - Deterministic PRNG-driven tree builder for both variants
+   - FNV-1a hash walker (anti-DCE + correctness check across
+     variants — same seed must produce same hash regardless of
+     allocator)
+6. `examples/demo-06-memory-and-allocators/src/main.cpp` (186 lines)
+   - One main.cpp serving all 4 binaries via compile-time switching
+   - Warmup (10 iterations not counted) + measurement loop
+   - PMR path uses 1 MB stack-backed monotonic_buffer_resource per
+     iteration; std variants use plain heap
+   - Output: single-line JSON to stdout for jq parsing
+7. `examples/demo-06-memory-and-allocators/run-all.sh` (41 lines)
+   - Container ENTRYPOINT; runs one variant via `$ALLOC` env or all
+     four sequentially if unset
+   - `$ITERATIONS` / `$DEPTH` / `$BRANCH` / `$VALUES` env-driven
+8. `examples/demo-06-memory-and-allocators/demo.sh` (111 lines)
+   - Build + run + tabulate
+   - Cross-variant hash agreement sanity check
+9. `scripts/test-demo-06-memory-and-allocators.sh` (61 lines)
+   - Replaces r70 placeholder
+   - 4-phase verification: image builds → 4 binaries present →
+     each runs and produces valid JSON → all 4 hashes agree
+
+Plus updated `examples/demo-06-memory-and-allocators/README.md`
+(106 lines) — replaces r70 placeholder with current scope, planned
+rounds table, source-material cross-refs (Andrist & Sehr Ch. 7,
+Enberg Ch. 3, Iglberger Ch. 7).
+
+**Anticipated outcomes** ranked by likelihood:
+
+- **Best case:** image builds, all 4 binaries run, hashes match,
+  comparison table shows real allocator differences. demo-06's
+  toolchain proof verifies; r72 starts on HTTP + OTel.
+- **mimalloc CMake recipe option mismatch:** the option name
+  guesses in conanfile.py (`override`, `secure`, `single_object`)
+  might not match current recipe options. Fix: check Conan Center
+  for the actual option names, adjust.
+- **jemalloc autotools build fails under gcc-toolset-14:** the
+  autotools detection logic in jemalloc 5.3.1 might not pick up
+  our toolset. Mitigation: pass `CC`/`CXX` env vars in the
+  Containerfile RUN step.
+- **`--whole-archive` syntax issue:** the
+  `target_link_options(... -Wl,--whole-archive ...)` pattern is
+  ld-specific; if Conan-managed jemalloc/mimalloc come as
+  shared libs (not static), the syntax breaks. Mitigation: our
+  conanfile has `"*/*:shared": False` which should force static.
+- **PMR vs std hash disagreement:** if `build_tree_pmr` allocates
+  slightly different intermediate strings (e.g., due to small-string
+  optimization quirks across `std::string` vs `std::pmr::string`),
+  the hashes could differ. Investigation path: re-examine the
+  build_node implementations for any mismatched logic.
+- **Cross-variant correctness violation OTHER than hash:** unlikely;
+  the workload is deterministic by construction.
+
+**What r71 deliberately doesn't have** (saved for r72+):
+- No HTTP server entry point (just a CLI binary)
+- No OTel instrumentation (no LGTM wiring)
+- No MAP_HUGETLB layer
+- No cgroup memory.high pressure
+- No multi-threading (single-threaded workload only)
+- No `compose.yml` (the binary is invoked via `podman run` directly)
+
+These all land in r72-r74. r71 is the "does mimalloc + jemalloc
+even link in our toolchain" gate.
+
+User runs:
+
+    ./examples/demo-06-memory-and-allocators/demo.sh
+
+Or with formal pass/fail criteria:
+
+    ./scripts/test-demo-06-memory-and-allocators.sh
 
 ---
 
