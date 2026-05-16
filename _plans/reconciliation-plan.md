@@ -11140,6 +11140,146 @@ Or with formal pass/fail:
 
     ./scripts/test-demo-06-memory-and-allocators.sh
 
+### 2026-05-16 — r78: demo-06 first real C++ bug — PMR emplace_back misuse + redundant mr parameter (build infrastructure milestone)
+
+**This round marks a significant milestone:** all the build-system
+errors are gone. CMake configured cleanly. The linker setup worked.
+All three binaries (`demo06-svc-std`, `demo06-svc-pmr`,
+`demo06-svc-mimalloc`) reached the actual compile step. **The errors
+are now in my C++ code, not the build infrastructure.**
+
+Compile error at `workload.cpp:107`:
+
+```
+error: static assertion failed: construction with an allocator must
+       be possible if uses_allocator is true
+note: 'std::is_constructible_v<demo06::PmrNode, std::pmr::memory_resource*&,
+       const std::pmr::polymorphic_allocator<demo06::PmrNode>&>'
+       evaluates to false
+
+note: candidate: 'demo06::PmrNode::PmrNode(allocator_type)'
+note:   candidate expects 1 argument, 2 provided
+```
+
+**The bug:**
+
+The buggy line:
+```cpp
+out.children.emplace_back(mr);  // mr is std::pmr::memory_resource*
+```
+
+`out.children` is a `std::pmr::vector<PmrNode>` whose allocator is a
+`polymorphic_allocator<PmrNode>` already wrapping the relevant
+`memory_resource`. When you `emplace_back(args...)` on a PMR vector,
+the vector's `uses_allocator` machinery auto-injects its own
+allocator into the constructed element's constructor. The vector
+sees PmrNode is allocator-aware and tries to call:
+
+```cpp
+PmrNode(mr, vector_allocator)   // two arguments
+```
+
+But PmrNode only has `PmrNode(allocator_type)` — one argument. The
+compiler correctly says "no match."
+
+I was conflating two ways to thread allocators through PMR:
+1. Pass `memory_resource*` directly to the element's constructor —
+   wrong, because PmrNode takes `polymorphic_allocator`, not
+   `memory_resource*`
+2. Let the vector's PMR machinery do the threading automatically —
+   right, just call `emplace_back()` with no args
+
+The vector already knows its allocator; passing `mr` separately is
+both incorrect (type mismatch) and redundant (duplicate plumbing).
+
+**Fix:**
+
+1. `workload.cpp:107`: `emplace_back(mr)` → `emplace_back()`
+2. The `mr` parameter to `build_node_pmr` became redundant after
+   the fix (it was only ever used in that emplace_back call), so
+   dropped it from the signature and from the recursive + top-level
+   call sites. The top-level `build_tree_pmr` still receives `mr`
+   from main.cpp; it uses it to construct the root PmrNode, and the
+   allocator chain propagates from there.
+
+Added explanatory comments at both fixed locations covering the
+uses_allocator semantics so future readers don't repeat the
+mistake.
+
+**Pedagogical note worth promoting to §7 prose:**
+
+This is exactly the kind of subtle PMR misuse the tutorial should
+warn about. Three common mistakes in this space:
+1. Calling `emplace_back(memory_resource*)` thinking it threads the
+   resource (this round's bug)
+2. Forgetting to mark a type allocator-aware (`using allocator_type`,
+   allocator-extended constructor) and getting silent fallback to
+   default allocator
+3. Mixing allocators within a single container subtree (silently
+   corrupts the arena reset semantics)
+
+§7 prose should include a worked example showing the correct PMR
+threading pattern: construct the root with the
+`polymorphic_allocator`, then let `uses_allocator` propagate. The
+demo-06 workload code is now the worked example for #1 and the
+correct pattern.
+
+**Files changed in r78 (1):**
+
+- `examples/demo-06-memory-and-allocators/src/workload.cpp`:
+  - `build_node_pmr` signature loses the `mr` parameter (was the
+    last positional)
+  - `emplace_back(mr)` → `emplace_back()`
+  - Recursive call inside `build_node_pmr` loses `, mr`
+  - Top-level call inside `build_tree_pmr` loses `, mr`
+  - Added a 9-line comment block above `build_node_pmr` explaining
+    the uses_allocator semantics and why we don't pass `mr` manually
+  - Added a 3-line comment inside `build_tree_pmr` clarifying that
+    `mr` only matters for root construction
+
+**Build infrastructure milestone (worth recording):**
+
+Demo-06's toolchain went through 7 sub-rounds (r71-r77) before
+landing the first real-code error. The sequence:
+
+| Round | Error layer | Status |
+|---|---|---|
+| r71 | initial 4-way attempt | jemalloc configure failed |
+| r72 | jemalloc autotools chmod gap (G-33) | retry-with-chmod, works |
+| r73 | jemalloc GCC 14 strictness (G-34) — ENV CFLAGS | shadowed by Conan toolchain |
+| r74 | jemalloc GCC 14 — Conan conf mechanism | recipe overrides |
+| r75 | dropped jemalloc → 3-way (std + PMR + mimalloc) | conan install clean |
+| r76 | CMake target name `mimalloc::*` vs `mimalloc-static` | flat name fix |
+| r77 | `$<TARGET_FILE>` on INTERFACE IMPORTED target | inline linker flags |
+| **r78** | **PMR emplace_back misuse — real code bug** | **fix shipped** |
+
+The build infrastructure is now proven end-to-end. Future demo-06
+rounds (HTTP + OTel, layer toggles) should not need to revisit any
+of r72-r77's fixes.
+
+**Anticipated outcomes for the r78 rebuild:**
+
+- **Very likely (~90%):** all three binaries compile and link.
+  demo.sh runs all three; cross-variant hash check confirms std and
+  PMR produce identical hashes. Toolchain proof complete.
+- **Possible (~7%):** another subtle PMR or C++23 issue surfaces
+  elsewhere in workload.cpp or main.cpp. The cascading template-
+  error noise in r78's output may have been hiding additional
+  errors that only show after the primary issue is fixed.
+- **Possible (~3%):** binaries build but cross-variant hash check
+  fails (std vs PMR produce different output). Would indicate a
+  subtle bug in the PMR variant's tree-building logic. Mitigation:
+  diff the trees, find where they diverge.
+
+User runs (rebuild required because source changed):
+
+    podman rmi cpp-tut/demo-06:latest 2>/dev/null || true
+    ./examples/demo-06-memory-and-allocators/demo.sh
+
+Or with formal pass/fail:
+
+    ./scripts/test-demo-06-memory-and-allocators.sh
+
 ---
 
 ## Known divergences from the PRD

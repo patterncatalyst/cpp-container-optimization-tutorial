@@ -87,10 +87,19 @@ void build_node(std::mt19937_64& rng, Node& out,
 }
 
 // ── PMR tree build ────────────────────────────────────────────────────
+//
+// Note on the absent mr parameter (vs build_node's twin above): the
+// `out` parameter is a PmrNode whose children/values/label all carry
+// their own polymorphic_allocator (set up via PmrNode's allocator-
+// extended constructor). When we emplace into out.children, the
+// vector's uses_allocator machinery auto-injects its own allocator
+// into the new PmrNode's constructor — no manual threading needed.
+// Passing mr separately would be wrong; it would attempt
+// PmrNode(mr, allocator), which doesn't match PmrNode's only
+// non-copy constructor PmrNode(allocator_type).
 
 void build_node_pmr(std::mt19937_64& rng, PmrNode& out,
-                    const WorkloadParams& p, int depth,
-                    std::pmr::memory_resource* mr) {
+                    const WorkloadParams& p, int depth) {
     int len = pick_label_len(rng, p.label_chars_min, p.label_chars_max);
     fill_label_pmr(rng, out.label, len);
 
@@ -103,9 +112,10 @@ void build_node_pmr(std::mt19937_64& rng, PmrNode& out,
     int nchildren = pick_branch(rng, p.branch_factor_max, depth, p.max_depth);
     out.children.reserve(static_cast<std::size_t>(nchildren));
     for (int i = 0; i < nchildren; ++i) {
-        // Use mr as the upstream for child node's allocators.
-        out.children.emplace_back(mr);
-        build_node_pmr(rng, out.children.back(), p, depth + 1, mr);
+        // Vector auto-injects its own allocator into PmrNode's
+        // constructor via uses_allocator_construction_args.
+        out.children.emplace_back();
+        build_node_pmr(rng, out.children.back(), p, depth + 1);
     }
 }
 
@@ -163,7 +173,10 @@ PmrNode build_tree_pmr(const WorkloadParams& params,
                        std::pmr::memory_resource* mr) {
     std::mt19937_64 rng(params.seed);
     PmrNode root(mr);
-    build_node_pmr(rng, root, params, 0, mr);
+    // mr is only needed to construct root; from there the allocator
+    // propagates through PmrNode's allocator-extended constructor and
+    // the vector's uses_allocator machinery.
+    build_node_pmr(rng, root, params, 0);
     return root;
 }
 
