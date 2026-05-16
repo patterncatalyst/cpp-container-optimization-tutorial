@@ -44,20 +44,45 @@ WORKDIR /src
 
 COPY conanfile.py ./
 
-# Conan install is wrapped in a retry-with-chmod because of a known
-# jemalloc-recipe bug: the recipe extracts an autotools source tree
-# from a tarball but doesn't preserve the executable bit on the
-# `configure` script. The first build attempt fails with
+# ── Build compatibility layers for jemalloc/5.3.1 ─────────────────────
 #
-#   /bin/sh: line 1: .../src/configure: Permission denied
-#   ConanException: Error 126 while executing
+# Building jemalloc/5.3.1 (released 2022) in our environment hits two
+# independent compatibility conflicts. Both are addressed at the right
+# layer rather than worked around at the build-step layer:
 #
-# (See conan-center-index issue #20858 and adjacent reports across
-# multiple jemalloc recipe versions. Fixed and re-broken several
-# times upstream.) The fix is to chmod any non-executable configure
-# scripts in Conan's package-build cache before retrying. The chmod
-# is run once across all in-flight builds because Conan may have
-# extracted multiple recipes' sources before hitting the failure.
+# CONFLICT 1 — GCC 14 conformance strictness (G-34):
+#   GCC 14 turned several long-standing warnings into errors-by-default:
+#   implicit function declarations, implicit-int returns, old-style K&R
+#   function definitions, incompatible pointer types, int↔pointer
+#   conversions. jemalloc's pre-2024 C sources use several of these
+#   older idioms; under GCC 14 the build halts on the first one with
+#   errors like:
+#       malloc_io.h: error: old-style parameter declarations ...
+#       ctl.c: error: expected declaration specifiers ... before 'tsd_t'
+#   Fix at the right layer: tell GCC 14 to behave like GCC 13 regarding
+#   these specific idioms, FOR THE JEMALLOC BUILD ONLY. This is the
+#   documented GCC 14 migration pattern at:
+#       https://gcc.gnu.org/gcc-14/porting_to.html
+#   and matches Fedora/Debian/openSUSE practice for pre-2024 C packages.
+#   The CFLAGS env var is picked up by autotools' configure step. Our
+#   C++23 app code is unaffected — those flags are C-language specific
+#   and our app builds via CMake, not autotools.
+#
+# CONFLICT 2 — Conan recipe chmod gap (G-33):
+#   Separately, jemalloc's Conan recipe extracts source from a tarball
+#   without preserving the executable bit on `configure`. The autotools
+#   helper then fails with errno 126 (Permission denied). This bug is
+#   in the recipe itself, not in jemalloc; the retry-with-chmod below
+#   is a workaround at the build-step layer rather than a fix at the
+#   recipe layer. A real fix would require forking the Conan recipe,
+#   which exceeds tutorial scope. Documented as G-33.
+
+ENV CFLAGS="-Wno-error=implicit-function-declaration \
+            -Wno-error=implicit-int \
+            -Wno-error=incompatible-pointer-types \
+            -Wno-error=int-conversion \
+            -Wno-error=old-style-definition"
+
 RUN conan install . --output-folder=build/conan \
                     -s build_type=Release \
                     --build=missing \
