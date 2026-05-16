@@ -519,7 +519,24 @@ int run_serve_mode(const Args& /*args*/, const demo06::WorkloadParams& params) {
         "demo06.request.duration", "Request latency", "ms");
 
     svr.Get("/run",
-        [&params, tracer, meter, logger, request_counter, latency_hist]
+        // Capture rules here matter for OTel-cpp:
+        // - `tracer`, `meter`, `logger` are nostd::shared_ptr<T> — copyable,
+        //   captured by value (each lambda copy bumps the shared_ptr's
+        //   refcount; underlying provider stays alive via the global registry).
+        // - `request_counter`, `latency_hist` are nostd::unique_ptr<T>
+        //   (Meter::CreateUInt64Counter and CreateDoubleHistogram return
+        //   move-only handles, one owner per metric). Lambdas can't copy
+        //   them, so we capture by reference. The references stay valid
+        //   for the lambda's lifetime because both objects live in
+        //   run_serve_mode's stack frame, which is kept alive by the
+        //   blocking signal-wait loop below.
+        // - `params` is a const& parameter; capture by reference matches its
+        //   incoming binding.
+        //
+        // r86 originally captured request_counter and latency_hist by value,
+        // which hit "use of deleted function" on the unique_ptr copy
+        // constructor. Fixed in r87.
+        [&params, tracer, meter, logger, &request_counter, &latency_hist]
         (const httplib::Request& req, httplib::Response& res) {
             auto t0 = std::chrono::steady_clock::now();
             auto span = tracer->StartSpan("run");

@@ -12655,6 +12655,161 @@ The `config` step is added to the recommended flow — it costs
 service ref typos, schema mismatches) before the build starts.
 Worth adopting as a verification-script convention.
 
+### 2026-05-16 — r87: lambda capture of OTel unique_ptr handles — need `&` prefix
+
+r86 fixed the compose validation. The build then proceeded —
+Conan resolved (cached from demo-04's previous build, so this
+was a ~6 minute build cycle, not the full 30-60 minute first
+build), CMake configured, ninja started compiling. Then **all
+three main.cpp compiles failed identically**:
+
+```
+error: use of deleted function 'constexpr
+    opentelemetry::v1::nostd::unique_ptr<
+        opentelemetry::v1::metrics::Counter<long unsigned int>
+    >::unique_ptr(const ... unique_ptr<...>&)'
+  522 |   [&params, tracer, meter, logger, request_counter, latency_hist]
+```
+
+The compiler points right at the lambda capture. The unique_ptr
+copy constructor is implicitly deleted (because unique_ptr
+declares a move constructor — the standard rule of five
+implication). Capturing `request_counter` and `latency_hist`
+**by value** in the lambda tries to copy them, which fails.
+
+**The OTel-cpp factory return types matter here:**
+
+- `Provider::GetTracerProvider()->GetTracer(...)` returns
+  `nostd::shared_ptr<Tracer>` — copyable
+- `Provider::GetMeterProvider()->GetMeter(...)` returns
+  `nostd::shared_ptr<Meter>` — copyable
+- `Provider::GetLoggerProvider()->GetLogger(...)` returns
+  `nostd::shared_ptr<Logger>` — copyable
+- **`Meter::CreateUInt64Counter(...)` returns
+  `nostd::unique_ptr<Counter<uint64_t>>` — move-only**
+- **`Meter::CreateDoubleHistogram(...)` returns
+  `nostd::unique_ptr<Histogram<double>>` — move-only**
+
+The provider getters return shared_ptr because providers are
+intentionally process-singletons; the metric-instrument factories
+return unique_ptr because each instrument should have one owner
+(typical "one Counter per metric definition" pattern). The mix
+of ownership models in one API call chain is a footgun for
+lambda capture lists.
+
+**Why demo-04 doesn't hit this:** demo-04's handler lambda uses
+`[&]` capture-all-by-reference. That sidesteps the issue
+entirely — references to unique_ptr are fine. r85 used explicit
+captures for documentation value, missed adding `&` to the
+unique_ptr captures.
+
+**Fix:**
+
+Add `&` prefix to the unique_ptr captures:
+
+```cpp
+[&params, tracer, meter, logger, &request_counter, &latency_hist]
+//                               ^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^
+//                               unique_ptr handles need by-ref
+```
+
+The shared_ptr handles (`tracer`, `meter`, `logger`) stay
+by-value — each lambda copy bumps the shared_ptr's refcount, and
+the underlying providers are kept alive by the global registry
+anyway, so by-value is safer (no chance of dangling on a delayed
+invocation).
+
+The unique_ptr handles live in `run_serve_mode`'s stack frame,
+which stays alive for the entire server lifetime because the
+function blocks on the signal-wait loop after `svr.listen()`. So
+reference capture is safe.
+
+Added inline comment to the lambda explaining the capture rules
+so future readers see the rationale without grepping plan
+entries.
+
+**Files changed in r87 (3):**
+
+- `examples/demo-06-memory-and-allocators/src/main.cpp`:
+  added `&` to `request_counter` and `latency_hist` in the /run
+  handler lambda capture list. Added ~15-line comment block
+  above the capture explaining shared_ptr vs unique_ptr handling
+  and the lifetime argument for reference capture safety.
+- `examples/demo-06-memory-and-allocators/README.md`:
+  rounds table: r86 marked partial, r87 added.
+- `_plans/reconciliation-plan.md`:
+  this r87 entry.
+
+**Diagnostic note re: the user's hey output:**
+
+After the build failure, hey ran against ports 18601/18602/18603
+where no containers were listening. The 9 million
+"connection refused" errors per variant are kernel-rejected
+connect attempts (TCP RST returned instantly). Same pattern as
+r83's failed-build cycle. Confirms the backlog item to make
+demo.sh / verification scripts short-circuit on build failure.
+
+**Cache hit observation:**
+
+The build took only ~6 minutes (not 30-60 min) because Conan's
+package cache survived from a previous demo-04 build cycle —
+opentelemetry-cpp, grpc, protobuf, abseil were all cache hits.
+This is a useful real-world data point: **once the Conan cache
+has the heavy deps, every demo using the same dep versions
+pays only the app-code compile cost.** Worth flagging in §12
+prose (reproducible builds + caching strategy).
+
+**Lesson worth flagging:**
+
+The unique_ptr-in-lambda-capture footgun is generic C++ knowledge
+(unique_ptr is move-only since C++11), but the OTel-cpp API
+makes it easy to trip into because the same API call chain
+returns both shared_ptr and unique_ptr objects. When mixing
+ownership models in capture lists, default to `[&]` unless you
+have a specific reason for explicit captures.
+
+Not promoting to a G-NN catalog entry because it's basic C++
+knowledge, not toolchain-specific. The inline code comment is
+the right level of documentation.
+
+**Anticipated:**
+
+- ~95%: r87 fixes the lambda capture, all 3 binaries compile,
+  build finishes (~30 sec because Conan cache is hot), services
+  come up, hey-driven traffic produces visible histograms in
+  Grafana within ~10 seconds.
+- ~5%: a runtime issue surfaces — most likely an OTel exporter
+  problem connecting to LGTM, or a histogram/counter API
+  mismatch we missed. Each has a clear diagnostic path
+  (container logs for OTel errors, `podman exec lgtm netstat`
+  for connectivity, Tempo's `/api/echo` for query path).
+
+**Verification (unchanged from r86, faster this time):**
+
+```bash
+# Validate compose first (~1 second)
+podman compose \
+    -f examples/demo-06-memory-and-allocators/compose-serve.yml \
+    -f examples/demo-06-memory-and-allocators/compose-observe.yml \
+    -f observability/compose.yml \
+    config > /dev/null && echo "compose OK"
+
+# Bring up — cache should make this ~1 minute total, not 30 minutes
+podman compose \
+    -f examples/demo-06-memory-and-allocators/compose-serve.yml \
+    -f examples/demo-06-memory-and-allocators/compose-observe.yml \
+    -f observability/compose.yml \
+    up --build -d
+
+sleep 30  # LGTM warmup
+
+hey -z 30s http://127.0.0.1:18601/run
+hey -z 30s http://127.0.0.1:18602/run
+hey -z 30s http://127.0.0.1:18603/run
+
+xdg-open http://localhost:3000 &
+```
+
 ---
 
 ## Known divergences from the PRD
