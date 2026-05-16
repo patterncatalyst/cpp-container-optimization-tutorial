@@ -12147,6 +12147,137 @@ visible in the hey output, not just in the synthetic batch run.
   resp_read split: if resp_wait got bigger, server's the
   bottleneck now (good — that's what we wanted to measure).
 
+### 2026-05-16 — r84: fix r83 typo — `httplib::socket_t` doesn't exist in v0.16.0; use generic lambda
+
+r83's build failed with the same error in all three variants:
+
+```
+/src/src/main.cpp:338:31: error: 'httplib::socket_t' has not been declared
+  338 |     svr.set_socket_options([](httplib::socket_t sock) {
+```
+
+I guessed the namespace and got it wrong. In cpp-httplib v0.16.0,
+`socket_t` is declared at **global scope** (outside any namespace),
+not inside `namespace httplib`. The relevant lines near the top of
+the vendored httplib.h:
+
+```cpp
+#ifdef _WIN32
+using socket_t = SOCKET;
+#else
+using socket_t = int;
+#endif
+
+namespace httplib {
+    // ... everything else, including set_socket_options ...
+}
+```
+
+So `httplib::socket_t` is unresolved; the correct unqualified name
+is just `socket_t`, or `::socket_t` to be explicit about global
+scope.
+
+**Fix — generic lambda is portability-safe:**
+
+Rather than commit to `socket_t` or `::socket_t` and risk getting
+it wrong if a future cpp-httplib version reorganizes things, use
+a generic lambda (`auto sock`). The lambda becomes a function
+template; when stored in httplib's
+`std::function<void(socket_t)>` parameter via `set_socket_options`,
+the compiler deduces `auto`'s type from the function-object
+signature. Works regardless of where `socket_t` lives.
+
+```cpp
+svr.set_socket_options([](auto sock) {
+    int yes = 1;
+    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+});
+```
+
+Added a short inline comment explaining the choice so future
+readers understand why `auto` instead of a named type.
+
+**Diagnostic note re: the rest of user's r83 output:**
+
+After the build failure, the rest of the script (the hey
+invocations) kept running against ports where no containers were
+listening. The compose output shows:
+
+```
+Image cpp-tut/demo-06:latest Building
+[... build error ...]
+Error: executing /usr/libexec/docker/cli-plugins/docker-compose
+  -f ... up --build -d: exit status 1
+```
+
+But the hey commands ran anyway:
+
+```
+Error distribution:
+  [1530012]  Get "http://127.0.0.1:18601/run":
+             dial tcp 127.0.0.1:18601: connect: connection refused
+```
+
+305K req/s is hey burning through kernel-rejected connect
+attempts (TCP RST returned instantly when no socket is listening).
+Numbers are meaningless. Worth knowing for future verification
+scripts.
+
+**Backlog item added:** demo.sh and the verification flow should
+short-circuit on `compose up` exit status rather than continuing
+through to load testing. Minor; not a blocker.
+
+**Files changed in r84 (3):**
+
+- `examples/demo-06-memory-and-allocators/src/main.cpp`:
+  changed `httplib::socket_t` to `auto`; added ~7-line comment
+  explaining the choice.
+- `examples/demo-06-memory-and-allocators/README.md`:
+  rounds table: r83 marked partial, r84 added, r85+ reshuffled.
+- `_plans/reconciliation-plan.md`:
+  this r84 entry.
+
+**Verification:**
+
+Same as r83 — the goal is to confirm TCP_NODELAY actually fixes
+the 40ms-per-request bunching:
+
+```bash
+podman rmi cpp-tut/demo-06:latest 2>/dev/null || true
+podman compose -f examples/demo-06-memory-and-allocators/compose-serve.yml up --build -d
+sleep 5
+hey -z 5s http://127.0.0.1:18601/run
+hey -z 5s http://127.0.0.1:18602/run
+hey -z 5s http://127.0.0.1:18603/run
+podman compose -f examples/demo-06-memory-and-allocators/compose-serve.yml down
+```
+
+Expected after r84 (same expectations as r83 originally):
+- Requests/sec: thousands to tens of thousands per variant.
+- Average: sub-millisecond.
+- resp_read: microseconds, no longer 40ms.
+- Histogram: actual variance visible (not all in one bucket).
+
+**Lesson worth noting:**
+
+This is the cost of building from cached memory of API details
+without checking the vendored source. The httplib.h gets curl'd
+to `src/third_party/` during the build; I could have
+`grep -n 'socket_t' src/third_party/httplib.h` (after a build) to
+confirm where the symbol lives. Process improvement: when
+introducing a new API I haven't used in the project before,
+verify symbol locations against the actual vendored source rather
+than trust the namespace I'd expect.
+
+**Anticipated:**
+
+- ~95%: build succeeds, TCP_NODELAY does its job, hey numbers
+  finally reflect real workload performance.
+- ~5%: some other small httplib defaults issue (the layers do
+  go deep). At this point we're getting close enough to baseline
+  TCP that further issues are unlikely.
+
 ---
 
 ## Known divergences from the PRD

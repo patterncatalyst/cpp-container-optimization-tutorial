@@ -220,4 +220,39 @@ no dedicated round needed.
 
 ---
 
+## Cleanup: demo.sh + verification scripts should short-circuit on `compose up` build failure
+
+**Status:** Logged 2026-05-16 in r84. Minor UX cleanup.
+
+When `compose up --build` fails (e.g. due to a compile error in
+src/), the rest of the shell script keeps running. If the script
+then invokes `hey` against ports where no containers ended up
+listening, we get nonsense output like:
+
+```
+Requests/sec: 305945.7232
+Error distribution:
+  [1530012]  dial tcp 127.0.0.1:18601: connect: connection refused
+```
+
+Those numbers are TCP-RST throughput, not workload throughput.
+Confusing if the user isn't reading carefully. Found during r83 →
+r84 sequence when r83's main.cpp had a typo.
+
+Fix: any script that runs `compose up` should `set -e` (or check
+$? explicitly) and exit before any downstream load testing if
+the build/start step fails.
+
+Applies to:
+- `examples/demo-06-memory-and-allocators/compose-serve.yml`'s
+  documented usage (in README, currently a copy-paste sequence;
+  worth making into a wrapper script that bails on build error)
+- Any future verification scripts that combine compose + load
+- The pattern for `demo.sh` in each demo
+
+**Effort estimate:** small, ~30 minutes per script when next
+touched. Not worth a dedicated round.
+
+---
+
 ## (Other backlog items go here as they come up.)

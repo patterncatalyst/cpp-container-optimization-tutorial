@@ -335,7 +335,14 @@ int run_serve_mode(const Args& /*args*/, const demo06::WorkloadParams& params) {
     svr.set_keep_alive_max_count(1000);
     svr.set_keep_alive_timeout(60);
     svr.new_task_queue = [] { return new httplib::ThreadPool(16); };
-    svr.set_socket_options([](httplib::socket_t sock) {
+    // Generic lambda (auto sock) avoids the question of where
+    // `socket_t` lives in any given cpp-httplib version. In v0.16.0
+    // it's declared at global scope (not `httplib::socket_t`); r83's
+    // first attempt got the qualifier wrong. With `auto`, the lambda
+    // becomes a function template and the compiler deduces the
+    // parameter type from httplib's std::function<void(socket_t)>
+    // signature when set_socket_options stores the callback.
+    svr.set_socket_options([](auto sock) {
         int yes = 1;
         setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
         setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
