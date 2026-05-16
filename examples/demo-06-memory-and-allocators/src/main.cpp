@@ -279,6 +279,36 @@ int run_serve_mode(const Args& /*args*/, const demo06::WorkloadParams& params) {
 
     httplib::Server svr;
 
+    // ── httplib config knobs — r82 ───────────────────────────────
+    //
+    // cpp-httplib's defaults are tuned for low-concurrency embedded
+    // use; under any meaningful load they produce surprising
+    // backpressure. The defaults that hurt us:
+    //
+    //   keep_alive_max_count:   5       — each connection retired
+    //                                     after 5 requests, forcing
+    //                                     new TCP setup constantly
+    //   keep_alive_timeout_sec: 5       — idle conns die in 5s,
+    //                                     same churn problem
+    //   ThreadPool size:        hw_concurrency (typically 4-8)
+    //                                   — too small for 50+ hey
+    //                                     workers
+    //
+    // r81's hey output showed the cost: 274ms average response
+    // time for 10µs of actual work, 10-second tail latencies, all
+    // because the listen backlog filled with reopen-storms and TCP
+    // retransmits kicked in.
+    //
+    // The bumps below are conservative — still way under what a
+    // production HTTP server would set, but enough that hey's
+    // default 50 concurrent workers don't trigger pathological
+    // queue thrashing. With these settings, hey -z 5s should
+    // produce throughput numbers that reflect the workload, not
+    // the connection-management overhead.
+    svr.set_keep_alive_max_count(1000);
+    svr.set_keep_alive_timeout(60);
+    svr.new_task_queue = [] { return new httplib::ThreadPool(16); };
+
     svr.Get("/healthz", [](const httplib::Request&, httplib::Response& res) {
         res.set_content("ok", "text/plain");
     });

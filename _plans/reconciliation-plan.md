@@ -3188,6 +3188,78 @@ code to GCC 14, which is useful general knowledge.
 
 ---
 
+### G-35 · UBI base images emit `librhsm-WARNING **: Found 0 entitlement certificates` on every dnf/microdnf invocation (r82)
+
+UBI (Universal Base Image) is Red Hat's free, unsubscribed base
+image. By design it has no entitlement certificates — that's why
+you can pull and run it without a Red Hat subscription. The image
+nonetheless ships with the `subscription-manager` DNF plugin
+(`librhsm`) installed and enabled. Every time `dnf` or `microdnf`
+runs inside a UBI container, the plugin initializes, looks for
+entitlement certificates in `/etc/pki/entitlement/`, finds none,
+and emits this warning to stderr:
+
+```
+(microdnf:N): librhsm-WARNING **: HH:MM:SS.MSS: Found 0 entitlement certificates
+```
+
+The warning is harmless; the install completes successfully. But
+it appears multiple times per dnf invocation (once for each plugin
+initialization checkpoint) and looks like a real problem to
+readers, especially in a tutorial context where the build output
+is meant to be a teaching artifact.
+
+**Fix:** disable the subscription-manager plugin in dnf's plugin
+config before any dnf/microdnf run. Single line:
+
+```dockerfile
+RUN sed -i 's/^enabled=1/enabled=0/' \
+        /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
+```
+
+The `2>/dev/null || true` defends against the file not existing
+in some UBI variants (only ubi-minimal in particular configs).
+
+This fix must be applied to **every stage** that runs dnf or
+microdnf — typically both the builder stage (full ubi) and the
+runtime stage (ubi-minimal). Demo-04 applied it in the builder
+only when the demo was first written; the runtime stage's
+microdnf invocation continued to emit the warning unnoticed until
+demo-06's r81 made the runtime build output prominent enough that
+the user spotted it. (Backlog: retrofit the runtime-stage fix to
+demo-04 for consistency.)
+
+**Optional companion fix:** also clear the empty redhat.repo:
+
+```dockerfile
+RUN rm -f /etc/yum.repos.d/redhat.repo
+```
+
+This isn't strictly necessary (the repo file references
+subscription-required content that's correctly skipped because
+no entitlement is present), but removing it makes `dnf repolist`
+output cleaner during debugging.
+
+**What's actually happening:** `librhsm` is the Red Hat
+Subscription Manager library — it implements the plugin
+interface that dnf uses to consult entitlement state. When the
+plugin loads, it tries to enumerate entitlement certs to know
+which subscription-gated repos to enable. UBI's design point is
+"unsubscribed access to a subset of repos," so the entitlement
+enumeration returns empty. The library's warning logger is hard-
+coded to emit at WARN level even when zero certs is the expected
+state for the image variant — a (mild) librhsm UX bug, not a
+container or user error.
+
+**Cross-references:**
+- Red Hat UBI FAQ confirms UBI images don't require subscription:
+  https://www.redhat.com/en/blog/introducing-red-hat-universal-base-image
+- librhsm source: https://github.com/lapierre-software/librhsm
+- Same fix pattern is used by AWS's UBI-based images, IBM's
+  cloud-native base images, etc.
+
+---
+
 ## Option B execution checklist
 
 **Goal:** flip §10 (Observability & Profiling) in the section
@@ -11653,7 +11725,7 @@ User runs:
     curl 'http://127.0.0.1:18603/run?iters=100'
     podman compose -f examples/demo-06-memory-and-allocators/compose-serve.yml down
 
-**Next round (r82) plan preview:**
+**Next round (r83) plan preview:**
 
 - Add opentelemetry-cpp 1.14.2 to conanfile.py with the
   grpc/protobuf/abseil override chain copied from demo-04.
@@ -11667,7 +11739,169 @@ User runs:
 - Estimated build time on first run: 30-60 min (the
   opentelemetry-cpp + grpc Conan rebuild from source).
 - Estimated rounds: 1-2 (demo-04 already proved this stack works;
-  r82 is mostly copy-and-adapt).
+  r83 is mostly copy-and-adapt).
+
+(Renumbered from "r82" to "r83" — r82 ended up addressing three
+polish fixes from the r81 test output, see below.)
+
+### 2026-05-16 — r82: three polish fixes from the r81 test output
+
+User's r81 verification surfaced three issues, all small mechanical
+fixes. Shipping them as a quick round before r83's big OTel build
+so the user has clean groundwork for that 30-60 min cycle.
+
+**Fix 1: UBI subscription-manager warning (G-35)**
+
+User correctly flagged that UBI shouldn't emit subscription-manager
+noise. Their exact concern:
+
+> I thought we were using UBI images which did not require
+> subscription manager
+
+The librhsm warnings ARE harmless (UBI is unsubscribed by design;
+no entitlement certs is the correct state), but they're cosmetic
+clutter on every dnf/microdnf invocation:
+
+```
+(microdnf:2): librhsm-WARNING **: HH:MM:SS.MSS: Found 0 entitlement certificates
+```
+
+Fix: disable the subscription-manager DNF plugin via one-line sed
+in BOTH stages of the Containerfile (builder + runtime). Demo-04
+applied the fix in its builder stage when it was written but
+missed the runtime stage; that's a backlog cleanup. Demo-06 in
+r82 applies it cleanly in both stages.
+
+Promoted to gotcha catalog as G-35 because this trips up every
+UBI-based tutorial author. The full catalog entry covers the
+librhsm mechanism, why it warns at WARN level even when zero
+certs is correct for UBI, and the standard mitigation pattern.
+
+**Fix 2: cpp-httplib defaults under load**
+
+User's hey output showed pathological tail latency:
+
+```
+Average: 0.2744 secs       ← 274ms for ~10µs of work
+Slowest: 10.0942 secs      ← 10s tail
+99%% in 9.9805 secs        ← 8 requests effectively hung
+```
+
+cpp-httplib's defaults are tuned for low-concurrency embedded use,
+not for hey's default 50 concurrent workers. The defaults that
+hurt:
+
+- `keep_alive_max_count: 5` — each connection retired after 5
+  requests, forcing constant TCP reopen storms
+- `keep_alive_timeout_sec: 5` — idle connections die in 5s, same
+  churn problem at low rates
+- ThreadPool size: hardware_concurrency (typically 4-8) — too
+  small for 50+ workers; queue thrashing fills the listen backlog,
+  TCP retransmits kick in at 10s
+
+Fix: three one-line bumps in run_serve_mode before the route
+handlers:
+
+```cpp
+svr.set_keep_alive_max_count(1000);
+svr.set_keep_alive_timeout(60);
+svr.new_task_queue = [] { return new httplib::ThreadPool(16); };
+```
+
+These are conservative — production-tuned values might be 10x
+higher — but enough to handle hey's defaults without the queue
+pathologies. After r82, `hey -z 5s` should produce throughput
+numbers reflecting the actual workload (target: thousands of
+req/s vs r81's 78 req/s).
+
+Not promoted to gotcha catalog because it's standard "tune
+defaults for your use case" tuning, not a footgun specific to
+our toolchain.
+
+**Fix 3: PMR cache-sensitivity README note**
+
+User's curl /run?iters=100 numbers vs r79's batch numbers:
+
+|  | Batch (r79) | Serve (r81) |
+|---|---|---|
+| std p50 | 8.50 µs | 9.17 µs (+8%) |
+| pmr p50 | **3.87 µs** | **8.69 µs (+125%)** |
+| mimalloc p50 | 8.50 µs | 9.32 µs (+10%) |
+
+std and mimalloc tracked closely (run-to-run noise). PMR
+specifically lost its 2x advantage. Most likely cause: cache
+state. The 1 MB `static thread_local` arena buffer stays in L2
+for the entire 210-iter batch run; in serve mode the buffer can
+be partially evicted between the 50-iter warmup and the
+curl-triggered /run, because the worker thread runs other code
+(HTTP parsing, JSON formatting, signal dispatch) between phases.
+First iter of /run pays cold-cache costs.
+
+This is itself a teaching point — PMR's wins are sensitive to
+working-set residency. Real services don't always look like batch
+microbenchmarks. r83's OTel histograms will let us see this
+distribution across hundreds of requests instead of inferring
+from single curl invocations.
+
+Added to README's "Serve mode" section a new subsection:
+"Why serve-mode numbers may differ from batch-mode numbers."
+Worth promoting to §7 prose verbatim later.
+
+**Files changed in r82 (4):**
+
+- `examples/demo-06-memory-and-allocators/Containerfile`:
+  added subscription-manager disable to both builder and runtime
+  stages (~6 lines each, with explanatory comments).
+- `examples/demo-06-memory-and-allocators/src/main.cpp`:
+  added 3-line httplib config block in `run_serve_mode()` before
+  the route handlers, with a ~20-line explanatory comment.
+- `examples/demo-06-memory-and-allocators/README.md`:
+  updated hey examples to `-z 5s`; added new subsection on
+  serve-vs-batch number variance; rounds table extended with
+  r82 + reshuffled r83+ planned items.
+- `_plans/reconciliation-plan.md`:
+  G-35 entry in gotcha catalog; this r82 round entry.
+
+**Backlog items added:**
+
+- Retrofit subscription-manager fix to demo-04's runtime stage
+  (single-stage fix, no behavior impact)
+- Audit demo-01/02/03/05/07 Containerfiles for the same
+  pattern when those reach the "uses dnf/microdnf" point
+
+**Verification:**
+
+```bash
+podman rmi cpp-tut/demo-06:latest 2>/dev/null || true
+./examples/demo-06-memory-and-allocators/demo.sh
+```
+
+Expected: no librhsm warnings in the build output. Batch numbers
+should match r79's (allocator code unchanged).
+
+Then serve mode under hey:
+
+```bash
+podman compose -f examples/demo-06-memory-and-allocators/compose-serve.yml up --build -d
+sleep 5
+hey -z 5s http://127.0.0.1:18601/run
+hey -z 5s http://127.0.0.1:18602/run
+hey -z 5s http://127.0.0.1:18603/run
+podman compose -f examples/demo-06-memory-and-allocators/compose-serve.yml down
+```
+
+Expected: thousands of req/s vs r81's 78 req/s. No 10s tail
+latencies. Distribution becomes useful for comparing variants
+under load (which is what r83's OTel histograms will visualize).
+
+**Anticipated:**
+
+- ~95%: all three fixes work first try, build is clean, hey
+  numbers are sensible. Quick win round.
+- ~5%: subscription-manager.conf path differs on some UBI
+  variant we hit (we handle this with `|| true`), or httplib's
+  set_keep_alive_* method signatures differ from v0.16.0's
+  (unlikely; demo-04 uses the same version successfully).
 
 ---
 

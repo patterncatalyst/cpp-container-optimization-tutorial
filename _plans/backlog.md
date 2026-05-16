@@ -170,4 +170,54 @@ wants it included, or be a standalone post-PPTX round.
 
 ---
 
+## Cleanup: retrofit subscription-manager disable to demo-04's runtime stage
+
+**Status:** Logged 2026-05-16 in r82. Small, mechanical, no behavior
+impact, but worth doing for consistency.
+
+Demo-04's Containerfile applies the subscription-manager DNF plugin
+disable in its BUILDER stage (lines 8-12) but not its RUNTIME stage
+(lines 130+). So `microdnf install libstdc++` during the runtime
+image build still emits `librhsm-WARNING **: Found 0 entitlement
+certificates` — same as demo-06 did before r82.
+
+Demo-06's r82 fixed this in both stages cleanly. Demo-04 needs the
+same one-line addition in its runtime stage.
+
+**Effort estimate:** single-file edit, single commit, ~5 minutes.
+No build difference (the warning is cosmetic), so no verification
+needed beyond "image still builds clean."
+
+**Pull-in trigger:** any future demo-04 round, or batched with
+demo-01/02/03 audit when those reach the dnf/microdnf usage point.
+
+See G-35 in `_plans/reconciliation-plan.md` for the full mechanism
+discussion.
+
+---
+
+## Audit: same subscription-manager pattern in demos 01/02/03/05/07
+
+**Status:** Logged 2026-05-16 in r82. Companion to the demo-04
+cleanup above.
+
+When demos 01/02/03/05/07 are built out (some are stubs, some are
+shipped earlier rounds), their Containerfiles should be audited for
+the same subscription-manager plugin disable pattern. Apply to BOTH
+builder and runtime stages.
+
+Current state by demo:
+- demo-01: shipped, status unknown — audit when next touched
+- demo-02: shipped, status unknown — audit when next touched
+- demo-03: shipped, status unknown — audit when next touched
+- demo-04: shipped, builder-only fix (see cleanup above)
+- demo-05: stub, will get the fix when built out
+- demo-06: shipped, both stages fixed in r82 ✓
+- demo-07: stub, will get the fix when built out
+
+**Effort estimate:** lumps naturally with each demo's next touch;
+no dedicated round needed.
+
+---
+
 ## (Other backlog items go here as they come up.)

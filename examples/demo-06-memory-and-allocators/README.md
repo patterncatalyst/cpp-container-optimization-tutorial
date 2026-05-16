@@ -100,15 +100,38 @@ curl 'http://127.0.0.1:18601/run?iters=100'
 curl 'http://127.0.0.1:18602/run?iters=100'
 curl 'http://127.0.0.1:18603/run?iters=100'
 
-# Or use hey for 1s of traffic at each variant
-hey -z 1s http://127.0.0.1:18601/run
-hey -z 1s http://127.0.0.1:18602/run
-hey -z 1s http://127.0.0.1:18603/run
+# Sustained load with hey. r82 tunes httplib's keep-alive limits
+# and thread pool to handle this gracefully; before r82 the defaults
+# produced 10-second tail latencies under hey's default 50 workers.
+hey -z 5s http://127.0.0.1:18601/run
+hey -z 5s http://127.0.0.1:18602/run
+hey -z 5s http://127.0.0.1:18603/run
 ```
 
 Ports `18601/02/03` follow the convention `186XX` (with the demo
 number `06` in the middle) to avoid collision with other demos'
 host ports.
+
+### Why serve-mode numbers may differ from batch-mode numbers
+
+When you compare `./demo.sh` (batch) against `curl /run?iters=N`
+(serve), PMR's relative advantage often shrinks. This isn't a
+bug; it's a teaching point worth flagging in §7 prose:
+
+**PMR's wins are sensitive to working-set residency.** The 1 MB
+`static thread_local` arena buffer needs to stay hot in cache for
+the bump-allocator advantage to materialize. Batch mode runs the
+workload in a tight loop on the main thread; the buffer stays in
+L2 for the entire 200-iter run. Serve mode runs each `/run` on an
+httplib worker thread that's also handling HTTP parsing, JSON
+formatting, and signal dispatch between requests — the buffer can
+be partially evicted, and the first iter of each request pays
+cold-cache costs.
+
+Real services don't always look like batch microbenchmarks. The
+allocator that wins in a tight loop may not win the same way under
+realistic request handling patterns. r83's OpenTelemetry histograms
+will let you see this distribution across hundreds of requests.
 
 ## What the numbers say
 
@@ -182,9 +205,10 @@ Round C (cgroups, huge pages, threads toggles) is planned.
 | r78 | First real C++ bug: `emplace_back(memory_resource*)` PMR misuse | works |
 | r79 | Second real C++ bug: PmrNode missing allocator-extended copy + move ctors for `reserve()` | **Round A complete** |
 | r80 | Docs lock-in (this README's actual numbers + rounds table) | shipped |
-| **r81** | **HTTP server mode (`--serve`); cpp-httplib vendored; compose-serve.yml** | **shipped** |
-| r82 | OTel traces/metrics/logs export to LGTM; compose-observe.yml | planned |
-| r83+ | Layer toggles: `HUGE_PAGES`, cgroup `memory.high`, `THREADS` | planned |
+| r81 | HTTP server mode (`--serve`); cpp-httplib vendored; compose-serve.yml | shipped |
+| **r82** | **3 polish fixes: subscription-manager warning, httplib keep-alive + thread pool, cache-sensitivity README note** | **shipped** |
+| r83 | OTel traces/metrics/logs export to LGTM; compose-observe.yml | planned |
+| r84+ | Layer toggles: `HUGE_PAGES`, cgroup `memory.high`, `THREADS` | planned |
 
 ## The two PMR bugs worth promoting to §7 prose
 

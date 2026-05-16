@@ -29,6 +29,16 @@
 
 FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
 
+# UBI w/o entitlement: silence the subscription-manager plugin. UBI
+# is free and unsubscribed by design; the librhsm warning about
+# "0 entitlement certificates" is harmless but noisy on every
+# microdnf/dnf invocation. Disabling the plugin removes the noise
+# without affecting functionality. Free UBI repos in ubi.repo
+# stay enabled and dnf install works normally.
+RUN rm -f /etc/yum.repos.d/redhat.repo && \
+    sed -i 's/^enabled=1/enabled=0/' \
+        /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
+
 RUN dnf install -y --quiet --setopt=install_weak_deps=False \
         gcc-toolset-14 \
         cmake ninja-build git python3-pip \
@@ -87,6 +97,13 @@ RUN cmake -S . -B build -G Ninja \
 # select which to exec.
 # ════════════════════════════════════════════════════════════════════════
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
+
+# Same UBI-without-entitlement warning suppression as the builder
+# stage. ubi-minimal ships microdnf which uses the same plugin
+# config path; disabling the plugin here keeps the runtime stage's
+# microdnf install output clean.
+RUN sed -i 's/^enabled=1/enabled=0/' \
+        /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
 
 RUN microdnf install -y --setopt=install_weak_deps=0 \
         libstdc++ \
