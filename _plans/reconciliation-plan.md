@@ -11408,6 +11408,116 @@ Or with formal pass/fail:
 
     ./scripts/test-demo-06-memory-and-allocators.sh
 
+### 2026-05-16 — r80: demo-06 Round A complete — first clean run + docs lock-in
+
+**Demo-06 Round A (the toolchain proof) is complete.** After 9
+rounds, all three binaries build, all three run, all three
+produce identical result hashes (the cross-variant correctness
+invariant holds), and the comparison table is real teaching
+material.
+
+Measured numbers from a 200-iter run, single-threaded, on a
+typical developer laptop:
+
+| Variant | min µs | p50 µs | p99 µs | max µs | throughput/s |
+|---|---|---|---|---|---|
+| std::allocator | 8.33 | 8.50 | 13.55 | 17.19 | 115,835 |
+| std::pmr (monotonic+sync_pool) | **3.81** | **3.87** | 16.06 | 40.43 | **169,620** |
+| mimalloc | 8.46 | 8.50 | 25.35 | 26.96 | 114,013 |
+
+All variants: `result_hash = 0xac09f54afe8c6152`.
+
+**What r80 does:**
+
+This is a documentation-only round capturing the toolchain proof
+outcome before we move on to Round B (HTTP + OTel) or other demos:
+
+1. Demo-06's README: replaced placeholder output block with
+   actual measured numbers; added a "What the numbers say"
+   section with the three pedagogical takeaways (PMR wins the
+   common case, PMR's tail is worse, mimalloc is invisible at
+   this scale).
+
+2. Demo-06's README rounds table: completed with r75-r79 entries
+   and Round A marked complete.
+
+3. Demo-06's README adds a "Two PMR bugs worth promoting to §7
+   prose" section documenting the r78 and r79 bugs with code
+   samples. Future §7 prose can reference this section directly.
+
+4. Fixed a count mistake in the README's jemalloc paragraph: it
+   said "After three rounds (r71-r74)" — that's four rounds.
+
+5. This plan entry captures the Round A completion checkpoint.
+
+**No code changes in r80.** The user's r79 build is the source of
+truth; this round just locks in the documentation.
+
+**Pedagogical takeaways from the 9-round Round A journey:**
+
+This is meta-content for §7 prose itself — the journey IS the
+lesson:
+
+1. **"Is this dep necessary?" should fire at 2-3 rounds of
+   no-convergence on a single dep** (r75 decision to drop
+   jemalloc). Codified earlier in the session; vindicated here.
+
+2. **Build infrastructure errors look catastrophic but are local
+   noise.** r71-r77 looked like deep, scary errors but were all
+   build-system-layer issues with mechanical fixes once
+   diagnosed. The actual C++ code only needed two fixes (r78,
+   r79).
+
+3. **PMR is a real-world stumbling block.** The r78 and r79 bugs
+   are exactly what teams hit in production. They look like
+   compile errors deep in template instantiation but distill to
+   two simple rules:
+   - Don't pass `memory_resource*` to element constructors; let
+     the vector inject its allocator.
+   - Provide all three allocator-extended constructors (default,
+     copy, move) for any allocator-aware type.
+
+4. **Cross-variant hash agreement is a powerful test.** The hash
+   check confirms allocator choice is invisible at the
+   application layer. If the std variant produced `0xabc` and
+   the PMR variant produced `0xdef`, we'd know there was a bug
+   in the PMR tree-building logic (most likely place for type
+   subtleties). It passed on first clean run, which is reassuring.
+
+5. **Honest numbers beat marketing.** PMR is faster on average
+   but has worse tail; mimalloc is invisible at this scale.
+   These aren't the "PMR is 4x faster than malloc!" numbers an
+   audience might expect from a marketing-driven talk. The
+   measured story is more nuanced and more useful.
+
+**Next round options (for user to choose):**
+
+- **r81 — Demo-06 Round B (HTTP + OTel observability layer):**
+  Copy demo-04's instrumentation pattern. Adds HTTP server entry
+  point, OTel traces/metrics/logs export. Estimated 2-3
+  sub-rounds. Result: demo-06 reaches Grafana like demo-04 does.
+  Useful for §10 (Observability) integration.
+
+- **r81 — Demo-06 Round C (layer toggles):** `HUGE_PAGES`,
+  `MEMORY_HIGH` (cgroup), `THREADS`. Estimated 2-3 sub-rounds.
+  More direct §7 + §11 content; less observability glue.
+
+- **r81 — Demo-05 isolation build-out:** Currently a stub. 4-7
+  sub-rounds. Covers cgroups v2, NUMA, CPU pinning, QoS classes
+  per §11.
+
+- **r81 — Demo-07 quality pipeline + §12 prose:** Currently a
+  stub. cppcheck + static analysis. Estimated 3-5 sub-rounds.
+
+- **r81 — Section prose buildout:** §4, §5, §7, §8, §11, §13,
+  §14, §15. No code, lots of writing, would benefit from being
+  done with demo-06 + demo-07 working as reference material.
+
+Recommended ordering for max teaching value: complete demo-06
+Round B (HTTP + OTel) first since it makes the demo reachable by
+the rest of the LGTM stack like demo-04. Then demo-05. Then
+demo-07. Then prose.
+
 ---
 
 ## Known divergences from the PRD

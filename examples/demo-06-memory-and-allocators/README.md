@@ -16,7 +16,7 @@ the comparison about allocator behavior rather than parser
 optimization.
 
 > **About jemalloc:** the original plan included jemalloc as a
-> fourth variant. After three rounds (r71-r74) of attempted
+> fourth variant. After four rounds (r71-r74) of attempted
 > toolchain integration, we judged the cost/benefit had shifted
 > away from including it: GCC 14's stricter C conformance vs
 > jemalloc 5.3.1's pre-2024 source code, combined with multiple
@@ -37,25 +37,58 @@ optimization.
 First build is ~3-5 minutes on a clean cache (mimalloc's CMake
 build is fast). Cached: ~30 seconds (just our app code).
 
-Output: a comparison table.
+Output: a comparison table. The numbers below are from a real
+single-threaded run on a typical developer laptop (your numbers
+will vary with CPU, frequency scaling, and the cache state, but
+the *relative ordering* is reproducible):
 
 ```
+==> Running 3 variants × 200 iterations
+    depth=6 branch=4 values=8
+
 ==> Comparison table
-
-Variant                            min µs     p50 µs     p99 µs     max µs    throughput/s   result_hash
+Variant                            min µs    p50 µs    p99 µs    max µs    throughput/s   result_hash
 ────────────────────────────────  ──────────  ──────────  ──────────  ──────────  ───────────────   ──────────────────
-std::allocator                     ... µs     ... µs     ... µs     ... µs        ...K     0x...
-std::pmr (monotonic+sync_pool)     ... µs     ... µs     ... µs     ... µs        ...K     0x...
-mimalloc                           ... µs     ... µs     ... µs     ... µs        ...K     0x...
+std::allocator                       8.33      8.50     13.55     17.19        115,835   0xac09f54afe8c6152
+std::pmr (monotonic+sync_pool)       3.81      3.87     16.06     40.43        169,620   0xac09f54afe8c6152
+mimalloc                             8.46      8.50     25.35     26.96        114,013   0xac09f54afe8c6152
 
-==> Sanity: all variants produced the same hash (0x...)
+==> Sanity: all variants produced the same hash (0xac09f54afe8c6152)
 ```
 
 The `result_hash` agreement is the correctness check: the workload
-is supposed to produce identical output regardless of which allocator
-is used. Allocator choice should be invisible at the application
-layer; if hashes diverge, there's a bug in the PMR path (the most
-likely place for type subtleties to creep in).
+is supposed to produce identical output regardless of which
+allocator is used. Allocator choice should be invisible at the
+application layer; if hashes diverge, there's a bug in the PMR
+path (the most likely place for type subtleties to creep in).
+
+## What the numbers say
+
+Reading the table above as a teaching artifact for §7 prose:
+
+**PMR wins decisively on the common case.** 45% faster p50, ~47%
+more throughput. Bump allocation in a monotonic buffer is
+unbeatable for this access pattern: many small allocations within
+a tight time window, all freed together via arena reset. Instead
+of N individual frees on iteration exit, the entire arena resets
+in O(1).
+
+**PMR's tail is worse.** p99 16µs vs std's 13.55µs, max 40µs vs
+17µs. The arena reset is doing batch work that occasionally
+spikes — a classic latency-vs-throughput tradeoff. **PMR isn't a
+free win**; you trade some predictability for substantial average-
+case speed. Honest teaching material: don't promise audiences
+that PMR is universally faster.
+
+**mimalloc is essentially indistinguishable from std::allocator
+here.** Not a defect; expected behaviour. mimalloc shines on
+multi-threaded workloads (per-thread heaps, lock-free
+free-list management), larger allocations (better huge-page
+handling), and longer-lived heaps (better fragmentation
+resistance). For our single-threaded short-lived tree builder,
+the malloc geometry is comparable to glibc's. If you're going to
+switch your service from glibc to mimalloc, profile YOUR workload
+first.
 
 ## Workload design
 
@@ -84,9 +117,9 @@ Why this shape:
 
 ## Scope per round
 
-This demo is being built incrementally. r71-r75 covered the
-toolchain proof; the full LGTM-wired, multi-layered version
-lands across r76+.
+This demo is being built incrementally. Round A (the toolchain
+proof, r71-r79) is complete; Round B (HTTP + OTel observability)
+and Round C (cgroups, huge pages, threads toggles) are planned.
 
 | Round | What's in | Status |
 |---|---|---|
@@ -94,10 +127,51 @@ lands across r76+.
 | r72 | jemalloc chmod-retry workaround (G-33) | partial — got past configure but make failed |
 | r73 | jemalloc GCC 14 ENV CFLAGS attempt (G-34) | failed — env shadowed by Conan toolchain |
 | r74 | jemalloc GCC 14 conf-mechanism attempt | failed — same compile errors |
-| **r75** | 3-way binary build (std + PMR + mimalloc), workload, demo.sh comparison | **shipped (current)** |
-| r76 | HTTP server entry point + OTel traces/metrics/logs → LGTM | planned |
-| r77 | Layer toggles: `HUGE_PAGES`, cgroup `memory.high`, `THREADS` | planned |
-| r78+ | Verify all 3×3 combinations; document findings in §7 prose | planned |
+| r75 | 3-way drop jemalloc, ship std + PMR + mimalloc | `conan install` clean |
+| r76 | mimalloc CMake target name `mimalloc-static` not `mimalloc::*` | works |
+| r77 | `--whole-archive` inline in target_link_libraries; mimalloc-static is INTERFACE not STATIC | works |
+| r78 | First real C++ bug: `emplace_back(memory_resource*)` PMR misuse | works |
+| **r79** | **Second real C++ bug: PmrNode missing allocator-extended copy + move ctors for `reserve()`** | **shipped — toolchain proof complete** |
+| r80+ | HTTP server entry point + OTel traces/metrics/logs → LGTM | planned |
+| r80+ | Layer toggles: `HUGE_PAGES`, cgroup `memory.high`, `THREADS` | planned |
+
+## The two PMR bugs worth promoting to §7 prose
+
+Demo-06's debugging journey (r78 + r79) surfaced two PMR mistakes
+that show up constantly in production code:
+
+**Mistake #1: `emplace_back(memory_resource*)` thinking it threads
+the resource** (r78). The PMR vector's `uses_allocator` machinery
+already injects its own allocator into the new element's
+constructor. Calling `emplace_back(mr)` makes the vector try
+`PmrNode(mr, allocator)` — two arguments — which doesn't match
+PmrNode's `PmrNode(allocator_type)` one-arg constructor. Compile
+error: *"construction with an allocator must be possible if
+uses_allocator is true."*
+
+Fix: just call `emplace_back()` with no args. The vector injects
+its allocator. Don't thread `mr` manually.
+
+**Mistake #2: Forgetting allocator-extended copy and move
+constructors** (r79). A type is properly allocator-aware only if
+it provides all three:
+
+```cpp
+PmrNode(allocator_type)                    // default + allocator
+PmrNode(const PmrNode&, allocator_type)    // copy    + allocator
+PmrNode(PmrNode&&,      allocator_type)    // move    + allocator (noexcept)
+```
+
+With only the first one, `emplace_back()` works but `reserve()`
+fails the moment the vector needs to grow its buffer — it can't
+move existing elements into the new storage with the right
+allocator. The symptom is often delayed: small inputs work
+because reserve is a no-op, then production data triggers the
+grow and the static_assert fires.
+
+Together these two cover the majority of "I tried PMR and it
+didn't work" reports. Each is now a worked example in this
+demo's source.
 
 ## Source materials this demo deepens
 
