@@ -19074,6 +19074,126 @@ Things that might surprise on first run:
 3. genhtml's "no source file at X" warnings for files that lcov's
    filter didn't catch — `--ignore-errors source` lets it proceed.
 
+### 2026-05-17 — r127.1: G-55 — lcov-1.14 needs perl(JSON) explicitly
+
+User ran r127. Toolchain dnf install failed:
+
+```
+Error:
+ Problem: conflicting requests
+  - nothing provides perl(JSON) needed by lcov-1.14-6.el9.noarch from epel
+```
+
+**The shape of the problem.**
+
+`lcov-1.14` (EPEL 9) declares `Requires: perl(JSON)`. dnf searches all
+enabled repos for a package that has `Provides: perl(JSON) = X.Y` and
+finds nothing.
+
+The provider is the `perl-JSON` package. It exists in EPEL 9 — the
+question is why dnf doesn't auto-resolve to it. Two compounding
+factors:
+
+1. **UBI 9 vs RHEL 9 repo divergence** — UBI 9's mirror of EPEL/CRB
+   is a subset of what RHEL gets. We saw this exact shape before in
+   G-47 (elfutils-devel not in UBI CRB even though it's in RHEL CRB)
+   and G-46 (libabigail not in UBI EPEL even though it's in RHEL EPEL).
+   For G-55, perl-JSON appears to be in the same gap — present as a
+   transitive resolution target name but not reachable for auto-
+   resolution from UBI's repo set.
+
+2. **`install_weak_deps=False` may also play a role** — though strict
+   Requires should still resolve regardless of this flag. The flag's
+   intent is to skip Recommends/Suggests; it shouldn't affect hard
+   Requires. So this factor is suspected but not confirmed.
+
+**The fix (simplest, lowest-risk first attempt).**
+
+Add `perl-JSON` to the explicit install list. This makes dnf attempt
+to install the package by name rather than searching for the abstract
+`perl(JSON)` symbol.
+
+```dockerfile
+RUN dnf install -y --setopt=install_weak_deps=False \
+        ... \
+        lcov \
+        perl-JSON \
+        ... \
+```
+
+If `perl-JSON` IS reachable from UBI 9 + EPEL 9 (just not pulled in
+auto), this works trivially. If it's NOT reachable, the next dnf
+error will be `Error: Nothing to do` or `No match for package`, and
+we'll have a clean signal to pivot.
+
+**Pivot options if perl-JSON also isn't findable:**
+
+| Option | Cost | When to choose |
+|---|---|---|
+| Multi-stage `lcov-builder` from Stream 9 (like libabigail-builder) | 2 hours | If UBI 9 repos genuinely lack lcov + deps |
+| Swap to `gcovr` (Python-based, in EPEL 9) | 1 hour | If we want simpler dep chain regardless |
+| Install lcov from upstream tarball + cpan for perl-JSON | 3 hours | Last resort |
+
+For r127.1 we try the simplest path. If r127.2 is needed we revisit.
+
+**G-55 captured below.**
+
+**Files changed in r127.1 (1):**
+- `examples/demo-07-quality-pipeline/Containerfile`: one line addition
+  — `perl-JSON` to the toolchain dnf install list
+
+---
+
+## Gotchas (running catalog) — continued
+
+### G-55 · UBI 9 EPEL: `lcov`'s perl deps aren't auto-resolved (r127.1)
+
+**Symptom.** `dnf install lcov` fails with:
+
+```
+Error:
+ Problem: conflicting requests
+  - nothing provides perl(JSON) needed by lcov-1.14-6.el9.noarch from epel
+```
+
+The package `perl-JSON` (which provides `perl(JSON)`) IS in EPEL 9
+upstream, but UBI 9's mirror or some interaction with
+`--setopt=install_weak_deps=False` prevents dnf from auto-resolving
+the abstract `perl(JSON)` symbol.
+
+**Cause.** UBI 9 repo content is a Red Hat-curated subset of RHEL 9 +
+EPEL 9. Some packages that exist in RHEL EPEL are not in UBI's mirror,
+or are present but require additional dep resolution that auto-
+resolution misses. The lcov-perl chain is one such gap.
+
+**Fix.** Install `perl-JSON` explicitly by package name alongside
+`lcov`:
+
+```dockerfile
+dnf install lcov perl-JSON ...
+```
+
+This skips dnf's abstract-symbol resolution step (which fails) and
+goes directly to the named package (which succeeds). Same fix pattern
+as RHEL 8's perl-Date-Calc + perl-NetAddr-IP issues that bit
+EPrints/Centreon installs years ago.
+
+**Where else this applies.** Any UBI 9-derived image installing
+EPEL Perl packages with abstract module dependencies. Common
+victims (perl modules that EPEL packages may depend on but UBI
+won't auto-resolve):
+- `perl(JSON)` → install `perl-JSON`
+- `perl(JSON::XS)` → install `perl-JSON-XS` (also EPEL)
+- `perl(MIME::Lite)` → install `perl-MIME-Lite` + `perl-MIME-Types`
+- `perl(XML::Simple)` → install `perl-XML-Simple` (mostly fine)
+
+When in doubt, install perl modules by explicit package name
+(`perl-Foo`) rather than relying on abstract symbol resolution.
+
+**Pattern to capture in §11/§13 prose:** "UBI 9 is curated. When EPEL
+auto-resolution fails, name the package directly. dnf doesn't need
+to find the symbol if it has the explicit package."
+
 ---
 
 ## Known divergences from the PRD
