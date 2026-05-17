@@ -77,6 +77,17 @@ ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64:/usr/local/lib
 # ---- build stage ----
 FROM toolchain AS build
 WORKDIR /src
+
+# HERMETIC_NONCE: a cache-buster ARG used by ./demo.sh --hermetic-check.
+# Passing different values via --build-arg forces this layer (and every
+# layer that depends on it) to re-execute, even when source + lockfile
+# are identical. This lets the demo rebuild from scratch twice without
+# touching the toolchain layers above. The value has NO effect on the
+# resulting binary; it's consumed only to invalidate the cache key.
+# See _docs/13-reproducibility-abi.md for the workflow.
+ARG HERMETIC_NONCE=0
+RUN echo "hermetic nonce: ${HERMETIC_NONCE}" > /tmp/.hermetic-nonce
+
 COPY conanfile.py CMakeLists.txt CMakePresets.json .clang-tidy ./
 COPY src/ ./src/
 COPY tests/ ./tests/

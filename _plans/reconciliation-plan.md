@@ -19637,8 +19637,147 @@ reader doesn't have to look it up.
 | r127.2 | G-55 pivot — gcovr | shipped + verified |
 | r127-docs | §12 reading coverage output | shipped |
 | r128 | `--demo-findings` flag | shipped + verified |
-| **r128.1** | **clang-tidy `-quiet` flag — drop preamble** | **this round** |
-| r129 | Hermetic build comparison | next (final Round B item) |
+| r128.1 | clang-tidy `-quiet` polish | shipped + verified (35× smaller) |
+| **r129** | **Hermetic build comparison — `--hermetic-check`** | **this round** |
+
+### 2026-05-17 — r129: `--hermetic-check` flag (byte-identical rebuild verification)
+
+User completed r128.1 with 35× reduction in clang-tidy.txt noise.
+Now the last big Round B item.
+
+**The pedagogical goal.**
+
+Demo-07's prior demos cover the supply-chain *defense* angle —
+analyzers gate, ABI gate, coverage measures, sanitizers catch. r129
+adds the supply-chain *verification* angle: prove the build is
+actually reproducible by building it twice and comparing the bytes.
+
+This connects directly to §13's existing prose on Konflux + Cachi2.
+The big-shop answer is hermetic CI infrastructure; the laptop answer
+is build twice, sha256sum, compare. Both are useful; the laptop test
+is what readers can run today.
+
+**The HERMETIC_NONCE cache-invalidation trick.**
+
+Podman's layer cache is content-addressable: cache key = hash of the
+instruction + inputs. Same inputs → cache hit, no rebuild. To force
+a re-execute *without changing real inputs*, we add a no-op ARG + RUN
+pair:
+
+```dockerfile
+FROM toolchain AS build
+WORKDIR /src
+ARG HERMETIC_NONCE=0
+RUN echo "hermetic nonce: ${HERMETIC_NONCE}" > /tmp/.hermetic-nonce
+COPY src/ ./src/
+# ... real build
+```
+
+Different `--build-arg HERMETIC_NONCE=$(date +%s%N)` values produce
+different cache keys at the ARG/RUN pair, forcing every downstream
+layer to re-execute. The arg's value never enters the compiled binary
+— it's written only to `/tmp/.hermetic-nonce`, which is not in any
+image we extract from. So:
+
+- Toolchain layers stay cached (~90% of total build time avoided)
+- build, analyzer, abi, svc stages all re-execute (the part we want
+  to test)
+- The compiled binaries should be identical despite independent builds
+  — that's what we verify
+
+**The script workflow (in demo.sh --hermetic-check).**
+
+```
+1. Generate two timestamps as distinct HERMETIC_NONCE values
+2. podman build --build-arg HERMETIC_NONCE=$nonce1 --target svc -t hermetic-1
+3. podman build --build-arg HERMETIC_NONCE=$nonce2 --target svc -t hermetic-2
+4. podman cp /app/demo07-svc + /usr/local/lib/libdemo07_channel.so.1.0.0
+   from both images
+5. sha256sum compare
+6. If match: print VERIFIED message
+7. If differ: print first 20 differing byte offsets via cmp -l,
+   plus diagnostic ladder pointing at the usual suspects
+```
+
+**Expected first-run outcome.**
+
+With our containerized build (constant /src WORKDIR, pinned toolchain,
+no network during compile), the build SHOULD be hermetic out of the
+box. We're not yet adding `-ffile-prefix-map` or `SOURCE_DATE_EPOCH`
+flags because the container path constancy obviates them. If verified
+hermetic on first run, that's a strong pedagogical signal: containers
+plus a sane build setup are enough; you don't need explicit determinism
+flags to get reproducibility.
+
+If NOT hermetic on first run, the failure message guides toward the
+fixes. Most likely culprits:
+1. `__DATE__`/`__TIME__` in channel.cpp or main.cpp (we should check
+   first — they're not in channel.cpp, but main.cpp may have them
+   for service startup logging)
+2. .note.gnu.build-id varying (gcc + binutils 14 should produce
+   deterministic build-id from same inputs, but worth confirming)
+3. Parallel `cmake --build -j$(nproc)` ordering (Ninja IS deterministic
+   given same input, so this shouldn't bite, but listed for
+   completeness)
+
+**Files changed (3):**
+
+1. `examples/demo-07-quality-pipeline/Containerfile`
+   - Added `ARG HERMETIC_NONCE=0` + `RUN echo ... > /tmp/.hermetic-nonce`
+     immediately after `WORKDIR /src` in the build stage
+   - Comment block above explaining what the ARG does and why it
+     has no effect on the compiled binary
+
+2. `examples/demo-07-quality-pipeline/demo.sh`
+   - New flag `--hermetic-check`, `DO_HERMETIC_CHECK` variable
+   - Usage line in header comment
+   - Full workflow block:
+     * Two builds with distinct timestamp-nanosecond nonces
+     * `podman cp` extracts demo07-svc + libchannel.so from both
+     * SHA-256 comparison loop over both artifacts
+     * Pass → print VERIFIED message + link to §13 for context
+     * Fail → print `cmp -l` first 20 differing offsets + diagnostic
+       ladder pointing at 5 common culprits
+   - Added `hermetic-1` and `hermetic-2` images to --clean
+
+3. `_docs/13-reproducibility-abi.md`
+   - New section "Testing hermeticity locally — ./demo.sh
+     --hermetic-check" inserted between "Hermetic CI — Konflux and
+     Cachi2" and "Tests as a build-stage quality gate"
+   - Covers:
+     * The build-twice-compare-bytes workflow
+     * The HERMETIC_NONCE trick (with Containerfile snippet inline)
+     * What "pass" output looks like
+     * Why containers do most of the work (constant /src, pinned
+       compiler, env reset per build) — table of three properties
+     * Pointer to existing "Production diagnostic" section for
+       failure cases
+     * Framing: this complements Konflux/Cachi2 (prevention via
+       infrastructure) with verification via comparison
+
+**Expected timing.**
+
+- Build 1: ~30 seconds (toolchain cached, build+analyzer+abi+svc re-run)
+- Build 2: ~30 seconds (same cache state after build 1)
+- Extract + sha256sum: <2 seconds total
+- Total: ~60 seconds
+
+**Round B status — r129 = Round B complete:**
+
+| Round | Item | Status |
+|---|---|---|
+| r125 | Housekeeping + `--abi-bless` | shipped + verified |
+| r126 | `--abi-break-demo` flag | shipped + verified |
+| r126-docs | §12 reports/ explainer | shipped |
+| r127.2 | G-55 pivot — gcovr | shipped + verified |
+| r127-docs | §12 reading coverage output | shipped |
+| r128 | `--demo-findings` flag | shipped + verified |
+| r128.1 | clang-tidy `-quiet` polish | shipped + verified |
+| **r129** | **`--hermetic-check` flag** | **this round** |
+
+After r129 verifies (or after the iteration to fix non-hermeticity if
+any): **Path F (PPTX rendering 14 sections + appendix)** — the final
+deliverable for the project.
 
 ---
 

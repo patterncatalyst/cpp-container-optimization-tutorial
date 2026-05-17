@@ -17,6 +17,13 @@
 #                            # channel.cpp; run analyzers WITHOUT gating;
 #                            # show what cppcheck + clang-tidy catch; restore.
 #                            # Pedagogical only — does NOT modify the repo.
+#   ./demo.sh --hermetic-check
+#                            # build demo07-svc twice from clean state (forces
+#                            # cache invalidation via HERMETIC_NONCE arg);
+#                            # extract demo07-svc + libdemo07_channel.so from
+#                            # both builds; SHA-256 compare. Pass means the
+#                            # build is reproducible. Fail prints diagnostic
+#                            # ladder. See _docs/13-reproducibility-abi.md.
 #   ./demo.sh --coverage-gcc # build with gcov instrumentation, run tests,
 #                            # generate lcov HTML report at
 #                            # reports/coverage-gcc/index.html
@@ -37,6 +44,7 @@ DO_CLEAN=0
 DO_ABI_BLESS=0
 DO_ABI_BREAK_DEMO=0
 DO_DEMO_FINDINGS=0
+DO_HERMETIC_CHECK=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --analyze-only)    PHASES=(analyzer);    shift;;
@@ -47,6 +55,7 @@ while [[ $# -gt 0 ]]; do
     --abi-bless)       DO_ABI_BLESS=1;       shift;;
     --abi-break-demo)  DO_ABI_BREAK_DEMO=1;  shift;;
     --demo-findings)   DO_DEMO_FINDINGS=1;   shift;;
+    --hermetic-check)  DO_HERMETIC_CHECK=1;  shift;;
     --debug)           DO_DEBUG=1;           shift;;
     --clean)           DO_CLEAN=1;           shift;;
     *) log_err "unknown arg: $1"; exit 2;;
@@ -64,7 +73,9 @@ if [[ $DO_CLEAN -eq 1 ]]; then
     cpp-tut/demo-07:abi \
     cpp-tut/demo-07:svc \
     cpp-tut/demo-07:gdbserver \
-    cpp-tut/demo-07:findings-demo 2>/dev/null || true
+    cpp-tut/demo-07:findings-demo \
+    cpp-tut/demo-07:hermetic-1 \
+    cpp-tut/demo-07:hermetic-2 2>/dev/null || true
   rm -rf reports
   log_ok "Cleaned."
   exit 0
@@ -275,6 +286,118 @@ EOF
   log_info "read it. channel.cpp will now be restored to its committed state."
 
   exit 0
+fi
+
+# --hermetic-check: build demo07-svc twice from clean state (forcing the
+# build stage to re-run via the HERMETIC_NONCE ARG), extract demo07-svc
+# and libdemo07_channel.so from both builds, and SHA-256 compare. Pass
+# means the build is reproducible — identical inputs produce identical
+# bytes. Fail prints a diagnostic ladder pointing at the usual suspects.
+#
+# The HERMETIC_NONCE trick (in the Containerfile build stage): a no-op
+# RUN that echoes the nonce. Different values create different layer
+# cache keys, forcing a rebuild of everything from that line down. The
+# nonce has zero effect on the resulting binary — it only invalidates
+# the cache. This is how we get "two independent builds" without
+# nuking the whole image cache.
+if [[ $DO_HERMETIC_CHECK -eq 1 ]]; then
+  require podman
+  mkdir -p reports/hermetic
+  rm -f reports/hermetic/build*
+
+  log_step "Hermetic build check: building demo07-svc twice with cache invalidation"
+  log_info "Both builds use identical source; the HERMETIC_NONCE ARG forces"
+  log_info "the build stage to re-execute so we get two independent compiles."
+  echo
+
+  # Use timestamps as nonces so each invocation of --hermetic-check creates
+  # fresh cache misses (don't accidentally reuse a prior build's cache).
+  nonce1="$(date +%s%N)"
+  sleep 1
+  nonce2="$(date +%s%N)"
+
+  log_info "Build 1/2 (HERMETIC_NONCE=$nonce1) ..."
+  podman build --build-arg HERMETIC_NONCE="$nonce1" \
+               --target svc \
+               -t cpp-tut/demo-07:hermetic-1 .
+
+  log_info "Build 2/2 (HERMETIC_NONCE=$nonce2) ..."
+  podman build --build-arg HERMETIC_NONCE="$nonce2" \
+               --target svc \
+               -t cpp-tut/demo-07:hermetic-2 .
+
+  echo
+  log_step "Extracting binaries from both builds"
+  cid1="$(podman create cpp-tut/demo-07:hermetic-1)"
+  podman cp "$cid1:/app/demo07-svc" reports/hermetic/build1-demo07-svc
+  podman cp "$cid1:/usr/local/lib/libdemo07_channel.so.1.0.0" reports/hermetic/build1-libchannel.so
+  podman rm "$cid1" >/dev/null
+
+  cid2="$(podman create cpp-tut/demo-07:hermetic-2)"
+  podman cp "$cid2:/app/demo07-svc" reports/hermetic/build2-demo07-svc
+  podman cp "$cid2:/usr/local/lib/libdemo07_channel.so.1.0.0" reports/hermetic/build2-libchannel.so
+  podman rm "$cid2" >/dev/null
+
+  echo
+  log_step "Comparing SHA-256 hashes"
+  echo
+
+  all_match=1
+  for artifact in demo07-svc libchannel.so; do
+    f1="reports/hermetic/build1-$artifact"
+    f2="reports/hermetic/build2-$artifact"
+
+    if [[ ! -f "$f1" || ! -f "$f2" ]]; then
+      log_err "  $artifact: one or both files missing — extraction failed"
+      all_match=0
+      continue
+    fi
+
+    size="$(stat -c %s "$f1")"
+    h1="$(sha256sum "$f1" | awk '{print $1}')"
+    h2="$(sha256sum "$f2" | awk '{print $1}')"
+
+    printf "  %-15s  size %d bytes\n" "$artifact" "$size"
+    printf "    build 1: %s\n" "$h1"
+    printf "    build 2: %s\n" "$h2"
+
+    if [[ "$h1" == "$h2" ]]; then
+      log_ok "    -> BYTE-IDENTICAL"
+    else
+      log_err "    -> DIFFER"
+      all_match=0
+      log_info "    First 20 differing byte offsets (offset:b1:b2):"
+      cmp -l "$f1" "$f2" 2>/dev/null | head -20 | sed 's/^/      /'
+    fi
+    echo
+  done
+
+  if [[ $all_match -eq 1 ]]; then
+    log_ok "Hermetic build: VERIFIED"
+    log_info "Both independent rebuilds produced byte-identical binaries."
+    log_info "This is the property that lets you cache, mirror, verify, and"
+    log_info "trust container images across a fleet. See _docs/13-reproducibility-abi.md"
+    log_info "for the broader Konflux + Cachi2 picture."
+    exit 0
+  else
+    log_warn "Hermetic build: FAILED"
+    log_warn "The binaries differ, which means something in the build is"
+    log_warn "non-deterministic. Common culprits in decreasing frequency:"
+    log_warn "  1. __DATE__ / __TIME__ macros in source"
+    log_warn "     (grep -r '__DATE__\\|__TIME__' src/)"
+    log_warn "  2. Embedded build paths in debug info"
+    log_warn "     (compile with -ffile-prefix-map=/src=.)"
+    log_warn "  3. Random PRNG seeds in code generation"
+    log_warn "     (compile with -frandom-seed=...)"
+    log_warn "  4. Non-deterministic build-id (.note.gnu.build-id)"
+    log_warn "     (readelf -n reports/hermetic/build1-demo07-svc | grep 'Build ID')"
+    log_warn "  5. Parallel build races producing different .o ordering"
+    log_warn ""
+    log_warn "Deeper diagnostic — disassembly diff (often pinpoints the source):"
+    log_warn "  diff <(objdump -d reports/hermetic/build1-demo07-svc) \\"
+    log_warn "       <(objdump -d reports/hermetic/build2-demo07-svc) | head -60"
+    exit 1
+  fi
 fi
 
 require podman

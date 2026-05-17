@@ -341,6 +341,96 @@ Konflux ships as the SaaS offering at https://console.redhat.com/application-pip
 and as the self-hostable open-source project; Cachi2 is at
 https://github.com/containerbuildsystem/cachi2.
 
+## Testing hermeticity locally — `./demo.sh --hermetic-check`
+
+Konflux + Cachi2 is the production answer. For local verification —
+"is my build actually reproducible right now, on my laptop?" — the
+simpler test is: build twice, compare bytes.
+
+Demo-07 ships this as a flag:
+
+```bash
+./demo.sh --hermetic-check
+```
+
+The script:
+
+1. Invokes `podman build --target svc` **twice**, each time passing a
+   different value to the `HERMETIC_NONCE` build-arg
+2. `podman cp`'s `demo07-svc` and `libdemo07_channel.so.1.0.0` out of
+   both resulting images into `reports/hermetic/build{1,2}-*`
+3. Computes SHA-256 of each artifact
+4. Reports byte-identical or differing, with diagnostic hints for the
+   failure case
+
+**The `HERMETIC_NONCE` trick.** Podman's layer cache is content-addressable:
+the cache key for a layer is a hash of the instruction plus the inputs.
+Same inputs → cache hit. To force a re-build without changing actual
+inputs, we add a no-op `ARG` + `RUN` pair that consumes the arg:
+
+```dockerfile
+FROM toolchain AS build
+WORKDIR /src
+ARG HERMETIC_NONCE=0
+RUN echo "hermetic nonce: ${HERMETIC_NONCE}" > /tmp/.hermetic-nonce
+COPY src/ ./src/
+# ... rest of build
+```
+
+Different `--build-arg HERMETIC_NONCE=...` values produce different
+cache keys at that line, forcing every layer downstream (the actual
+`cmake --build`) to re-execute. The arg itself has zero effect on the
+compiled binary — it only changes a string in `/tmp/`. The toolchain
+layers (UBI, EPEL, gcc-toolset-14, libabigail) stay cached because
+they're upstream of the `ARG` line.
+
+**What "pass" looks like.**
+
+```
+==> Comparing SHA-256 hashes
+
+  demo07-svc       size 47216 bytes
+    build 1: 8a3c4d... (full hash)
+    build 2: 8a3c4d... (full hash)
+[ ok ]     -> BYTE-IDENTICAL
+
+  libchannel.so    size 24648 bytes
+    build 1: f2e1a9... (full hash)
+    build 2: f2e1a9... (full hash)
+[ ok ]     -> BYTE-IDENTICAL
+
+[ ok ]  Hermetic build: VERIFIED
+```
+
+This isn't a partial signal — byte-identical means *byte-identical*.
+Build IDs match. Debug info matches. Constant pools match. Symbol
+ordering matches. The compiled binaries are interchangeable.
+
+**Why containers make this work.** Three properties of the
+containerized build do most of the work:
+
+| Property | What it eliminates |
+|---|---|
+| `/src` is the constant WORKDIR | Path-dependent debug info |
+| Compiler binary identity is pinned | Toolchain version drift |
+| Environment is reset per build | Stray env-var leakage |
+
+Outside containers, you'd typically need `-ffile-prefix-map=/path/to/src=.`
+and `SOURCE_DATE_EPOCH=...` exported to get this same property. Inside
+a container with constant `/src`, those flags become redundant.
+
+**When it fails.** Section "Production diagnostic — when a build isn't
+reproducible" below covers the ladder. The flag's failure output
+points there directly. The five suspects in decreasing frequency are:
+`__DATE__`/`__TIME__` macros, embedded paths in debug info, PRNG seeds
+in codegen, non-deterministic build-id, and parallel-build races.
+
+**This complements Konflux, not replaces it.** Konflux + Cachi2
+guarantees hermeticity by *closing off* sources of non-determinism
+(no network, no environment leakage). `--hermetic-check` *verifies*
+hermeticity by independent rebuild + comparison. You want both: the
+first prevents drift, the second catches it when prevention fails.
+
 ## Tests as a build-stage quality gate — GoogleTest in hermetic CI
 
 GoogleTest was introduced in [§12](12-analysis-debugging.md);
