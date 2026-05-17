@@ -1,14 +1,124 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" role="img" aria-label="Multi-stage image strategy placeholder">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 540" role="img"
+     aria-label="Two container build strategies side by side. Single-stage build: one image containing toolchain (~400 MB), Conan cache (~200 MB), intermediates (~80 MB), source, plus the binary, totaling 689 MB. Multi-stage build: a build stage containing the toolchain and intermediates, plus a runtime stage based on UBI micro containing only the binary and minimal libc; the COPY --from=build line is the key transition. The runtime image is 26.4 MB. The 26-fold size reduction is verified in demo-01 and shown in red as the punchline.">
   <defs>
+    <style><![CDATA[
+      .bg       { fill: #fdfbf7; }
+      .grid     { stroke: #e8e1d3; stroke-width: 0.5; fill: none; }
+      .band     { stroke-width: 1.5; rx: 6; ry: 6; }
+      .b-single { fill: #ecdfd8; stroke: #b86742; }
+      .b-multi-b{ fill: #f0e8d8; stroke: #b89540; }
+      .b-multi-r{ fill: #d8e8df; stroke: #5a8870; }
+      .b-layer  { fill: #fdfbf7; stroke: #b86742; stroke-width: 1; rx: 3; ry: 3; }
+      .b-layer-b{ fill: #fdfbf7; stroke: #b89540; stroke-width: 1; rx: 3; ry: 3; }
+      .b-layer-r{ fill: #fdfbf7; stroke: #5a8870; stroke-width: 1; rx: 3; ry: 3; }
+      .b-result { fill: #fdfbf7; stroke: #c0392b; }
+      .ttl      { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .ttl-big  { font: 700 16px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .ttl-sub  { font: 700 13px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .lbl      { font: 600 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .mono     { font: 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .mono-sm  { font: 10px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #555; }
+      .sec      { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #555; }
+      .size     { font: 700 13px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #b86742; }
+      .size-r   { font: 700 13px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #5a8870; }
+      .arrow    { stroke: #2d2d2d; stroke-width: 1.4; fill: none; }
+      .arrow-r  { stroke: #c0392b; stroke-width: 2; fill: none; }
+      .arrow-l  { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #444; }
+      .accent-t { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+      .accent-h { font: 700 16px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+    ]]></style>
     <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e6dfd2" stroke-width="0.5"/>
+      <path d="M 20 0 L 0 0 0 20" class="grid"/>
     </pattern>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+    <marker id="arrowhead-r" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="9" markerHeight="9" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
   </defs>
-  <rect width="800" height="360" fill="#fdfbf7"/>
-  <rect width="800" height="360" fill="url(#grid)"/>
-  <rect x="40" y="40" width="720" height="280" rx="14" ry="14" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="6 4"/>
-  <text x="400" y="155" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="28" font-weight="700" fill="#1a1a1a">Multi-stage image strategy</text>
-  <text x="400" y="195" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="13" fill="#767676">03-image-strategy-multistage.svg</text>
-  <text x="400" y="245" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="14" fill="#4a4a4a">Diagram pending — see assets/diagrams/README.md to draw.</text>
+
+  <rect class="bg" width="900" height="540"/>
+  <rect width="900" height="540" fill="url(#grid)" opacity="0.4"/>
+
+  <!-- Title -->
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">Container image strategy — single-stage vs multi-stage</text>
+
+  <!-- LEFT: Single-stage -->
+  <rect class="band b-single" x="40" y="60" width="350" height="380"/>
+  <text x="215" y="84" class="ttl" text-anchor="middle">Single-stage build</text>
+  <text x="215" y="100" class="sec" text-anchor="middle">FROM ubi:9; do everything in one image</text>
+
+  <!-- Containerfile preview -->
+  <rect class="b-layer" x="60" y="114" width="310" height="78" stroke-dasharray="2 2"/>
+  <text x="70" y="132" class="mono">FROM ubi:9</text>
+  <text x="70" y="146" class="mono">RUN dnf install -y gcc-toolset-14 ...</text>
+  <text x="70" y="160" class="mono">RUN pip install conan &amp;&amp; conan install ...</text>
+  <text x="70" y="174" class="mono">COPY . /src</text>
+  <text x="70" y="188" class="mono">RUN cmake -B build &amp;&amp; ninja</text>
+
+  <text x="215" y="212" class="ttl-sub" text-anchor="middle">What ends up in the final image:</text>
+
+  <rect class="b-layer" x="60" y="222" width="310" height="22"/>
+  <text x="70" y="238" class="lbl">toolchain (gcc, glibc-devel, headers)</text>
+  <text x="360" y="238" class="size" text-anchor="end">~400 MB</text>
+
+  <rect class="b-layer" x="60" y="248" width="310" height="22"/>
+  <text x="70" y="264" class="lbl">Conan cache (deps + variants)</text>
+  <text x="360" y="264" class="size" text-anchor="end">~200 MB</text>
+
+  <rect class="b-layer" x="60" y="274" width="310" height="22"/>
+  <text x="70" y="290" class="lbl">.o / .a intermediates, CMake cache</text>
+  <text x="360" y="290" class="size" text-anchor="end">~80 MB</text>
+
+  <rect class="b-layer" x="60" y="300" width="310" height="22"/>
+  <text x="70" y="316" class="lbl">source files (rarely needed at runtime)</text>
+  <text x="360" y="316" class="size" text-anchor="end">~5 MB</text>
+
+  <rect class="b-layer" x="60" y="326" width="310" height="22"/>
+  <text x="70" y="342" class="lbl">your binary</text>
+  <text x="360" y="342" class="size" text-anchor="end">~4 MB</text>
+
+  <line x1="60" y1="370" x2="370" y2="370" stroke="#b86742" stroke-width="0.5" opacity="0.5"/>
+  <text x="215" y="396" class="ttl-sub" text-anchor="middle">Total image size</text>
+  <text x="215" y="424" class="accent-h" text-anchor="middle">689 MB</text>
+
+  <!-- RIGHT: Multi-stage -->
+  <rect class="band b-multi-b" x="490" y="60" width="370" height="180"/>
+  <text x="675" y="84" class="ttl" text-anchor="middle">Multi-stage build  —  Stage 1 (build)</text>
+  <text x="675" y="100" class="sec" text-anchor="middle">FROM ubi:9 AS build  —  same as single-stage above</text>
+
+  <rect class="b-layer-b" x="510" y="114" width="330" height="62" stroke-dasharray="2 2"/>
+  <text x="520" y="132" class="mono">FROM ubi:9 AS build</text>
+  <text x="520" y="146" class="mono">RUN dnf install -y gcc-toolset-14 ...</text>
+  <text x="520" y="160" class="mono">COPY . /src</text>
+  <text x="520" y="174" class="mono">RUN cmake -B build &amp;&amp; ninja</text>
+
+  <text x="675" y="200" class="sec" text-anchor="middle">heavy: toolchain, Conan cache, intermediates,</text>
+  <text x="675" y="214" class="sec" text-anchor="middle">source files all present — but THROWN AWAY</text>
+
+  <!-- Red COPY directive: the key transition between stages -->
+  <line x1="600" y1="240" x2="600" y2="270" class="arrow-r" marker-end="url(#arrowhead-r)"/>
+  <text x="675" y="258" class="accent-t" text-anchor="middle">COPY --from=build</text>
+  <text x="675" y="273" class="sec" text-anchor="middle">only the binary crosses the stage boundary</text>
+
+  <rect class="band b-multi-r" x="490" y="280" width="370" height="160"/>
+  <text x="675" y="304" class="ttl" text-anchor="middle">Multi-stage build  —  Stage 2 (runtime)</text>
+  <text x="675" y="320" class="sec" text-anchor="middle">FROM ubi-micro  —  bare minimum runtime</text>
+
+  <rect class="b-layer-r" x="510" y="334" width="330" height="48" stroke-dasharray="2 2"/>
+  <text x="520" y="352" class="mono">FROM registry.access.redhat.com/ubi9-micro</text>
+  <text x="520" y="366" class="mono">COPY --from=build /usr/local/bin/app /</text>
+  <text x="520" y="380" class="mono">ENTRYPOINT ["/app"]</text>
+
+  <text x="675" y="406" class="ttl-sub" text-anchor="middle">Total image size</text>
+  <text x="675" y="430" class="accent-h" text-anchor="middle">26.4 MB</text>
+
+  <!-- Bottom result band -->
+  <rect class="band b-result" x="120" y="464" width="660" height="60"/>
+  <text x="450" y="486" class="ttl-sub" text-anchor="middle">Demo-01 verified result (r20)</text>
+  <text x="450" y="510" class="accent-h" text-anchor="middle">689 MB  →  26.4 MB    (26× smaller; faster pull, smaller attack surface)</text>
 </svg>

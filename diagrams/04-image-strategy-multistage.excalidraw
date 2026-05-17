@@ -1,45 +1,169 @@
 {
-    "type": "excalidraw",
-    "version": 2,
-    "source": "https://excalidraw.com",
-    "elements": [
-        {
-            "type": "text",
-            "version": 1,
-            "id": "03-image-strategy-multistage-placeholder-text",
-            "x": 100,
-            "y": 100,
-            "width": 600,
-            "height": 40,
-            "text": "Multi-stage image strategy — replace this placeholder",
-            "fontSize": 24,
-            "fontFamily": 1,
-            "textAlign": "left",
-            "verticalAlign": "top",
-            "strokeColor": "#1a1a1a",
-            "backgroundColor": "transparent",
-            "fillStyle": "solid",
-            "strokeWidth": 1,
-            "strokeStyle": "solid",
-            "roughness": 1,
-            "opacity": 100,
-            "groupIds": [],
-            "frameId": null,
-            "roundness": null,
-            "seed": 1,
-            "boundElements": null,
-            "updated": 1,
-            "link": null,
-            "locked": false,
-            "containerId": null,
-            "originalText": "Multi-stage image strategy — replace this placeholder",
-            "lineHeight": 1.25,
-            "baseline": 18
-        }
-    ],
-    "appState": {
-        "gridSize": 20,
-        "viewBackgroundColor": "#fdfbf7"
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "type": "text", "version": 1, "id": "title",
+      "x": 200, "y": 16, "width": 500, "height": 24,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 20, "fontFamily": 1,
+      "text": "Container image strategy — single-stage vs multi-stage",
+      "textAlign": "center", "verticalAlign": "middle"
     },
-    "files": {}
+    {
+      "type": "rectangle", "version": 1, "id": "single",
+      "x": 40, "y": 60, "width": 350, "height": 380,
+      "angle": 0, "strokeColor": "#b86742", "backgroundColor": "#ecdfd8",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["single-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "single-title",
+      "x": 60, "y": 70, "width": 310, "height": 38,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["single-group"],
+      "fontSize": 14, "fontFamily": 1,
+      "text": "Single-stage build\nFROM ubi:9; do everything in one image",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "text", "version": 1, "id": "single-containerfile",
+      "x": 70, "y": 120, "width": 290, "height": 90,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["single-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "FROM ubi:9\nRUN dnf install -y gcc-toolset-14 ...\nRUN pip install conan && conan install ...\nCOPY . /src\nRUN cmake -B build && ninja",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "text", "version": 1, "id": "single-layers",
+      "x": 70, "y": 220, "width": 290, "height": 140,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["single-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "What ends up in the final image:\n  toolchain (gcc, glibc, headers)   ~400 MB\n  Conan cache (deps + variants)      ~200 MB\n  .o / .a intermediates, CMake cache  ~80 MB\n  source files                          ~5 MB\n  your binary                            ~4 MB",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "text", "version": 1, "id": "single-total",
+      "x": 60, "y": 390, "width": 310, "height": 40,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["single-group"],
+      "fontSize": 18, "fontFamily": 1,
+      "text": "Total: 689 MB",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "multi-build",
+      "x": 490, "y": 60, "width": 370, "height": 180,
+      "angle": 0, "strokeColor": "#b89540", "backgroundColor": "#f0e8d8",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["multi-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "multi-build-title",
+      "x": 510, "y": 70, "width": 330, "height": 38,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["multi-group"],
+      "fontSize": 14, "fontFamily": 1,
+      "text": "Multi-stage build  —  Stage 1 (build)\nFROM ubi:9 AS build",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "text", "version": 1, "id": "multi-build-code",
+      "x": 520, "y": 120, "width": 320, "height": 100,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["multi-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "FROM ubi:9 AS build\nRUN dnf install -y gcc-toolset-14 ...\nCOPY . /src\nRUN cmake -B build && ninja\n\nheavy stuff present — but THROWN AWAY",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "multi-runtime",
+      "x": 490, "y": 280, "width": 370, "height": 160,
+      "angle": 0, "strokeColor": "#5a8870", "backgroundColor": "#d8e8df",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["multi-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "multi-runtime-title",
+      "x": 510, "y": 290, "width": 330, "height": 38,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["multi-group"],
+      "fontSize": 14, "fontFamily": 1,
+      "text": "Multi-stage build  —  Stage 2 (runtime)\nFROM ubi-micro  —  bare minimum",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "text", "version": 1, "id": "multi-runtime-code",
+      "x": 520, "y": 340, "width": 320, "height": 60,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["multi-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "FROM registry.access.redhat.com/ubi9-micro\nCOPY --from=build /usr/local/bin/app /\nENTRYPOINT [\"/app\"]",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "text", "version": 1, "id": "multi-total",
+      "x": 510, "y": 405, "width": 330, "height": 30,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["multi-group"],
+      "fontSize": 18, "fontFamily": 1,
+      "text": "Total: 26.4 MB",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-stages-RED",
+      "x": 600, "y": 244, "width": 0, "height": 30,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [0, 30] ], "endArrowhead": "arrow"
+    },
+    {
+      "type": "text", "version": 1, "id": "stages-label-RED",
+      "x": 620, "y": 248, "width": 220, "height": 30,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "COPY --from=build\nonly the binary crosses",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "result",
+      "x": 120, "y": 464, "width": 660, "height": 60,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "result-label",
+      "x": 140, "y": 472, "width": 620, "height": 50,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 14, "fontFamily": 1,
+      "text": "Demo-01 verified (r20)\n689 MB → 26.4 MB    (26× smaller; faster pull, smaller attack surface)",
+      "textAlign": "center", "verticalAlign": "middle"
+    }
+  ],
+  "appState": { "viewBackgroundColor": "#fdfbf7", "gridSize": null },
+  "files": {}
 }

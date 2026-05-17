@@ -1,45 +1,239 @@
 {
-    "type": "excalidraw",
-    "version": 2,
-    "source": "https://excalidraw.com",
-    "elements": [
-        {
-            "type": "text",
-            "version": 1,
-            "id": "05-stl-layout-flat-vs-node-placeholder-text",
-            "x": 100,
-            "y": 100,
-            "width": 600,
-            "height": 40,
-            "text": "Flat vs node containers — replace this placeholder",
-            "fontSize": 24,
-            "fontFamily": 1,
-            "textAlign": "left",
-            "verticalAlign": "top",
-            "strokeColor": "#1a1a1a",
-            "backgroundColor": "transparent",
-            "fillStyle": "solid",
-            "strokeWidth": 1,
-            "strokeStyle": "solid",
-            "roughness": 1,
-            "opacity": 100,
-            "groupIds": [],
-            "frameId": null,
-            "roundness": null,
-            "seed": 1,
-            "boundElements": null,
-            "updated": 1,
-            "link": null,
-            "locked": false,
-            "containerId": null,
-            "originalText": "Flat vs node containers — replace this placeholder",
-            "lineHeight": 1.25,
-            "baseline": 18
-        }
-    ],
-    "appState": {
-        "gridSize": 20,
-        "viewBackgroundColor": "#fdfbf7"
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "type": "text", "version": 1, "id": "title",
+      "x": 180, "y": 16, "width": 540, "height": 24,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 20, "fontFamily": 1,
+      "text": "Container layout — contiguous vs node-based, in cache lines",
+      "textAlign": "center", "verticalAlign": "middle"
     },
-    "files": {}
+    {
+      "type": "rectangle", "version": 1, "id": "vec-col",
+      "x": 30, "y": 60, "width": 410, "height": 430,
+      "angle": 0, "strokeColor": "#5a8870", "backgroundColor": "#d8e8df",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["vec-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "vec-title",
+      "x": 50, "y": 70, "width": 370, "height": 40,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["vec-group"],
+      "fontSize": 14, "fontFamily": 1,
+      "text": "std::vector<int>  /  flat_map  /  std::array\ncontiguous heap allocation; cache-friendly",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "vec-stack",
+      "x": 50, "y": 132, "width": 120, "height": 80,
+      "angle": 0, "strokeColor": "#7a6f55", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["vec-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "vec-stack-label",
+      "x": 60, "y": 140, "width": 100, "height": 60,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["vec-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "std::vector\n────────\ndata ──→ ●\nsize\ncapacity",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "text", "version": 1, "id": "vec-heap-label",
+      "x": 50, "y": 248, "width": 300, "height": 18,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["vec-group"],
+      "fontSize": 13, "fontFamily": 1,
+      "text": "Heap (contiguous):",
+      "textAlign": "left", "verticalAlign": "middle"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "vec-cl1",
+      "x": 50, "y": 290, "width": 320, "height": 30,
+      "angle": 0, "strokeColor": "#5a8870", "backgroundColor": "#d8e8df",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["vec-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "vec-cl1-label",
+      "x": 60, "y": 296, "width": 300, "height": 22,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["vec-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "cache line 1 (64 B): [ 0 | 1 | 2 | 3 | 4 | ... | 15 ]",
+      "textAlign": "left", "verticalAlign": "middle"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "vec-cl2",
+      "x": 50, "y": 350, "width": 320, "height": 22,
+      "angle": 0, "strokeColor": "#5a8870", "backgroundColor": "#d8e8df",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["vec-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "vec-cl2-label",
+      "x": 60, "y": 354, "width": 300, "height": 18,
+      "angle": 0, "strokeColor": "#444", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["vec-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "cache line 2 (64 B): [ 16 | 17 | 18 | ... | 31 ]",
+      "textAlign": "left", "verticalAlign": "middle"
+    },
+    {
+      "type": "text", "version": 1, "id": "vec-cost",
+      "x": 50, "y": 410, "width": 370, "height": 70,
+      "angle": 0, "strokeColor": "#2d6e4a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["vec-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "Iteration cost:\n≈ 1 cache miss per 16 ints (4 B × 16 = 64 B)\nL1 hardware prefetcher loves this\nmeasured at < 1 ns per element on a warm cache",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "list-col",
+      "x": 460, "y": 60, "width": 410, "height": 430,
+      "angle": 0, "strokeColor": "#b86742", "backgroundColor": "#ecdfd8",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["list-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "list-title",
+      "x": 480, "y": 70, "width": 370, "height": 40,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["list-group"],
+      "fontSize": 14, "fontFamily": 1,
+      "text": "std::list<int>  /  std::map<K,V>  /  unordered_map\none heap allocation per element; cache-unfriendly",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "list-stack",
+      "x": 480, "y": 132, "width": 100, "height": 60,
+      "angle": 0, "strokeColor": "#7a6f55", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["list-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "list-stack-label",
+      "x": 490, "y": 140, "width": 80, "height": 44,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["list-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "std::list\n────\nhead ──→ ●\nsize",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "text", "version": 1, "id": "list-heap-label",
+      "x": 480, "y": 210, "width": 200, "height": 18,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["list-group"],
+      "fontSize": 13, "fontFamily": 1,
+      "text": "Heap (scattered):",
+      "textAlign": "left", "verticalAlign": "middle"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "node-1",
+      "x": 480, "y": 244, "width": 80, "height": 36,
+      "angle": 0, "strokeColor": "#b86742", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["list-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "node-1-label",
+      "x": 490, "y": 250, "width": 60, "height": 30,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["list-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "data: 0\nnext →",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "node-2",
+      "x": 620, "y": 244, "width": 80, "height": 36,
+      "angle": 0, "strokeColor": "#b86742", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["list-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "node-2-label",
+      "x": 630, "y": 250, "width": 60, "height": 30,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["list-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "data: 1\nnext →",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "node-3",
+      "x": 500, "y": 296, "width": 80, "height": 36,
+      "angle": 0, "strokeColor": "#b86742", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["list-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "node-3-label",
+      "x": 510, "y": 302, "width": 60, "height": 30,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["list-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "data: 2\nnext →",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "node-4",
+      "x": 700, "y": 296, "width": 80, "height": 36,
+      "angle": 0, "strokeColor": "#b86742", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["list-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "node-4-label",
+      "x": 710, "y": 302, "width": 60, "height": 30,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["list-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "data: 3\nnext ...",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "text", "version": 1, "id": "list-cost",
+      "x": 480, "y": 410, "width": 370, "height": 70,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["list-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "Iteration cost:\n≈ 1 cache miss per element (each is a pointer chase)\nhardware prefetcher cannot predict pointer targets\nmeasured at 15-40 ns per element typical",
+      "textAlign": "left", "verticalAlign": "top"
+    }
+  ],
+  "appState": { "viewBackgroundColor": "#fdfbf7", "gridSize": null },
+  "files": {}
 }

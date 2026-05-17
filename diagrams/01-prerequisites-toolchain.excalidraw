@@ -1,45 +1,171 @@
 {
-    "type": "excalidraw",
-    "version": 2,
-    "source": "https://excalidraw.com",
-    "elements": [
-        {
-            "type": "text",
-            "version": 1,
-            "id": "01-prerequisites-toolchain-placeholder-text",
-            "x": 100,
-            "y": 100,
-            "width": 600,
-            "height": 40,
-            "text": "Toolchain layout — replace this placeholder",
-            "fontSize": 24,
-            "fontFamily": 1,
-            "textAlign": "left",
-            "verticalAlign": "top",
-            "strokeColor": "#1a1a1a",
-            "backgroundColor": "transparent",
-            "fillStyle": "solid",
-            "strokeWidth": 1,
-            "strokeStyle": "solid",
-            "roughness": 1,
-            "opacity": 100,
-            "groupIds": [],
-            "frameId": null,
-            "roundness": null,
-            "seed": 1,
-            "boundElements": null,
-            "updated": 1,
-            "link": null,
-            "locked": false,
-            "containerId": null,
-            "originalText": "Toolchain layout — replace this placeholder",
-            "lineHeight": 1.25,
-            "baseline": 18
-        }
-    ],
-    "appState": {
-        "gridSize": 20,
-        "viewBackgroundColor": "#fdfbf7"
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "type": "text", "version": 1, "id": "title",
+      "x": 280, "y": 16, "width": 340, "height": 24,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 20, "fontFamily": 1,
+      "text": "Prerequisites — the toolchain at a glance",
+      "textAlign": "center", "verticalAlign": "middle"
     },
-    "files": {}
+    {
+      "type": "rectangle", "version": 1, "id": "build-col",
+      "x": 60, "y": 60, "width": 340, "height": 320,
+      "angle": 0, "strokeColor": "#4a73b8", "backgroundColor": "#e8f0fb",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "build-title",
+      "x": 80, "y": 70, "width": 300, "height": 50,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 14, "fontFamily": 1,
+      "text": "BUILD-TIME\nproducer: ELF binary + container image",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "text", "version": 1, "id": "build-tools",
+      "x": 80, "y": 120, "width": 300, "height": 230,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "Source code (C++20/23) + Containerfiles\n\nConan 2.x — package manager + lockfiles\n\nCMake + Ninja — presets, hermetic build\n\ngcc-toolset-14 | clang (optional)\nC++20/23, sanitizers, LTO, PGO\n\n↓\n\nELF binary\nlinked against glibc from build base",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "rt-col",
+      "x": 500, "y": 60, "width": 340, "height": 320,
+      "angle": 0, "strokeColor": "#5a8870", "backgroundColor": "#d8e8df",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "rt-title",
+      "x": 520, "y": 70, "width": 300, "height": 50,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 14, "fontFamily": 1,
+      "text": "RUNTIME\nconsumer: containerized C++ service",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "text", "version": 1, "id": "rt-tools",
+      "x": 520, "y": 120, "width": 300, "height": 230,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "Podman 5.x (rootless)\npodman compose, slirp4netns\n\nOCI runtime: crun + conmon\napplies cgroup v2 + user namespace\n\nBase images: UBI 9 / UBI micro / scratch\nmulti-stage strategy in §4\n\nLoad generator: hey, ghz\nHTTP + gRPC, used by every demo\n\nObservability: otel-lgtm (§10)",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "host-band",
+      "x": 60, "y": 400, "width": 780, "height": 120,
+      "angle": 0, "strokeColor": "#b89540", "backgroundColor": "#f0e8d8",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "host-title",
+      "x": 80, "y": 410, "width": 740, "height": 36,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 14, "fontFamily": 1,
+      "text": "HOST  —  Fedora 44\nLinux kernel 6.x, the substrate all the above runs on",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "host-cgroup",
+      "x": 90, "y": 452, "width": 200, "height": 56,
+      "angle": 0, "strokeColor": "#b89540", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "host-cgroup-label",
+      "x": 100, "y": 462, "width": 180, "height": 40,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "cgroup v2 + systemd\nmemory.high, cpu.weight, cpuset.cpus\nuser-1000.slice, podman.scope",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "host-delegation-RED",
+      "x": 310, "y": 452, "width": 280, "height": 56,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "host-delegation-label",
+      "x": 320, "y": 462, "width": 260, "height": 40,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "cgroup v2 controller delegation\n/etc/systemd/system/user@.service.d/delegate.conf\nG-40: the prerequisite most setups miss",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "host-profilers",
+      "x": 610, "y": 452, "width": 200, "height": 56,
+      "angle": 0, "strokeColor": "#b89540", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "host-profilers-label",
+      "x": 620, "y": 462, "width": 180, "height": 40,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "Profilers (§10)\nperf, bcc-tools, bpftrace\nused against container PIDs",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-bridge",
+      "x": 400, "y": 322, "width": 100, "height": 0,
+      "angle": 0, "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1.4, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [100, 0] ], "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-build-host",
+      "x": 230, "y": 380, "width": 0, "height": 20,
+      "angle": 0, "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1.4, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [0, 20] ], "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-rt-host",
+      "x": 670, "y": 380, "width": 0, "height": 20,
+      "angle": 0, "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1.4, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [0, 20] ], "endArrowhead": "arrow"
+    }
+  ],
+  "appState": { "viewBackgroundColor": "#fdfbf7", "gridSize": null },
+  "files": {}
 }

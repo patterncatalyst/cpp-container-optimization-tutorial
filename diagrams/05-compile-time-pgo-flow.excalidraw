@@ -1,45 +1,153 @@
 {
-    "type": "excalidraw",
-    "version": 2,
-    "source": "https://excalidraw.com",
-    "elements": [
-        {
-            "type": "text",
-            "version": 1,
-            "id": "04-compile-time-pgo-flow-placeholder-text",
-            "x": 100,
-            "y": 100,
-            "width": 600,
-            "height": 40,
-            "text": "LTO and PGO build flow — replace this placeholder",
-            "fontSize": 24,
-            "fontFamily": 1,
-            "textAlign": "left",
-            "verticalAlign": "top",
-            "strokeColor": "#1a1a1a",
-            "backgroundColor": "transparent",
-            "fillStyle": "solid",
-            "strokeWidth": 1,
-            "strokeStyle": "solid",
-            "roughness": 1,
-            "opacity": 100,
-            "groupIds": [],
-            "frameId": null,
-            "roundness": null,
-            "seed": 1,
-            "boundElements": null,
-            "updated": 1,
-            "link": null,
-            "locked": false,
-            "containerId": null,
-            "originalText": "LTO and PGO build flow — replace this placeholder",
-            "lineHeight": 1.25,
-            "baseline": 18
-        }
-    ],
-    "appState": {
-        "gridSize": 20,
-        "viewBackgroundColor": "#fdfbf7"
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "type": "text", "version": 1, "id": "title",
+      "x": 130, "y": 16, "width": 640, "height": 24,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 20, "fontFamily": 1,
+      "text": "Profile-guided optimization — three-pass build, one feedback loop",
+      "textAlign": "center", "verticalAlign": "middle"
     },
-    "files": {}
+    {
+      "type": "rectangle", "version": 1, "id": "src",
+      "x": 30, "y": 160, "width": 120, "height": 80,
+      "angle": 0, "strokeColor": "#4a73b8", "backgroundColor": "#e8f0fb",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "src-label",
+      "x": 40, "y": 170, "width": 100, "height": 60,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "Source\n.cpp / .hpp\nCMakeLists\nConan deps",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "pass1",
+      "x": 200, "y": 80, "width": 200, "height": 240,
+      "angle": 0, "strokeColor": "#b89540", "backgroundColor": "#f0e8d8",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["pass1-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "pass1-label",
+      "x": 215, "y": 90, "width": 170, "height": 220,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["pass1-group"],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "Pass 1 — Instrument\ncompile with profile counters\n\n-fprofile-generate\n-fno-omit-frame-pointer\n      ↓\n  instrumented binary\n  ~10% slower than baseline\n\nembedded counters track\nbranch taken/not-taken,\nfunction entries, etc.",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "pass2",
+      "x": 450, "y": 80, "width": 200, "height": 240,
+      "angle": 0, "strokeColor": "#b86742", "backgroundColor": "#ecdfd8",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["pass2-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "pass2-label",
+      "x": 465, "y": 90, "width": 170, "height": 220,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["pass2-group"],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "Pass 2 — Profile\nrun against representative load\n\n./instrumented_binary\n  with realistic workload\n      ↓\n  .profraw files\n  merged with llvm-profdata\n\n→ merged.profdata\nthe entire feedback loop:\n'what the binary actually does'",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "pass3",
+      "x": 700, "y": 80, "width": 180, "height": 240,
+      "angle": 0, "strokeColor": "#5a8870", "backgroundColor": "#d8e8df",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["pass3-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "pass3-label",
+      "x": 715, "y": 90, "width": 150, "height": 220,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["pass3-group"],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "Pass 3 — Optimize\ncompile with feedback\n\n-fprofile-use=\n  merged.profdata\n      ↓\n  optimized binary\n  production artifact\n\ncompiler now knows:\n• hot vs cold paths\n• branch frequencies",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "lto-band",
+      "x": 80, "y": 380, "width": 740, "height": 50,
+      "angle": 0, "strokeColor": "#7a6f55", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "dashed",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "lto-label",
+      "x": 100, "y": 390, "width": 700, "height": 36,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "LTO (Link-Time Optimization) is orthogonal: -flto in both Pass 1 and Pass 3.\nTogether typically 15-30% throughput improvement on CPU-bound C++ workloads.",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "text", "version": 1, "id": "what-pgo-does",
+      "x": 80, "y": 446, "width": 740, "height": 80,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "What PGO does to your binary, given the profile:\n• inline aggressively in hot functions   • keep cold paths out of the I-cache\n• reorder branches for the common case   • lay out functions to fit working set in pages\n• apply __builtin_expect implicitly       • better register allocation",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-src-pass1",
+      "x": 150, "y": 200, "width": 50, "height": 0,
+      "angle": 0, "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1.4, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [50, 0] ], "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-pass1-pass2",
+      "x": 400, "y": 200, "width": 50, "height": 0,
+      "angle": 0, "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1.4, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [50, 0] ], "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-pass2-pass3-RED",
+      "x": 650, "y": 200, "width": 50, "height": 0,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [50, 0] ], "endArrowhead": "arrow"
+    },
+    {
+      "type": "text", "version": 1, "id": "feedback-label-RED",
+      "x": 620, "y": 178, "width": 80, "height": 18,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "profile data",
+      "textAlign": "center", "verticalAlign": "middle"
+    }
+  ],
+  "appState": { "viewBackgroundColor": "#fdfbf7", "gridSize": null },
+  "files": {}
 }

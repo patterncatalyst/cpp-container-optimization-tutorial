@@ -1,14 +1,140 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" role="img" aria-label="LTO and PGO build flow placeholder">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 540" role="img"
+     aria-label="Profile-guided optimization is a three-pass build. Pass 1 compiles the source with -fprofile-generate to produce an instrumented binary that is slightly slower but records runtime statistics. Pass 2 runs the instrumented binary against a representative workload, generating .profraw files; these are merged with llvm-profdata into a profile data file. Pass 3 compiles the source again with -fprofile-use, applying the recorded profile data to make inlining, layout, and branch-prediction decisions; the result is the optimized production binary. The feedback loop from Pass 2 back into Pass 3 — the recorded profile data — is the entire mechanism, shown in red. LTO is orthogonal: -flto is applied in both Pass 1 and Pass 3.">
   <defs>
+    <style><![CDATA[
+      .bg       { fill: #fdfbf7; }
+      .grid     { stroke: #e8e1d3; stroke-width: 0.5; fill: none; }
+      .band     { stroke-width: 1.5; rx: 6; ry: 6; }
+      .b-src    { fill: #e8f0fb; stroke: #4a73b8; }
+      .b-pass1  { fill: #f0e8d8; stroke: #b89540; }
+      .b-pass2  { fill: #ecdfd8; stroke: #b86742; }
+      .b-pass3  { fill: #d8e8df; stroke: #5a8870; }
+      .b-bin    { fill: #fdfbf7; stroke-width: 1; rx: 4; ry: 4; }
+      .b-bin-p1 { fill: #fdfbf7; stroke: #b89540; stroke-width: 1; rx: 4; ry: 4; }
+      .b-bin-p2 { fill: #fdfbf7; stroke: #b86742; stroke-width: 1; rx: 4; ry: 4; }
+      .b-bin-p3 { fill: #fdfbf7; stroke: #5a8870; stroke-width: 1; rx: 4; ry: 4; }
+      .b-profile{ fill: #fdfbf7; stroke: #c0392b; stroke-width: 1.5; rx: 4; ry: 4; }
+      .b-lto    { fill: #fdfbf7; stroke: #7a6f55; stroke-width: 1; stroke-dasharray: 4 3; rx: 4; ry: 4; }
+      .ttl      { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .ttl-big  { font: 700 16px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .lbl      { font: 600 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .mono     { font: 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .mono-sm  { font: 10px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #555; }
+      .sec      { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #555; }
+      .arrow    { stroke: #2d2d2d; stroke-width: 1.4; fill: none; }
+      .arrow-r  { stroke: #c0392b; stroke-width: 2.5; fill: none; }
+      .arrow-l  { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #444; }
+      .accent-t { font: 700 13px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+      .accent-l { font: italic 700 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+    ]]></style>
     <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e6dfd2" stroke-width="0.5"/>
+      <path d="M 20 0 L 0 0 0 20" class="grid"/>
     </pattern>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+    <marker id="arrowhead-r" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="10" markerHeight="10" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
   </defs>
-  <rect width="800" height="360" fill="#fdfbf7"/>
-  <rect width="800" height="360" fill="url(#grid)"/>
-  <rect x="40" y="40" width="720" height="280" rx="14" ry="14" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="6 4"/>
-  <text x="400" y="155" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="28" font-weight="700" fill="#1a1a1a">LTO and PGO build flow</text>
-  <text x="400" y="195" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="13" fill="#767676">04-compile-time-pgo-flow.svg</text>
-  <text x="400" y="245" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="14" fill="#4a4a4a">Diagram pending — see assets/diagrams/README.md to draw.</text>
+
+  <rect class="bg" width="900" height="540"/>
+  <rect width="900" height="540" fill="url(#grid)" opacity="0.4"/>
+
+  <!-- Title -->
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">Profile-guided optimization — three-pass build, one feedback loop</text>
+
+  <!-- Source code -->
+  <rect class="band b-src" x="30" y="160" width="120" height="80"/>
+  <text x="90" y="184" class="ttl" text-anchor="middle">Source</text>
+  <text x="90" y="201" class="mono-sm" text-anchor="middle">.cpp / .hpp</text>
+  <text x="90" y="216" class="mono-sm" text-anchor="middle">CMakeLists.txt</text>
+  <text x="90" y="231" class="mono-sm" text-anchor="middle">Conan deps</text>
+
+  <!-- Arrow source -> pass 1 -->
+  <line x1="150" y1="200" x2="200" y2="200" class="arrow" marker-end="url(#arrowhead)"/>
+
+  <!-- Pass 1: Instrument -->
+  <rect class="band b-pass1" x="200" y="80" width="200" height="240"/>
+  <text x="300" y="104" class="ttl" text-anchor="middle">Pass 1 — Instrument</text>
+  <text x="300" y="120" class="sec" text-anchor="middle">compile with profile counters</text>
+
+  <rect class="b-bin-p1" x="220" y="136" width="160" height="48" stroke-dasharray="2 2"/>
+  <text x="300" y="155" class="mono" text-anchor="middle">-fprofile-generate</text>
+  <text x="300" y="172" class="mono" text-anchor="middle">-fno-omit-frame-pointer</text>
+
+  <line x1="300" y1="192" x2="300" y2="208" class="arrow" marker-end="url(#arrowhead)"/>
+
+  <rect class="b-bin-p1" x="220" y="214" width="160" height="42"/>
+  <text x="300" y="232" class="lbl" text-anchor="middle">instrumented binary</text>
+  <text x="300" y="248" class="sec" text-anchor="middle">~10% slower than baseline</text>
+
+  <text x="300" y="282" class="mono-sm" text-anchor="middle">embedded counters track</text>
+  <text x="300" y="296" class="mono-sm" text-anchor="middle">branch taken/not-taken,</text>
+  <text x="300" y="310" class="mono-sm" text-anchor="middle">function entries, etc.</text>
+
+  <!-- Arrow pass 1 -> pass 2 -->
+  <line x1="400" y1="200" x2="450" y2="200" class="arrow" marker-end="url(#arrowhead)"/>
+
+  <!-- Pass 2: Profile collection -->
+  <rect class="band b-pass2" x="450" y="80" width="200" height="240"/>
+  <text x="550" y="104" class="ttl" text-anchor="middle">Pass 2 — Profile</text>
+  <text x="550" y="120" class="sec" text-anchor="middle">run against representative load</text>
+
+  <rect class="b-bin-p2" x="470" y="136" width="160" height="48" stroke-dasharray="2 2"/>
+  <text x="550" y="155" class="mono" text-anchor="middle">./instrumented_binary</text>
+  <text x="550" y="172" class="mono" text-anchor="middle">  with realistic workload</text>
+
+  <line x1="550" y1="192" x2="550" y2="208" class="arrow" marker-end="url(#arrowhead)"/>
+
+  <rect class="b-profile" x="470" y="214" width="160" height="42"/>
+  <text x="550" y="232" class="accent-t" text-anchor="middle">.profraw files</text>
+  <text x="550" y="248" class="sec" text-anchor="middle">merged with llvm-profdata</text>
+
+  <text x="550" y="282" class="mono-sm" text-anchor="middle">→ merged.profdata</text>
+  <text x="550" y="296" class="sec" text-anchor="middle">the entire feedback loop:</text>
+  <text x="550" y="310" class="accent-l" text-anchor="middle">"what the binary actually does"</text>
+
+  <!-- Arrow pass 2 -> pass 3 (RED — the feedback loop) -->
+  <line x1="650" y1="200" x2="700" y2="200" class="arrow-r" marker-end="url(#arrowhead-r)"/>
+  <text x="675" y="192" class="accent-l" text-anchor="middle">profile data</text>
+
+  <!-- Pass 3: Optimize -->
+  <rect class="band b-pass3" x="700" y="80" width="180" height="240"/>
+  <text x="790" y="104" class="ttl" text-anchor="middle">Pass 3 — Optimize</text>
+  <text x="790" y="120" class="sec" text-anchor="middle">compile with feedback</text>
+
+  <rect class="b-bin-p3" x="720" y="136" width="140" height="48" stroke-dasharray="2 2"/>
+  <text x="790" y="155" class="mono" text-anchor="middle">-fprofile-use=</text>
+  <text x="790" y="172" class="mono" text-anchor="middle">  merged.profdata</text>
+
+  <line x1="790" y1="192" x2="790" y2="208" class="arrow" marker-end="url(#arrowhead)"/>
+
+  <rect class="b-bin-p3" x="720" y="214" width="140" height="42"/>
+  <text x="790" y="232" class="lbl" text-anchor="middle">optimized binary</text>
+  <text x="790" y="248" class="sec" text-anchor="middle">production artifact</text>
+
+  <text x="790" y="282" class="mono-sm" text-anchor="middle">compiler now knows:</text>
+  <text x="790" y="296" class="mono-sm" text-anchor="middle">• hot vs cold paths</text>
+  <text x="790" y="310" class="mono-sm" text-anchor="middle">• branch frequencies</text>
+
+  <!-- LTO sidebar -->
+  <rect class="b-lto" x="80" y="380" width="740" height="50"/>
+  <text x="100" y="400" class="lbl">LTO (Link-Time Optimization)</text>
+  <text x="100" y="416" class="sec">is orthogonal: -flto in both Pass 1 and Pass 3 lets the linker inline across translation-unit boundaries.</text>
+  <text x="100" y="430" class="sec">PGO and LTO are complementary; together typically 15-30% throughput improvement on CPU-bound C++ workloads.</text>
+
+  <!-- What PGO actually does -->
+  <text x="450" y="464" class="lbl" text-anchor="middle">What PGO actually does to your binary, given the profile:</text>
+  <text x="200" y="486" class="mono-sm" text-anchor="middle">• inline aggressively in hot functions</text>
+  <text x="200" y="500" class="mono-sm" text-anchor="middle">• keep cold paths out of the I-cache</text>
+  <text x="450" y="486" class="mono-sm" text-anchor="middle">• reorder branches for the common case</text>
+  <text x="450" y="500" class="mono-sm" text-anchor="middle">• lay out functions to fit working set in pages</text>
+  <text x="700" y="486" class="mono-sm" text-anchor="middle">• apply __builtin_expect implicitly</text>
+  <text x="700" y="500" class="mono-sm" text-anchor="middle">• better register allocation</text>
+
+  <text x="450" y="525" class="sec" text-anchor="middle">Demo-01 ships the full pipeline as ./demo-pgo.sh; the result image is cpp-tut/demo-01:pgo</text>
 </svg>

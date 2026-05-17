@@ -1,14 +1,123 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" role="img" aria-label="Toolchain layout placeholder">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 540" role="img"
+     aria-label="The tutorial's toolchain has two columns sitting on a shared Fedora 44 host: build-time tools (Conan, CMake + Ninja, gcc-toolset-14 or clang) produce an ELF binary, while runtime tools (Podman 5.x, podman compose, crun/conmon, UBI base images) consume that binary inside a container. Both columns ground onto the Fedora 44 host kernel, which provides cgroup v2 (with delegation as the prerequisite most people miss, highlighted in red), systemd, and the profiling tools (perf, bcc-tools, bpftrace) used in §10.">
   <defs>
+    <style><![CDATA[
+      .bg       { fill: #fdfbf7; }
+      .grid     { stroke: #e8e1d3; stroke-width: 0.5; fill: none; }
+      .band     { stroke-width: 1.5; rx: 6; ry: 6; }
+      .b-build  { fill: #e8f0fb; stroke: #4a73b8; }
+      .b-rt     { fill: #d8e8df; stroke: #5a8870; }
+      .b-host   { fill: #f0e8d8; stroke: #b89540; }
+      .b-tool   { fill: #fdfbf7; stroke: #4a73b8; stroke-width: 1; rx: 4; ry: 4; }
+      .b-tool-r { fill: #fdfbf7; stroke: #5a8870; stroke-width: 1; rx: 4; ry: 4; }
+      .b-tool-h { fill: #fdfbf7; stroke: #b89540; stroke-width: 1; rx: 4; ry: 4; }
+      .b-accent { fill: #fdfbf7; stroke: #c0392b; stroke-width: 1.5; rx: 4; ry: 4; }
+      .ttl      { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .ttl-big  { font: 700 16px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .lbl      { font: 600 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .mono     { font: 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .mono-sm  { font: 10px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #444; }
+      .sec      { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #555; }
+      .arrow    { stroke: #2d2d2d; stroke-width: 1.4; fill: none; }
+      .arrow-l  { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #444; }
+      .accent-t { font: 700 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+      .accent-l { font: italic 600 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+    ]]></style>
     <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e6dfd2" stroke-width="0.5"/>
+      <path d="M 20 0 L 0 0 0 20" class="grid"/>
     </pattern>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
   </defs>
-  <rect width="800" height="360" fill="#fdfbf7"/>
-  <rect width="800" height="360" fill="url(#grid)"/>
-  <rect x="40" y="40" width="720" height="280" rx="14" ry="14" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="6 4"/>
-  <text x="400" y="155" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="28" font-weight="700" fill="#1a1a1a">Toolchain layout</text>
-  <text x="400" y="195" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="13" fill="#767676">01-prerequisites-toolchain.svg</text>
-  <text x="400" y="245" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="14" fill="#4a4a4a">Diagram pending — see assets/diagrams/README.md to draw.</text>
+
+  <rect class="bg" width="900" height="540"/>
+  <rect width="900" height="540" fill="url(#grid)" opacity="0.4"/>
+
+  <!-- Title -->
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">Prerequisites — the toolchain at a glance</text>
+
+  <!-- Build-time column -->
+  <rect class="band b-build" x="60" y="60" width="340" height="320"/>
+  <text x="230" y="84" class="ttl" text-anchor="middle">BUILD-TIME</text>
+  <text x="230" y="100" class="sec" text-anchor="middle">producer: ELF binary + container image</text>
+
+  <rect class="b-tool" x="100" y="116" width="260" height="32"/>
+  <text x="115" y="135" class="lbl">Source code (C++20/23)</text>
+  <text x="115" y="146" class="mono-sm">+ tutorial Containerfiles</text>
+
+  <rect class="b-tool" x="100" y="158" width="260" height="32"/>
+  <text x="115" y="176" class="lbl">Conan 2.x</text>
+  <text x="115" y="187" class="mono-sm">package manager + lockfiles (§13)</text>
+
+  <rect class="b-tool" x="100" y="200" width="260" height="32"/>
+  <text x="115" y="218" class="lbl">CMake + Ninja</text>
+  <text x="115" y="229" class="mono-sm">presets, hermetic build (§13)</text>
+
+  <rect class="b-tool" x="100" y="242" width="260" height="32"/>
+  <text x="115" y="260" class="lbl">gcc-toolset-14  |  clang (optional)</text>
+  <text x="115" y="271" class="mono-sm">C++20/23, sanitizers, LTO, PGO (§5)</text>
+
+  <line x1="230" y1="278" x2="230" y2="298" class="arrow" marker-end="url(#arrowhead)"/>
+
+  <rect class="b-tool" x="100" y="302" width="260" height="32"/>
+  <text x="115" y="320" class="lbl">ELF binary</text>
+  <text x="115" y="331" class="mono-sm">linked against glibc from build base</text>
+
+  <line x1="230" y1="338" x2="230" y2="358" class="arrow" marker-end="url(#arrowhead)"/>
+  <text x="240" y="354" class="arrow-l">COPY into</text>
+
+  <!-- Runtime column -->
+  <rect class="band b-rt" x="500" y="60" width="340" height="320"/>
+  <text x="670" y="84" class="ttl" text-anchor="middle">RUNTIME</text>
+  <text x="670" y="100" class="sec" text-anchor="middle">consumer: containerized C++ service</text>
+
+  <rect class="b-tool-r" x="540" y="116" width="260" height="32"/>
+  <text x="555" y="135" class="lbl">Podman 5.x (rootless)</text>
+  <text x="555" y="146" class="mono-sm">podman compose, slirp4netns network</text>
+
+  <rect class="b-tool-r" x="540" y="158" width="260" height="32"/>
+  <text x="555" y="176" class="lbl">OCI runtime: crun + conmon</text>
+  <text x="555" y="187" class="mono-sm">applies cgroup v2 + user namespace</text>
+
+  <rect class="b-tool-r" x="540" y="200" width="260" height="32"/>
+  <text x="555" y="218" class="lbl">Base images: UBI 9 / UBI micro / scratch</text>
+  <text x="555" y="229" class="mono-sm">multi-stage strategy in §4</text>
+
+  <rect class="b-tool-r" x="540" y="242" width="260" height="32"/>
+  <text x="555" y="260" class="lbl">Load generator: hey, ghz</text>
+  <text x="555" y="271" class="mono-sm">HTTP + gRPC, used by every demo</text>
+
+  <rect class="b-tool-r" x="540" y="284" width="260" height="32"/>
+  <text x="555" y="302" class="lbl">Observability: otel-lgtm (§10)</text>
+  <text x="555" y="313" class="mono-sm">Prometheus + Tempo + Loki + Mimir + Grafana</text>
+
+  <line x1="670" y1="318" x2="670" y2="358" class="arrow" marker-end="url(#arrowhead)"/>
+
+  <!-- Connection arrow between columns -->
+  <path class="arrow" d="M 360 322 C 420 322, 480 322, 540 322" marker-end="url(#arrowhead)"/>
+  <text x="450" y="316" class="arrow-l" text-anchor="middle">binary</text>
+
+  <!-- Host band -->
+  <rect class="band b-host" x="60" y="400" width="780" height="120"/>
+  <text x="450" y="424" class="ttl" text-anchor="middle">HOST  —  Fedora 44</text>
+  <text x="450" y="440" class="sec" text-anchor="middle">Linux kernel 6.x, the substrate all the above runs on</text>
+
+  <rect class="b-tool-h" x="90" y="452" width="200" height="56"/>
+  <text x="105" y="470" class="lbl">cgroup v2 + systemd</text>
+  <text x="105" y="484" class="mono-sm">memory.high, cpu.weight, cpuset.cpus</text>
+  <text x="105" y="498" class="mono-sm">user-1000.slice, podman.scope</text>
+
+  <!-- Accent: cgroup delegation -->
+  <rect class="b-accent" x="310" y="452" width="280" height="56"/>
+  <text x="325" y="470" class="accent-t">cgroup v2 controller delegation</text>
+  <text x="325" y="484" class="mono-sm">/etc/systemd/system/user@.service.d/delegate.conf</text>
+  <text x="325" y="498" class="accent-l">G-40: the prerequisite most setups miss</text>
+
+  <rect class="b-tool-h" x="610" y="452" width="200" height="56"/>
+  <text x="625" y="470" class="lbl">Profilers (§10)</text>
+  <text x="625" y="484" class="mono-sm">perf, bcc-tools, bpftrace</text>
+  <text x="625" y="498" class="mono-sm">used against container PIDs</text>
 </svg>

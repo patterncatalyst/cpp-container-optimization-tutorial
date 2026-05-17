@@ -15050,6 +15050,106 @@ Proposed batching:
 
 User can review r106 first, then we proceed with r107.
 
+### 2026-05-16 — r107: Earlier-section diagrams batch — §1, §4, §5, §6
+
+Four placeholder diagrams promoted to real content, matching the §2
+reference style established in r106. Each is conceptual / mechanism-
+focused (less verified-data backing than the §-anchor diagrams in
+r106), but each has a clear accent in red per the style guide.
+
+**1. `01-prerequisites-toolchain`** — Two-column layout: BUILD-TIME
+(Conan, CMake+Ninja, gcc-toolset-14, ELF binary) on the left,
+RUNTIME (Podman, crun/conmon, UBI bases, hey/ghz, otel-lgtm) on
+the right, with a "binary" arrow bridging them. Both columns ground
+into a HOST band (Fedora 44) containing three sub-blocks: cgroup
+v2+systemd, **cgroup v2 controller delegation (red accent, the G-40
+prerequisite most setups miss)**, and profilers (perf, bcc-tools,
+bpftrace).
+Files: 7 KB SVG + 8 KB excalidraw (18 elements).
+
+**2. `04-image-strategy-multistage`** — Side-by-side comparison:
+single-stage build (left) shows the Containerfile and lists what
+ends up in the final image (toolchain ~400 MB, Conan cache
+~200 MB, intermediates ~80 MB, source ~5 MB, binary ~4 MB) totaling
+**689 MB**. Multi-stage build (right) shows Stage 1 (build, FROM
+ubi:9) with all the heavy stuff and Stage 2 (runtime, FROM
+ubi-micro) with just the binary, **totaling 26.4 MB**. The
+`COPY --from=build` arrow between stages is the red accent — the
+key transition. Bottom band: verified r20 demo-01 result: 689 MB →
+26.4 MB (**26× smaller**).
+Files: 8 KB SVG + 8 KB excalidraw (17 elements).
+
+**3. `05-compile-time-pgo-flow`** — Three-pass flow left to right:
+source → Pass 1 (Instrument, `-fprofile-generate`, gold) → Pass 2
+(Profile, run with realistic workload, generates `.profraw` →
+merged.profdata, terracotta) → Pass 3 (Optimize, `-fprofile-use`,
+green) → optimized production binary. The arrow from Pass 2 to
+Pass 3 is the **red accent — the entire feedback loop is "what the
+binary actually does"**. Bottom: LTO sidebar (orthogonal, -flto in
+Pass 1 and Pass 3, together 15-30% throughput improvement) + a
+bulleted list of what PGO actually does to the binary (inline,
+branch reorder, cold path eviction, etc.)
+Files: 9 KB SVG + 8 KB excalidraw (16 elements).
+
+**4. `06-stl-layout-flat-vs-node`** — Side-by-side memory layout
+visualization. Left (vector, green): stack header with data
+pointer → contiguous heap with two cache lines showing 16 ints
+packed per line; iteration cost ~1 cache miss per 16 ints, < 1 ns
+per element. Right (list, terracotta): stack header → 5 scattered
+heap nodes connected by red pointer-chase arrows, each labeled
+"miss"; iteration cost ~1 cache miss per element, 15-40 ns per
+element typical. The **scattered node layout with red "miss" labels
+is the accent — visualizing pointer chasing as the cache cost.**
+Files: 11 KB SVG + 11 KB excalidraw (25 elements).
+
+**G-43 captured during r107: XML comments cannot contain `--`.**
+
+§4's SVG had `<!-- Red COPY --from line: the key transition -->`
+in a comment — the `--from` literal triggered an XML parse error
+("invalid token") because XML's grammar reserves `--` as the
+comment terminator pattern. Fixed by rewording the comment to
+"Red COPY directive: the key transition between stages". The
+literal `COPY --from=build` text in the rendered `<text>` element
+is fine — only XML *comments* prohibit `--`.
+
+This is a recurring hazard for hand-written SVGs that document
+container/Linux tooling, where flags and directives routinely use
+`--option` form. The comment-only restriction is easy to miss
+during authorship but caught by `xmllint` / `xml.etree.ElementTree`
+parse on the first try. Audit pattern added: grep for
+`<!--.*--[a-zA-Z]` across all SVGs before commit (run during r107;
+returned clean for the other diagrams).
+
+**No accidental gotcha for SVG content text** — the `<text>`
+element body can contain `--` freely; only the `<!-- ... -->`
+comment delimiters react.
+
+**Diagram progress after r107:** 7 of 15 done.
+
+- ✓ §2 four-layers (pre-existing)
+- ✓ §2 threading-models (pre-existing)
+- ✓ §3 raii-discipline (pre-existing)
+- ✓ §7 allocator-stack (r106)
+- ✓ §10 otel-stack (r106)
+- ✓ §11 cgroup-tree (r106)
+- ✓ §1 prerequisites-toolchain (r107)
+- ✓ §4 image-strategy-multistage (r107)
+- ✓ §5 compile-time-pgo-flow (r107)
+- ✓ §6 stl-layout-flat-vs-node (r107)
+- remaining for r108: §8 io-uring-rings, §9 networking-veth-vs-
+  host, §12 debug-sidecar-pattern, §13 reproducibility-conan-flow,
+  §14 pitfalls-avx512-mismatch (five diagrams)
+
+**Files changed in r107 (9):**
+
+- `diagrams/01-prerequisites-toolchain.{svg,excalidraw}`: real
+- `diagrams/04-image-strategy-multistage.{svg,excalidraw}`: real
+- `diagrams/05-compile-time-pgo-flow.{svg,excalidraw}`: real
+- `diagrams/06-stl-layout-flat-vs-node.{svg,excalidraw}`: real
+- `_plans/reconciliation-plan.md`: this r107 entry + G-43 capture
+
+**No code changes. No image rebuild. Pure diagram work.**
+
 ---
 
 ## Known divergences from the PRD
