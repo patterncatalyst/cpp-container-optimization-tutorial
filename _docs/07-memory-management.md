@@ -28,16 +28,14 @@ By the end of this section you can:
 
 {% include excalidraw.html name="07-allocator-stack" caption="The allocator stack: app → PMR resource → glibc malloc / jemalloc / mimalloc → page cache → cgroup memory.high → cgroup memory.max → host" %}
 
-## Planned content
-
-### Where the cost lives
+## Where the cost lives
 
 Allocation cost isn't `malloc()`. It's the page fault that follows
 the first write to a page glibc just handed out. Resident-set growth
 is the latency signal worth watching; allocation rate is mostly a
 distraction.
 
-### PMR, and where its advantage actually lives
+## PMR, and where its advantage actually lives
 
 `std::pmr::monotonic_buffer_resource` is the high-leverage tool
 in this section. The conceptual model: a fixed buffer (often
@@ -154,7 +152,7 @@ When PMR won't help:
 - Code where allocation rate is already low because you've
   optimized data structures upstream
 
-### Allocators: what changes when you swap
+## Allocators: what changes when you swap
 
 | Allocator    | Thread caching                      | Returns to OS quickly | Drop-in via `LD_PRELOAD` |
 |--------------|-------------------------------------|-----------------------|--------------------------|
@@ -165,7 +163,7 @@ When PMR won't help:
 
 The "returns to OS" column is the column that matters in a container.
 
-### Why allocators hold onto memory (and why that's a container problem)
+## Why allocators hold onto memory (and why that's a container problem)
 
 Standard `malloc` implementations don't immediately `munmap()` freed
 regions. They keep them on a free list because the next allocation
@@ -188,7 +186,7 @@ Three escape hatches, in order of preference:
    draining a request batch). Coarse, but reliable when you know the
    shape of your workload.
 
-### cgroups v2: `memory.max`, `memory.high`, and the difference
+## cgroups v2: `memory.max`, `memory.high`, and the difference
 
 ```text
 memory.max   — hard ceiling. Going over invokes the OOM killer.
@@ -219,7 +217,7 @@ auto memory_current = read_cgroup_long("/sys/fs/cgroup/memory.current");
 
 (`memory.max` reads as the literal string `max` when unset; handle that.)
 
-### RSS, working set, and `memory.current`
+## RSS, working set, and `memory.current`
 
 These are not the same number:
 
@@ -235,7 +233,7 @@ These are not the same number:
 
 When the OOM killer fires, it does so on `memory.current`, not on RSS.
 
-### The LinuxMemoryChecker pattern
+## The LinuxMemoryChecker pattern
 
 The C++ Presto team published a useful pattern: a periodic in-process
 check that compares `memory.current` to `memory.max` and starts shedding
@@ -297,6 +295,6 @@ combination — useful for seeing how the *layout* decisions from
 
 ## What's next
 
-§7 leaves memory and goes to the network: `io_uring` and async
-gRPC, where the ratio of useful CPU to syscall overhead is the
-fight.
+[§8 leaves memory and goes to the network](08-io-latency.md):
+`io_uring` and async gRPC, where the ratio of useful CPU to
+syscall overhead is the fight.

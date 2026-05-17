@@ -172,7 +172,12 @@ syscall overhead per submission goes to *zero*.
 SQPOLL is rarely the right default — most services don't have
 enough sustained I/O pressure to justify the kernel thread — but
 for high-fan-in network proxies or storage workloads at >500k
-req/s it can shave another 30-50% off the latency floor.
+req/s it can shave another 30-50% off the latency floor. The
+SQPOLL kernel thread shows up as `[io_uring-sq]` in `ps`;
+[§11's cpuset isolation patterns](11-noisy-neighbors.md) apply
+to it the same way they apply to your service's worker threads
+— pin the SQPOLL thread to a dedicated core if you want to
+keep its work from contending with anything else.
 
 ## Container security gates for `io_uring` — G-32
 
@@ -333,7 +338,12 @@ fastest? Two reasons:
 
 1. **Asio's io_uring backend uses fixed registered buffers and
    registered file descriptors**, which avoid a per-call
-   buffer/fd lookup in the kernel. The direct liburing version
+   buffer/fd lookup in the kernel. Registered buffers are a
+   data-layout decision — you allocate the buffer pool *once*
+   at setup and reuse it for every operation, which is the
+   same arena pattern [§6's `flat_map` discussion](06-stl-layout.md)
+   and [§7's PMR `monotonic_buffer_resource`](07-memory-management.md)
+   apply to general-purpose data. The direct liburing version
    in demo-03 doesn't (yet) use these features.
 2. **Asio's coroutine machinery batches submissions more
    aggressively** than the hand-rolled version's loop.
@@ -400,7 +410,11 @@ registered buffer not unregistered is a pinned page that the
 kernel can't reclaim; a CQE not `cqe_seen`'d is a ring slot
 permanently consumed. The C++-shaped wrapper that pairs each
 of these with `unique_ptr`-style ownership semantics is what
-makes the code production-grade.
+makes the code production-grade — the same pattern
+[§3 develops for resource discipline more broadly](03-raii-discipline.md),
+applied here to kernel-side resources where the leak symptoms
+are even harder to spot than the file-descriptor leaks §3
+walks through.
 
 ## Demo
 

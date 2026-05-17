@@ -16099,6 +16099,159 @@ The natural next moves:
    §-anchor mini-essays, the 15 diagrams, and the 7 verified
    demos into a presentation deck.
 
+### 2026-05-16 — r113: Polish round before demo-07
+
+Small fix-up round before C/F: four targeted fixes plus an
+audit-script correction.
+
+**Fix 1 — §7 stale "## Planned content" heading removed.**
+
+§7's prose was written in r105 but the structure inherited the
+stub template's `## Planned content` H2 heading wrapping over
+the real prose, with 6 sub-sections as H3. Removed the wrapping
+H2 and promoted the 6 H3 sub-sections to H2 (`### Where the
+cost lives` → `## Where the cost lives`, etc.). Net: -2 lines,
+proper heading hierarchy throughout.
+
+**Fix 2 — §3 cross-reference audit was a false alarm.**
+
+Earlier rounds counted §3 as having 0 cross-references and
+flagged it for r113 polish. The actual situation: §3 uses
+Jekyll's `{% raw %}{% include section.html n=N %}{% endraw %}`
+convention (which resolves to a resilient link via doc
+front-matter lookup) instead of the markdown-link style
+(`[§N text](N-name.md)`). §3 has **10 include-style xrefs**
+to §7, §8, §9, §12 — perfectly fine cross-reference density.
+
+The audit script was using the wrong regex; updated audit
+now counts both conventions:
+
+```bash
+md_xrefs=$(grep -cE "§[0-9]+|\(0[0-9]-|\(1[0-6]-" "$f")
+include_xrefs=$(grep -cE "section\.html n=[0-9]+" "$f")
+```
+
+Two valid conventions exist in the tutorial — sections written
+in r103-r112 use the markdown-link style; sections §2 and §3
+(written earlier, before this batch of work) use the
+include-style. The include-style is *more* rename-resilient
+(it looks up by `order` front-matter), but the markdown-link
+style is *more* readable in raw markdown. Both are kept;
+**not converting** between them. Future sections may use either
+convention.
+
+**Fix 3 — §8 cross-reference density (4 → 9).**
+
+§8 was genuinely sparse on backward links. Three additions:
+
+1. SQPOLL section now references [§11's cpuset isolation
+   patterns](11-noisy-neighbors.md) for pinning the
+   `[io_uring-sq]` kernel thread.
+2. Registered-buffers paragraph (in "Direct vs Asio io_uring")
+   now references [§6's `flat_map` discussion](06-stl-layout.md)
+   and [§7's PMR `monotonic_buffer_resource`](07-memory-management.md)
+   as the same arena pattern applied to general-purpose data.
+3. "Why this is a C++ concern" RAII paragraph now explicitly
+   references [§3's resource-discipline coverage](03-raii-discipline.md)
+   as the broader pattern applied to kernel-side resources.
+
+Net: §8 went from 4 → 9 xrefs, all backward-pointing
+(complementing the existing forward links to §9 and §10).
+
+**Fix 4 — caught one more self-reference bug in §7.**
+
+The earlier r109-r112 tracker had identified 5 sections with
+the stub copy-paste bug (§4, §5, §6, §8, §12). The r113 audit
+script — which finds "What's next" paragraphs that reference
+their own section number — caught a 6th: **§7's "What's next"
+said "§7 leaves memory and goes to the network..."** The fix
+was the same shape — change `§7` to `[§8]`. Final tally: 6
+sections had the bug (§4, §5, §6, §7, §8, §12); §1, §2, §3,
+§9, §10, §11, §13, §14 did not.
+
+The audit script's logic (per-section: "is the section's own
+number mentioned in its own 'What's next' paragraph in a
+forward-pointing way?") is now in the plan as a teaching point
+for future stub rewrites — worth running once after every prose
+round.
+
+**Other audits run:**
+
+- **Self-reference bug recheck across all sections** — clean
+  after r113 (§2's "the threading deep-dive that §2 sketched"
+  is a backward callback, not a forward self-reference; it
+  was correctly excluded from the bug list)
+- **Liquid audit across all of `_docs/`** — ✓ all clean
+- **`## Planned content` heading sweep** — ✓ all clean (was
+  only §7 remaining; fixed)
+
+**Final per-section state (audit columns are: lines, "Planned"
+heading present, total cross-references including both
+conventions):**
+
+| Section | Lines | "Planned" | Total xrefs |
+|---|---|---|---|
+| §0 outline | 280 | no | 37 |
+| §1 prerequisites | 533 | no | 4 |
+| §2 introduction | 467 | no | 20 |
+| §3 raii-discipline | 259 | no | 10 |
+| §4 image-strategy | 353 | no | 9 |
+| §5 compile-time-wins | 359 | no | 9 |
+| §6 stl-layout | 408 | no | 12 |
+| §7 memory-management | 300 | no | 5 |
+| §8 io-latency | 462 | no | 9 |
+| §9 networking-kernel | 502 | no | 8 |
+| §10 observability-profiling | 437 | no | 4 |
+| §11 noisy-neighbors | 334 | no | 5 |
+| §12 analysis-debugging | 570 | no | 12 |
+| §13 reproducibility-abi | 740 | no | 13 |
+| §14 pitfalls | 493 | no | 17 |
+| §15 where-to-go-next | 60 | no | 2 |
+| §16 appendix | 339 | no | 1 |
+
+**All section prose work complete. All diagrams complete.
+Polish round done.**
+
+**Files changed in r113 (3):**
+
+- `_docs/07-memory-management.md`: stale `## Planned content`
+  heading removed; 6 sub-sections promoted from H3 to H2; §7
+  self-reference bug in "What's next" fixed (302 → 300 lines,
+  net minor; structural cleanup is the substance)
+- `_docs/08-io-latency.md`: 3 cross-reference additions (462
+  lines, was 449; 4 → 9 xrefs)
+- `_plans/reconciliation-plan.md`: this r113 entry
+
+**No code changes. No image rebuild. Pure prose work.**
+
+**Updated option-1 plan status:**
+
+| Path | State |
+|---|---|
+| A. demo-06 | ✓ complete |
+| B. demo-05 | ✓ complete |
+| D. Section prose | ✓ COMPLETE (r103-r112) |
+| E. Diagrams (15) | ✓ complete (r106-r108) |
+| **Polish (r113)** | **✓ done** |
+| C. demo-07 quality-pipeline | **next active work** |
+| F. PPTX | last |
+
+**Next: r114+ demo-07 quality-pipeline buildout.** The §12
+prose (r112) describes demo-07 as if it exists; the demo
+itself is still a stub. Round A will produce a minimum-viable
+demo (cppcheck + clang-tidy + GoogleTest + ASan variant); Round
+B will add the abidiff CI step, the hermetic-build comparison,
+and possibly the gcov/lcov + clang source-based coverage
+pipelines that §13 (r112) describes. Likely new gotchas
+expected around:
+- ASan shadow-memory mapping interacting with seccomp (§12
+  prose already addresses this; demo needs to verify)
+- clang-tidy in CI with `compile_commands.json` from CMake
+- abidiff wired into the build (libabigail packaging on UBI 9)
+
+After demo-07: optional demo-08-ebpf-analysis decision, then
+path F (PPTX).
+
 ---
 
 ## Known divergences from the PRD
