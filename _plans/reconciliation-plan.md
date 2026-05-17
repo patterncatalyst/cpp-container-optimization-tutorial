@@ -20652,7 +20652,7 @@ convention:
     `&#123;% raw %&#125; ... &#123;% endraw %&#125;` pair.
   - Prose mentions of the raw/endraw tag names themselves are
     written using HTML entities: `&#123;` and `&#125;` in place of
-    `{` and `}`. Liquid only matches literal `{%`, so entity-
+    `{` and `}`. Liquid only matches literal `&#123;%`, so entity-
     escaped braces are invisible to it; the browser renders the
     entities as `{` and `}` so readers see the literal syntax.
 
@@ -20678,7 +20678,50 @@ endraw appears inside a still-open raw region.
 
 ---
 
+### 2026-05-17 — r134.4: one more — lone `&#123;%` in prose terminates with no `%&#125;`
 
+**The bug.**
+
+The r134.3 entry's prose contained an inline code span showing the
+literal two-character sequence `&#123;%` (the one Liquid scans for).
+Even inside backticks, Liquid's parser still saw it, started parsing
+a tag, and looked for a matching `%&#125;` to close it. None existed
+on that line, on the next line, or anywhere before end-of-file.
+Result:
+
+    Liquid syntax error: Tag '&#123;%' was not properly terminated with regexp: /\%\}/
+
+The same pedagogical mistake as the r134.2/3 chain: discussing the
+Liquid syntax in prose without escaping the literal characters the
+parser scans for. Backticks don't help; only HTML entities do.
+
+**The fix.**
+
+Replace every literal `&#123;%` in prose mentions throughout the
+r134.x entries with `&amp;&#35;123;%` (an HTML entity for `{`
+followed by `%`). After Kramdown processes the source, the entity
+renders in the browser as `&#123;`, so readers still see the
+literal `&#123;%` syntax — but Liquid never sees a parseable
+`&#123;%` in the source. Same convention r134.3 established for
+matched-pair tag mentions, just applied consistently across every
+single stray reference.
+
+**Analyzer extension.**
+
+Added a fourth pattern to `scripts/check-liquid.py`: detect a lone
+`&#123;%` on a line that has no matching `%&#125;` somewhere later
+on the same line. The analyzer allows known multi-line tag openers
+— `include`, `capture`, `for`, `if`, `unless`, `case`, `assign` —
+to continue onto the next line (those are legitimate Liquid patterns
+the site uses). Anything else gets flagged with a recommendation to
+escape using HTML entities. The trim modifier `&#123;%-` is
+recognized as part of the same opener family.
+
+**Files changed.**
+
+- `_plans/reconciliation-plan.md` — fix the lone `&#123;%` on the
+  affected line; add this r134.4 entry
+- `scripts/check-liquid.py` — fourth pattern detector
 
 ---
 

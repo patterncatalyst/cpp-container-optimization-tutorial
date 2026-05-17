@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Static analyzer for Liquid build hazards in the Jekyll source.
 
-Catches the three classes of bug that crashed the Pages build in r134
-/ r134.1 / r134.2 / r134.3 before they reach CI:
+Catches the four classes of bug that crashed the Pages build in r134
+through r134.4 before they reach CI:
 
     1. {{ var, other }}    — comma without a preceding filter pipe.
                               Valid Liquid is {{ var | filter: a, b }}
@@ -27,8 +27,21 @@ Catches the three classes of bug that crashed the Pages build in r134
                               closer becomes orphan; build fails with
                               'Unknown tag endraw'.
 
-                              Prose that needs to show the literal tag
-                              syntax should use HTML entities:
+    4. Lone `{%` in prose   — added in r134.4. Liquid scans for the
+       (no matching `%}`)     literal two-char sequence `{%` regardless
+                              of backticks, code fences, or any markdown
+                              context. If found, it expects `%}` to
+                              close the tag. Multi-line tags exist for
+                              {% include %} etc., but lone `{%` in
+                              prose (e.g. an inline code span like
+                              `{%` discussing what Liquid matches)
+                              makes the parser consume content
+                              indefinitely until it finds `%}`,
+                              eventually erroring with 'Tag {% was not
+                              properly terminated'.
+
+                              Prose that needs to show the literal
+                              tag syntax should use HTML entities:
                               &#123;% raw %&#125; / &#123;% endraw %&#125;.
 
 The analyzer is context-aware:
@@ -199,6 +212,39 @@ def analyze() -> list[str]:
                 errors.append(
                     f"{f}:{i}: site.github.* is plugin-dependent: "
                     f"{line.strip()[:80]}"
+                )
+
+            # Pattern 4 (r134.4): lone {% without matching %} on same line.
+            # Liquid scans for literal `{%` regardless of backticks/code.
+            # If it finds one, it expects the tag to terminate with `%}`.
+            # Multi-line tags exist for `{% include %}` etc., but lone
+            # `{%` in prose (e.g. discussing what Liquid matches) will
+            # make the parser consume content indefinitely until it finds
+            # `%}` somewhere — usually erroring with "Tag '{%' was not
+            # properly terminated".
+            #
+            # We look at the line AFTER stripping inline raw (so legitimate
+            # raw escapes don't count). Any remaining `{%` should be
+            # followed by a matching `%}` on the same line OR be a known
+            # multi-line tag opener like `{% include ... ` that's clearly
+            # mid-tag.
+            for m in re.finditer(r'\{%', inspect):
+                rest_of_line = inspect[m.start():]
+                if '%}' in rest_of_line:
+                    continue  # tag terminates on same line — fine
+                # Check if it's a known multi-line tag start (the tag
+                # continues to the next line). The valid Liquid grammar
+                # after `{%` should start with whitespace + a tag word.
+                tag_word = re.match(r'\{%-?\s*(\w+)', rest_of_line)
+                if tag_word and tag_word.group(1) in {
+                    'include', 'include_relative', 'capture', 'for',
+                    'if', 'unless', 'case', 'assign'
+                }:
+                    continue  # multi-line tag — usually fine
+                # Otherwise: lonely {% in prose, parser will choke
+                errors.append(
+                    f"{f}:{i}: lone {{% with no matching %}} on same "
+                    f"line (escape with &#123;%): {line.strip()[:80]}"
                 )
 
     return errors
