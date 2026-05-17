@@ -108,9 +108,90 @@ RUN clang-tidy -p build/compile_commands.json --warnings-as-errors='*' src/*.cpp
 ```
 
 The build fails if either tool reports a warning marked as
-error. Demo-07's `Containerfile` runs this exact pattern, and
-its `./demo.sh` deliberately ships one finding each tool catches
-so you can see the failure mode.
+error. Demo-07's `Containerfile` runs this exact pattern. By
+default the demo ships clean — production code that passes its
+own analyzers — but a `--demo-findings` flag lets you see what
+the failure mode looks like.
+
+### Seeing the analyzers fire — `./demo.sh --demo-findings`
+
+The reports/ directory after a clean run is informative but
+quiet: `cppcheck.xml` is 129 bytes (just the XML header), and
+`clang-tidy.txt` is empty. That's correct production behavior —
+clean code, no findings — but it doesn't teach readers what
+findings actually look like.
+
+The `--demo-findings` flag (introduced in demo-07's r128) fixes
+this by temporarily appending a deliberately bad function to
+`src/lib/channel.cpp`, building through a `analyzer-soft` stage
+that captures findings WITHOUT gating, then restoring
+`channel.cpp` on exit. The bad code is engineered to trigger
+several distinct checks across both tools:
+
+```cpp
+[[maybe_unused]] int demo07_findings_example(int input) {
+    int uninit_var;                              // → cppcheck: uninitvar
+    int* maybe_null = NULL;                      // → clang-tidy: modernize-use-nullptr
+    char* leaked_buffer = new char[16];          // → cppcheck: memleak
+    leaked_buffer[0] = static_cast<char>(input);
+    if (input > 0) {
+        return uninit_var;                       // → cppcheck: uninitvar (use)
+    }
+    return *maybe_null;                          // → cppcheck: nullPointer
+}
+```
+
+Run it:
+
+```
+$ ./demo.sh --demo-findings
+[step] Findings demo: appending deliberately bad code to src/lib/channel.cpp
+...
+[ok]  Analyzers fired. Here's what they caught:
+
+----- reports/cppcheck.xml (cppcheck findings) -----
+<error id="uninitvar" severity="error" msg="Uninitialized variable: uninit_var">
+  <location file="src/lib/channel.cpp" line="..." column="..."/>
+</error>
+<error id="memleak" severity="error" msg="Memory leak: leaked_buffer">
+  ...
+</error>
+<error id="nullPointer" severity="error" msg="Null pointer dereference: maybe_null">
+  ...
+</error>
+----------------------------------------------------
+
+----- reports/clang-tidy.txt (clang-tidy findings) -----
+src/lib/channel.cpp:NN:NN: warning: use nullptr [modernize-use-nullptr]
+src/lib/channel.cpp:NN:NN: warning: variable 'uninit_var' is not initialized
+                            [cppcoreguidelines-init-variables]
+...
+--------------------------------------------------------
+
+[info] channel.cpp will now be restored.
+```
+
+Two design points worth internalizing:
+
+**1. The stage is split — `analyzer-soft` captures, `analyzer` gates.**
+This is the same pattern as `abi-diff` (always captures) vs `abi`
+(gates on captured evidence). It exists so that `--demo-findings`
+can build only through the capture stage without the gating step
+firing. Production `--analyze-only` still builds through the full
+`analyzer` stage and fails loudly on any finding.
+
+**2. The modification is ephemeral.** `--demo-findings` uses
+`mktemp` to back up `channel.cpp`, then sets a bash `EXIT` trap
+that restores the file when the script exits — clean exit, ^C,
+build failure, anything. The repository never sees the bad code
+committed. Readers can run the flag repeatedly without it
+"sticking."
+
+The lesson: **CI should be the only thing that runs the gating
+analyzer.** Local pedagogical mode should be able to capture and
+display findings without forcing the developer to choose between
+"run the analyzer" and "have a passing build." Split stages give
+you both.
 
 ## Tests — GoogleTest + gmock
 

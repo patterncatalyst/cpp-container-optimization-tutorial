@@ -19388,6 +19388,174 @@ describes.
 | r128 | `--demo-findings` flag | next |
 | r129 | Hermetic build comparison | after r128 |
 
+### 2026-05-17 — r128: `--demo-findings` flag (analyzer split + pedagogical demo)
+
+User explicitly asked for r128 after r127-docs shipped.
+
+**The problem r128 solves.**
+
+After r127.2, demo-07 has a clean state: all analyzers pass, all
+tests pass, coverage reports, ABI is stable. That's correct
+production behavior — clean code, clean reports — but it's
+pedagogically thin. Readers see `cppcheck.xml` at 129 bytes (just
+the XML header) and `clang-tidy.txt` empty, and reasonably ask:
+"so what would findings actually look like?"
+
+The §12 prose at line 110-113 has been quietly aspirational about
+this since the early drafts:
+
+> "Demo-07's `Containerfile` runs this exact pattern, and its
+>  `./demo.sh` deliberately ships one finding each tool catches
+>  so you can see the failure mode."
+
+That second clause was never actually true — the demo always
+shipped clean. r128 brings the demo in line with that aspiration,
+but with a better mechanism than "ship broken code by default":
+
+- **Default state**: analyzers ship clean (production-realistic)
+- **`--demo-findings` flag**: temporarily appends bad code, runs
+  through a non-gating stage, shows findings, restores
+
+**The design — split analyzer into soft + strict.**
+
+Mirrors the abi-diff vs abi split from r126.
+
+```
+FROM build AS analyzer-soft
+  - cppcheck (writes cppcheck.xml, NEVER gates)
+  - run-clang-tidy (writes clang-tidy.txt, NEVER gates)
+
+FROM analyzer-soft AS analyzer
+  - grep cppcheck.xml for <error tags; gate
+  - grep clang-tidy.txt for ":line:col: warning|error:" lines; gate
+```
+
+The strict analyzer stage chains FROM analyzer-soft, so its
+reports come from the soft stage's captured evidence rather than
+re-running the tools. This means production `--analyze-only` still
+fails loudly on any finding (the gating step in analyzer fires),
+while `--demo-findings` can target analyzer-soft directly and
+bypass gating.
+
+**The bad code function (channel.cpp injection).**
+
+The demo.sh `--demo-findings` flag appends this function to
+`src/lib/channel.cpp` via `cat >> "$cpp" <<EOF`:
+
+```cpp
+[[maybe_unused]] int demo07_findings_example(int input) {
+    int uninit_var;                              // → cppcheck: uninitvar
+    int* maybe_null = NULL;                      // → clang-tidy: modernize-use-nullptr
+    char* leaked_buffer = new char[16];          // → cppcheck: memleak
+    leaked_buffer[0] = static_cast<char>(input); //   ...and used once so it's not "unused"
+    if (input > 0) {
+        return uninit_var;                       // → cppcheck: uninitvar (use)
+    }
+    return *maybe_null;                          // → cppcheck: nullPointer
+}
+```
+
+Each line is engineered to trigger a specific diagnostic. Expected
+findings:
+- **cppcheck**: uninitvar (×2 — declaration + use), memleak,
+  nullPointer (4 findings)
+- **clang-tidy**: modernize-use-nullptr, cppcoreguidelines-init-
+  variables, possibly cppcoreguidelines-owning-memory and
+  clang-analyzer-core.NullDereference (3-4 findings)
+
+Total: 6-8 visible findings between the two tools. Good demo
+material that lets readers see what each tool catches and how
+the output is structured.
+
+**The trap-and-restore pattern.**
+
+Same as `--abi-break-demo` (r126):
+
+```bash
+backup="$(mktemp -t channel.cpp.XXXXXX)"
+trap "mv -f '$backup' '$cpp' && log_info 'channel.cpp restored'" EXIT
+cp "$cpp" "$backup"
+# ... append bad code, build, extract, display ...
+exit 0  # trap fires, restores
+```
+
+The `EXIT` trap fires on:
+- Normal exit (the explicit `exit 0` at end)
+- ^C (SIGINT)
+- Build failure (set -euo pipefail aborts)
+- Any other signal
+
+Readers can run `./demo.sh --demo-findings` repeatedly without
+the bad code ever sticking in the repo. Robust against partial
+failures.
+
+**Files changed (3):**
+
+1. `examples/demo-07-quality-pipeline/Containerfile`
+   - SPLIT: analyzer stage (single, gates strictly)
+   - INTO: analyzer-soft (captures, never gates) + analyzer
+     (FROM analyzer-soft, gates on captured reports via grep)
+   - Net effect: production analyzer behavior unchanged;
+     analyzer-soft target available for --demo-findings
+
+2. `examples/demo-07-quality-pipeline/demo.sh`
+   - ADDED: --demo-findings flag, DO_DEMO_FINDINGS variable
+   - ADDED: usage line in header comment
+   - ADDED: full workflow block (mktemp backup, trap, append bad
+     code, build analyzer-soft, podman cp reports, display
+     findings, exit 0 with trap restore)
+   - ADDED: findings-demo to --clean image cleanup list
+
+3. `_docs/12-analysis-debugging.md`
+   - UPDATED: line 110-113 prose (replaced aspirational
+     "deliberately ships one finding" with accurate "by default
+     ships clean; --demo-findings shows the failure mode")
+   - ADDED: new subsection "Seeing the analyzers fire —
+     ./demo.sh --demo-findings" covering:
+     - Why the flag exists (clean ≠ pedagogical)
+     - The bad code that gets appended (mapped finding-by-finding)
+     - Sample output from cppcheck.xml + clang-tidy.txt
+     - Two design lessons: (a) split stages let one demo serve
+       both production gating and pedagogical display; (b) the
+       ephemeral modification pattern keeps the repo clean
+
+**Expected first-run behavior.**
+
+Cache invalidation: analyzer stage's logic changed (now splits
+into analyzer-soft + analyzer). So:
+- analyzer-soft layer rebuilds from build stage (fast — just
+  cppcheck + clang-tidy invocations, same source unchanged)
+- analyzer layer adds two grep checks (fast — no compilation)
+
+For `--demo-findings`:
+- build stage cache invalidates (channel.cpp modified)
+- analyzer-soft rebuilds with bad code (cppcheck/clang-tidy
+  produce findings, no gating)
+- demo.sh extracts reports/, displays, exits 0
+- Trap restores channel.cpp
+- Next non-demo run: build stage cache invalidates again
+  (channel.cpp restored to original), analyzer-soft rebuilds,
+  analyzer passes (clean code → no <error> tags, no diagnostic
+  lines)
+
+Cache thrash is unavoidable for this workflow but only affects
+demo iterations. Production CI runs always see clean cache.
+
+**Round B sequencing — r128 done:**
+
+| Round | Item | Status |
+|---|---|---|
+| r125 | Housekeeping + `--abi-bless` | shipped |
+| r126 | `--abi-break-demo` flag | shipped + verified |
+| r126-docs | §12 reports/ explainer | shipped |
+| r127.2 | G-55 pivot — gcovr | shipped + VERIFIED |
+| r127-docs | §12 reading coverage output | shipped |
+| **r128** | **`--demo-findings` flag** | **this round** |
+| r129 | Hermetic build comparison | next |
+
+After r129: Path F (PPTX rendering 14 sections + appendix). Round
+B will be functionally complete.
+
 ---
 
 ## Known divergences from the PRD

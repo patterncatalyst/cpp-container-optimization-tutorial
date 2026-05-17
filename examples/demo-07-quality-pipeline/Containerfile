@@ -112,24 +112,67 @@ RUN conan profile detect --force \
  && cmake --preset release-debuginfo \
  && cmake --build --preset release-debuginfo -j"$(nproc)"
 
-# ---- analyzer stage ----
-FROM build AS analyzer
+# ---- analyzer-soft stage ----
+# Runs cppcheck + clang-tidy and ALWAYS writes their reports to /src/reports/,
+# regardless of findings. This stage NEVER fails — its job is to capture
+# evidence, not to gate. The gating decision lives in the `analyzer` stage
+# below.
+#
+# This split makes two things possible:
+#   1. ./demo.sh --analyze-only (production)   → builds through `analyzer`,
+#      which fails loudly if cppcheck or clang-tidy report ANY issue.
+#   2. ./demo.sh --demo-findings (pedagogical) → builds through
+#      `analyzer-soft` only, so readers can see what real findings look
+#      like without the build failing.
+#
+# Same pattern as abi-diff vs abi.
+FROM build AS analyzer-soft
 WORKDIR /src
 RUN mkdir -p reports
 
-# cppcheck. --error-exitcode=1 makes the build break on any finding.
+# cppcheck WITHOUT --error-exitcode so the stage never gates. Findings
+# still land in reports/cppcheck.xml; the gating decision is downstream.
 RUN cppcheck --enable=warning,style,performance,portability \
-        --error-exitcode=1 \
         --inline-suppr \
         --xml --xml-version=2 \
         --suppress=missingIncludeSystem \
         -I src/include src/ 2> reports/cppcheck.xml \
-  || (cat reports/cppcheck.xml; exit 1)
+  || true
 
-# clang-tidy. Errors-as-warnings flipped on by .clang-tidy.
+# clang-tidy. .clang-tidy has WarningsAsErrors='*' which would normally
+# make run-clang-tidy exit non-zero on any finding. The `|| true` swallows
+# that exit; the diagnostics are already captured in reports/clang-tidy.txt
+# regardless. The gating happens in the `analyzer` stage.
 RUN run-clang-tidy -p build/release-debuginfo -j"$(nproc)" \
         $(find src -name '*.cpp') > reports/clang-tidy.txt 2>&1 \
-  || (cat reports/clang-tidy.txt; exit 1)
+  || true
+
+# ---- analyzer stage ----
+# Inherits the captured reports from analyzer-soft and gates strictly:
+#   - cppcheck.xml: any <error ...> tag fails the build
+#   - clang-tidy.txt: any line matching "FILE:LINE:COL: warning|error:"
+#     (the standard diagnostic format) fails the build
+#
+# Building this target re-runs the analyzers via cache invalidation only
+# when source changes; otherwise the reports are reused from analyzer-soft.
+FROM analyzer-soft AS analyzer
+WORKDIR /src
+
+# Gate on cppcheck findings.
+RUN if grep -q '<error ' reports/cppcheck.xml; then \
+        echo "cppcheck reported findings:"; \
+        cat reports/cppcheck.xml; \
+        exit 1; \
+    fi
+
+# Gate on clang-tidy findings. The regex matches the canonical diagnostic
+# line shape (path:line:col: severity:) so we don't trip on summary lines
+# like "1234 warnings generated" that include the word "warning".
+RUN if grep -qE ':[0-9]+:[0-9]+: (warning|error):' reports/clang-tidy.txt; then \
+        echo "clang-tidy reported findings:"; \
+        cat reports/clang-tidy.txt; \
+        exit 1; \
+    fi
 
 # ---- test stage ----
 FROM build AS tests

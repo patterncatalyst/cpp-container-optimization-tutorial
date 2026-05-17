@@ -12,6 +12,11 @@
 #                            # temporarily patch channel.hpp to break ABI;
 #                            # rebuild + run abidiff; show the report; restore.
 #                            # Requires a committed abi-reference/ baseline.
+#   ./demo.sh --demo-findings
+#                            # temporarily append deliberately bad code to
+#                            # channel.cpp; run analyzers WITHOUT gating;
+#                            # show what cppcheck + clang-tidy catch; restore.
+#                            # Pedagogical only — does NOT modify the repo.
 #   ./demo.sh --coverage-gcc # build with gcov instrumentation, run tests,
 #                            # generate lcov HTML report at
 #                            # reports/coverage-gcc/index.html
@@ -31,6 +36,7 @@ DO_DEBUG=0
 DO_CLEAN=0
 DO_ABI_BLESS=0
 DO_ABI_BREAK_DEMO=0
+DO_DEMO_FINDINGS=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --analyze-only)    PHASES=(analyzer);    shift;;
@@ -40,6 +46,7 @@ while [[ $# -gt 0 ]]; do
     --coverage-gcc)    PHASES=(coverage-gcc); shift;;
     --abi-bless)       DO_ABI_BLESS=1;       shift;;
     --abi-break-demo)  DO_ABI_BREAK_DEMO=1;  shift;;
+    --demo-findings)   DO_DEMO_FINDINGS=1;   shift;;
     --debug)           DO_DEBUG=1;           shift;;
     --clean)           DO_CLEAN=1;           shift;;
     *) log_err "unknown arg: $1"; exit 2;;
@@ -56,7 +63,8 @@ if [[ $DO_CLEAN -eq 1 ]]; then
     cpp-tut/demo-07:abi-diff \
     cpp-tut/demo-07:abi \
     cpp-tut/demo-07:svc \
-    cpp-tut/demo-07:gdbserver 2>/dev/null || true
+    cpp-tut/demo-07:gdbserver \
+    cpp-tut/demo-07:findings-demo 2>/dev/null || true
   rm -rf reports
   log_ok "Cleaned."
   exit 0
@@ -165,6 +173,106 @@ if [[ $DO_ABI_BREAK_DEMO -eq 1 ]]; then
     log_warn "abidiff did NOT detect a break — investigate."
     log_warn "(reports/abidiff.txt is missing or empty.)"
   fi
+
+  exit 0
+fi
+
+# --demo-findings: temporarily append deliberately bad code to channel.cpp,
+# build through the analyzer-soft target (captures findings, never gates),
+# show what cppcheck + clang-tidy report, then restore channel.cpp on exit.
+#
+# This exists so readers can SEE what the analyzers catch. Without bad code
+# the analyzer reports are empty (clean repo), which is correct production
+# behavior but uninformative pedagogically. The bad code lives only on disk
+# during this script's runtime; an EXIT trap guarantees restoration.
+if [[ $DO_DEMO_FINDINGS -eq 1 ]]; then
+  cpp="src/lib/channel.cpp"
+  if [[ ! -f "$cpp" ]]; then
+    log_err "$cpp not found"
+    exit 1
+  fi
+
+  backup="$(mktemp -t channel.cpp.XXXXXX)"
+  # shellcheck disable=SC2064
+  trap "mv -f '$backup' '$cpp' && log_info 'channel.cpp restored to original'" EXIT
+  cp "$cpp" "$backup"
+
+  log_step "Findings demo: appending deliberately bad code to $cpp"
+  # The bad function exists ONLY so cppcheck and clang-tidy fire findings
+  # readers can see. Each line below is engineered to trigger a specific
+  # diagnostic. See _docs/12-analysis-debugging.md for the full mapping.
+  cat >> "$cpp" <<'EOF'
+
+// === --demo-findings: deliberately bad code (r128) ===
+// DO NOT use these patterns in production. This block exists only so
+// cppcheck and clang-tidy report findings readers can see.
+namespace demo07 {
+
+[[maybe_unused]] int demo07_findings_example(int input) {
+    int uninit_var;                              // uninitialized variable
+    int* maybe_null = NULL;                      // C-style NULL, should be nullptr
+    char* leaked_buffer = new char[16];          // owning raw pointer, leaks
+    leaked_buffer[0] = static_cast<char>(input); // ...and used once
+    if (input > 0) {
+        return uninit_var;                       // returns the uninit value
+    }
+    return *maybe_null;                          // dereferences NULL
+}
+
+}  // namespace demo07
+EOF
+
+  if ! grep -q 'demo07_findings_example' "$cpp"; then
+    log_err "append verification failed"
+    exit 1
+  fi
+
+  log_info "Bad code appended (will be restored on exit):"
+  echo
+  echo "----- tail of channel.cpp -----"
+  tail -20 "$cpp"
+  echo "-------------------------------"
+  echo
+
+  log_step "Building through analyzer-soft (captures findings, never gates)"
+  mkdir -p reports
+  podman build --target analyzer-soft -t cpp-tut/demo-07:findings-demo .
+
+  # Extract reports from the analyzer-soft image
+  cid="$(podman create cpp-tut/demo-07:findings-demo)"
+  podman cp "$cid:/src/reports/cppcheck.xml" reports/cppcheck.xml 2>/dev/null || true
+  podman cp "$cid:/src/reports/clang-tidy.txt" reports/clang-tidy.txt 2>/dev/null || true
+  podman rm -f "$cid" >/dev/null
+
+  echo
+  log_ok "Analyzers fired. Here's what they caught:"
+  echo
+
+  if [[ -s reports/cppcheck.xml ]] && grep -q '<error ' reports/cppcheck.xml; then
+    echo "----- reports/cppcheck.xml (cppcheck findings) -----"
+    cat reports/cppcheck.xml
+    echo "----------------------------------------------------"
+  else
+    log_warn "No cppcheck findings — reports/cppcheck.xml is empty or clean."
+    log_warn "(That would mean the bad code didn't trigger cppcheck.)"
+  fi
+  echo
+
+  if [[ -s reports/clang-tidy.txt ]] && \
+     grep -qE ':[0-9]+:[0-9]+: (warning|error):' reports/clang-tidy.txt; then
+    echo "----- reports/clang-tidy.txt (clang-tidy findings) -----"
+    cat reports/clang-tidy.txt
+    echo "--------------------------------------------------------"
+  else
+    log_warn "No clang-tidy findings — reports/clang-tidy.txt is empty or clean."
+    log_warn "(That would mean the bad code didn't trigger clang-tidy.)"
+  fi
+
+  echo
+  log_info "In production, --analyze-only would have exited 1 at this point,"
+  log_info "blocking the build. With --demo-findings, the analyzer-soft target"
+  log_info "captures the same evidence but skips the gating step so you can"
+  log_info "read it. channel.cpp will now be restored to its committed state."
 
   exit 0
 fi
