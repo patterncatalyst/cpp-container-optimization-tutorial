@@ -164,6 +164,118 @@ makes it run on the next CMake configure.
 that pairs with GoogleTest — gcov/lcov for GCC builds and
 clang source-based coverage for LLVM builds.
 
+## Understanding the `reports/` directory
+
+After a successful `./demo.sh` run, the demo's `reports/` directory
+holds the evidence each phase produced. The file extensions don't
+always tell you which schema they're in. Here's the legend:
+
+| File | Schema | Producer | Notes |
+|---|---|---|---|
+| `gtest.xml` | JUnit XML | `ctest --output-junit` (release-debuginfo run) | One `<testcase>` per CTest test |
+| `asan.xml` | JUnit XML | `ctest --output-junit` (ASan+UBSan run) | Same schema as gtest.xml, but the underlying tests ran instrumented |
+| `asan.txt` | plain text | `tee` of the ASan ctest stdout | Human-readable; includes any ASan/UBSan stack traces if a sanitizer fires |
+| `cppcheck.xml` | cppcheck XML | `cppcheck --xml --xml-version=2` | Different schema — `<results>` → `<errors>` → `<error>` |
+| `clang-tidy.txt` | plain text | `run-clang-tidy` | One human-readable section per check that fired (empty when clean) |
+| `current.abi` | libabigail XML | `abidw` | Symbolic representation of every public ABI surface for `libdemo07_channel.so.1` |
+| `abidiff.txt` | plain text | `abidiff` | The semantic diff between `current.abi` and `abi-reference/`; empty file means no ABI changes |
+
+The two files worth a longer note: `gtest.xml` and `asan.xml`.
+
+### "JUnit XML" is a schema, not a framework
+
+The "JUnit" label is the schema's name, not a statement about which
+test framework produced the file. JUnit's XML format — defined for
+Apache Ant's `<junit>` task in the early 2000s — became the industry
+standard for test reporting. Nearly every language's test runner can
+emit it now: pytest, RSpec, mocha, ctest, googletest, JUnit (Java),
+NUnit, xUnit, you name it.
+
+The `--output-junit` flag in our Containerfile:
+
+```dockerfile
+ctest --preset release-debuginfo --output-on-failure \
+      --output-junit /src/reports/gtest.xml
+```
+
+is CMake 3.21+'s built-in JUnit emitter. The output looks like:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="release-debuginfo" tests="5" failures="0" errors="0" ...>
+  <testcase name="MemoryChannelTest.SendThenRecvRoundTrips"
+            classname="..." time="0.00"/>
+  <testcase name="MemoryChannelTest.RespectsCapacity" .../>
+  ...
+</testsuite>
+```
+
+Why this matters operationally: every CI system in common use —
+Jenkins, GitLab CI, GitHub Actions test-reporter, CircleCI, Azure
+DevOps, Bamboo, Buildkite — ingests JUnit XML natively. Drop
+`gtest.xml` into a Jenkins job's "Publish JUnit results" step and you
+get test-by-test charts with zero extra plumbing. The same XML you
+extracted from a podman build powers the dashboard.
+
+### Two layers of JUnit emission you could pick
+
+There are actually two levels of granularity available, and we picked
+the outer one:
+
+| Mechanism | Granularity | When to use |
+|---|---|---|
+| `ctest --output-junit path.xml` (what we use) | One `<testcase>` per `add_test()` / `gtest_discover_tests()` test | Standard choice — works for any test framework CTest can run |
+| `./demo07_tests --gtest_output=xml:path.xml` | One `<testcase>` per individual `TEST_F`/`TEST_P`/`TEST` in the C++ source | Use when you don't have CTest in the loop, or when you want finer reporting |
+
+In our demo they produce similar output because `gtest_discover_tests()`
+in CMakeLists.txt creates one CTest test per gtest test case (5 gtest
+tests → 5 CTest tests → 5 `<testcase>` entries). If we'd used the
+older `add_test(NAME tests COMMAND demo07_tests)` style, CTest would
+have seen just one logical test, and we'd have had to use gtest's own
+`--gtest_output=xml` to get per-test granularity.
+
+Either path lands at JUnit XML, which is why the label still fits.
+
+### cppcheck has its own schema
+
+`cppcheck.xml` is **not** JUnit — cppcheck uses a custom schema:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<results version="2">
+    <cppcheck version="2.9"/>
+    <errors>
+        <error id="useStlAlgorithm" severity="style" ...>
+            <location file="src/svc/main.cpp" line="58"/>
+        </error>
+    </errors>
+</results>
+```
+
+When teams want cppcheck findings in test dashboards, they convert it
+to either JUnit (so it shows up in test panels) or to SARIF (for
+GitHub-style code-scanning panels). Tools like `cppcheck-junit` (PyPI)
+and `cppcheck-codequality` (GitLab) do the conversion. Our demo keeps
+the raw cppcheck XML because the demo's job is to show what each tool
+natively produces; CI integration is the next layer up.
+
+### libabigail's XML is its own thing too
+
+`current.abi` is a libabigail-specific XML format describing every
+exported symbol, type, function signature, and inheritance relationship
+in the .so. It's not meant to be human-friendly (the file from our
+demo is ~98 KB for a tiny library), but it diffs reliably. abidiff
+compares two .abi files semantically — it knows that re-ordering
+struct fields is meaningful but re-ordering function definitions in
+the source isn't.
+
+The take-away for the reports/ directory as a whole: **every file is
+designed to be machine-consumable by something**. The XML ones plug
+into CI. The .abi file plugs into abidiff. The .txt files are the
+human fallback. None of them is the "primary" output — they're
+parallel evidence streams that different audiences (CI, developer,
+ABI tooling) consume independently.
+
 ## Runtime sanitizers in containers
 
 The four to know:

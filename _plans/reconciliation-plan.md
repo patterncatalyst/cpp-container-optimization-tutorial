@@ -18883,6 +18883,28 @@ consequences far away that compile-time checks won't catch."
   the "tutorial uses a deliberate ABI break" sentence into a real
   walkthrough of what `--abi-break-demo` does.
 
+**Follow-up r126 (in same commit): §12 prose — "Understanding the reports/ directory"**
+
+User noticed the JUnit XML labelling on `gtest.xml` and `asan.xml`
+might confuse readers unfamiliar with the schema vs framework
+distinction. Added a new subsection to `_docs/12-analysis-debugging.md`
+sitting between "Tests — GoogleTest + gmock" and "Runtime sanitizers
+in containers" with:
+
+1. A table mapping each reports/ file to its schema + producer
+2. The "JUnit XML is a schema not a framework" callout, including
+   a sample of the XML structure and the CI-integration take-away
+3. The two-layers-of-JUnit-emission decision (ctest vs gtest direct)
+   so readers understand why we chose one path over the other
+4. A note that cppcheck.xml has its own schema, with a pointer to
+   `cppcheck-junit` / `cppcheck-codequality` for CI integration
+5. A note that current.abi is libabigail's XML, not for humans
+
+The "every file is machine-consumable by something" framing helps
+readers see reports/ as parallel evidence streams (CI ingests JUnit,
+abidiff consumes .abi, humans read .txt) rather than redundant
+duplicates.
+
 **Limitations worth knowing:**
 
 1. The bash trap fires on EXIT (including via `set -e` and SIGINT) but
