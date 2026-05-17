@@ -1,45 +1,111 @@
 {
-    "type": "excalidraw",
-    "version": 2,
-    "source": "https://excalidraw.com",
-    "elements": [
-        {
-            "type": "text",
-            "version": 1,
-            "id": "08-networking-veth-vs-host-placeholder-text",
-            "x": 100,
-            "y": 100,
-            "width": 600,
-            "height": 40,
-            "text": "Container networking modes — replace this placeholder",
-            "fontSize": 24,
-            "fontFamily": 1,
-            "textAlign": "left",
-            "verticalAlign": "top",
-            "strokeColor": "#1a1a1a",
-            "backgroundColor": "transparent",
-            "fillStyle": "solid",
-            "strokeWidth": 1,
-            "strokeStyle": "solid",
-            "roughness": 1,
-            "opacity": 100,
-            "groupIds": [],
-            "frameId": null,
-            "roundness": null,
-            "seed": 1,
-            "boundElements": null,
-            "updated": 1,
-            "link": null,
-            "locked": false,
-            "containerId": null,
-            "originalText": "Container networking modes — replace this placeholder",
-            "lineHeight": 1.25,
-            "baseline": 18
-        }
-    ],
-    "appState": {
-        "gridSize": 20,
-        "viewBackgroundColor": "#fdfbf7"
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "type": "text", "version": 1, "id": "title",
+      "x": 150, "y": 16, "width": 600, "height": 24,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 20, "fontFamily": 1,
+      "text": "Container networking — three modes, three latency profiles",
+      "textAlign": "center", "verticalAlign": "middle"
     },
-    "files": {}
+    {
+      "type": "rectangle", "version": 1, "id": "host-col",
+      "x": 30, "y": 60, "width": 280, "height": 430,
+      "angle": 0, "strokeColor": "#5a8870", "backgroundColor": "#d8e8df",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["host-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "host-content",
+      "x": 50, "y": 70, "width": 240, "height": 410,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["host-group"],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "host networking\n--network=host\nno namespace isolation\n\n[ container process ]\n      ↓ socket()\n[ host kernel TCP/IP ]\n   no intermediate layer\n      ↓\n[ host NIC driver ]\n  wire\n\nLatency: ≈ bare-metal\nno isolation overhead\n\nTrade-off:\n  no port mapping needed\n  no port-conflict protection",
+      "textAlign": "center", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "veth-col",
+      "x": 320, "y": 60, "width": 280, "height": 430,
+      "angle": 0, "strokeColor": "#b89540", "backgroundColor": "#f0e8d8",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["veth-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "veth-content",
+      "x": 340, "y": 70, "width": 240, "height": 410,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["veth-group"],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "veth + bridge\n--network=bridge (rootful default)\nkernel-level virtual ethernet\n\n[ container netns: eth0 ]\n      ↓ veth pair\n[ host bridge (podman0) ]\n   virtual switch in kernel\n      ↓\n[ host kernel TCP/IP ]\n   forwards via iptables/nft\n\nLatency: + tens of µs\nveth + bridge + NAT overhead\n\nTrade-off:\n  isolation, port mapping\n  requires root or rootlesskit",
+      "textAlign": "center", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "slirp-col",
+      "x": 610, "y": 60, "width": 280, "height": 430,
+      "angle": 0, "strokeColor": "#b86742", "backgroundColor": "#ecdfd8",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["slirp-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "slirp-title",
+      "x": 630, "y": 70, "width": 240, "height": 60,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["slirp-group"],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "slirp4netns\n--network=slirp4netns (rootless default)\nuserspace TCP/IP stack",
+      "textAlign": "center", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "slirp-process-RED",
+      "x": 640, "y": 208, "width": 220, "height": 40,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["slirp-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "slirp-process-label-RED",
+      "x": 650, "y": 216, "width": 200, "height": 26,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["slirp-group"],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "slirp4netns process\nuserspace TCP/IP stack",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "text", "version": 1, "id": "slirp-context",
+      "x": 630, "y": 138, "width": 240, "height": 60,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["slirp-group"],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "[ container netns: eth0 ]\n   TAP device → tap fd",
+      "textAlign": "center", "verticalAlign": "top"
+    },
+    {
+      "type": "text", "version": 1, "id": "slirp-rest",
+      "x": 630, "y": 268, "width": 240, "height": 220,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["slirp-group"],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "      ↓ syscall (RED)\n[ host kernel TCP/IP ]\n   re-stacked from user-space\n\nLatency: + hundreds of µs to ms\ntwo TCP/IP stacks per packet (RED)\n\nTrade-off:\n  rootless out-of-the-box\n  consider pasta as the upgrade",
+      "textAlign": "center", "verticalAlign": "top"
+    }
+  ],
+  "appState": { "viewBackgroundColor": "#fdfbf7", "gridSize": null },
+  "files": {}
 }

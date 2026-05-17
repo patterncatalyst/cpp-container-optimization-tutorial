@@ -1,14 +1,98 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" role="img" aria-label="Ephemeral gdb sidecar placeholder">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 540" role="img"
+     aria-label="The ephemeral debug-sidecar pattern. A production container runs a stripped, locked-down C++ service with no debugger tools and PID 1 = your service. To attach a debugger without rebuilding the production image, an ephemeral sidecar is launched alongside with --pid=container:main and --cap-add=SYS_PTRACE, sharing the production container's PID namespace; the sidecar has gdb plus debug symbols and uses ptrace to attach to PID 1. The shared PID namespace plus SYS_PTRACE capability — the --pid=container flag — is the key mechanism, highlighted in red.">
   <defs>
+    <style><![CDATA[
+      .bg       { fill: #fdfbf7; }
+      .grid     { stroke: #e8e1d3; stroke-width: 0.5; fill: none; }
+      .band     { stroke-width: 1.5; rx: 6; ry: 6; }
+      .b-pod    { fill: #f0e8d8; stroke: #b89540; stroke-dasharray: 5 3; }
+      .b-main   { fill: #e8f0fb; stroke: #4a73b8; }
+      .b-side   { fill: #ecdfd8; stroke: #b86742; }
+      .b-cell-m { fill: #fdfbf7; stroke: #4a73b8; stroke-width: 0.8; rx: 4; ry: 4; }
+      .b-cell-s { fill: #fdfbf7; stroke: #b86742; stroke-width: 0.8; rx: 4; ry: 4; }
+      .b-share  { fill: #fdfbf7; stroke: #c0392b; stroke-width: 2; stroke-dasharray: 5 3; rx: 6; ry: 6; }
+      .b-flag   { fill: #fdfbf7; stroke: #c0392b; stroke-width: 1.5; rx: 4; ry: 4; }
+      .ttl      { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .ttl-big  { font: 700 16px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .lbl      { font: 600 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .mono     { font: 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .mono-sm  { font: 10px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #444; }
+      .sec      { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #555; }
+      .arrow    { stroke: #2d2d2d; stroke-width: 1.4; fill: none; }
+      .arrow-r  { stroke: #c0392b; stroke-width: 2; fill: none; }
+      .accent-t { font: 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+      .accent-l { font: italic 700 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+    ]]></style>
     <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e6dfd2" stroke-width="0.5"/>
+      <path d="M 20 0 L 0 0 0 20" class="grid"/>
     </pattern>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+    <marker id="arrowhead-r" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="9" markerHeight="9" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
   </defs>
-  <rect width="800" height="360" fill="#fdfbf7"/>
-  <rect width="800" height="360" fill="url(#grid)"/>
-  <rect x="40" y="40" width="720" height="280" rx="14" ry="14" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="6 4"/>
-  <text x="400" y="155" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="28" font-weight="700" fill="#1a1a1a">Ephemeral gdb sidecar</text>
-  <text x="400" y="195" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="13" fill="#767676">11-debug-sidecar-pattern.svg</text>
-  <text x="400" y="245" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="14" fill="#4a4a4a">Diagram pending — see assets/diagrams/README.md to draw.</text>
+
+  <rect class="bg" width="900" height="540"/>
+  <rect width="900" height="540" fill="url(#grid)" opacity="0.4"/>
+
+  <!-- Title -->
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">Ephemeral debug sidecar — gdb without rebuilding the prod image</text>
+
+  <!-- Shared PID namespace band (red dashed) -->
+  <rect class="b-share" x="40" y="80" width="820" height="280"/>
+  <text x="60" y="100" class="accent-t">shared PID namespace</text>
+  <text x="450" y="100" class="accent-l" text-anchor="middle">— containers see each other's processes —</text>
+  <text x="840" y="100" class="accent-t" text-anchor="end">--pid=container:main</text>
+
+  <!-- LEFT: main (production) container -->
+  <rect class="band b-main" x="80" y="120" width="340" height="220"/>
+  <text x="250" y="144" class="ttl" text-anchor="middle">Main container  —  production</text>
+  <text x="250" y="160" class="sec" text-anchor="middle">stripped, no debug tools, smallest image</text>
+
+  <rect class="b-cell-m" x="100" y="180" width="300" height="60"/>
+  <text x="115" y="200" class="lbl">PID 1: your C++ service</text>
+  <text x="115" y="218" class="mono-sm">/usr/local/bin/myservice</text>
+  <text x="115" y="232" class="mono-sm">UBI micro base, ~26 MB total</text>
+
+  <rect class="b-cell-m" x="100" y="252" width="300" height="76"/>
+  <text x="115" y="272" class="lbl">Containerfile:</text>
+  <text x="115" y="290" class="mono">FROM ubi-micro</text>
+  <text x="115" y="304" class="mono">COPY --from=build /app /</text>
+  <text x="115" y="318" class="mono">ENTRYPOINT ["/app"]</text>
+
+  <!-- RIGHT: sidecar container -->
+  <rect class="band b-side" x="480" y="120" width="340" height="220"/>
+  <text x="650" y="144" class="ttl" text-anchor="middle">Debug sidecar  —  ephemeral</text>
+  <text x="650" y="160" class="sec" text-anchor="middle">heavy, only running during a debug session</text>
+
+  <rect class="b-cell-s" x="500" y="180" width="300" height="60"/>
+  <text x="515" y="200" class="lbl">gdb + debug symbols + glibc-debug</text>
+  <text x="515" y="218" class="mono-sm">eu-stack, valgrind, strace, perf</text>
+  <text x="515" y="232" class="mono-sm">~400 MB image, fine for ad-hoc use</text>
+
+  <rect class="b-cell-s" x="500" y="252" width="300" height="76"/>
+  <text x="515" y="272" class="lbl">Launch command:</text>
+  <text x="515" y="290" class="mono">podman run -it --rm \</text>
+  <text x="515" y="304" class="mono">  --pid=container:main \</text>
+  <text x="515" y="318" class="mono">  --cap-add=SYS_PTRACE  debug:latest</text>
+
+  <!-- Red ptrace arrow from sidecar to main -->
+  <path class="arrow-r" d="M 500 210 C 460 210, 440 210, 400 210" marker-end="url(#arrowhead-r)"/>
+  <text x="450" y="200" class="accent-l" text-anchor="middle">gdb attach PID 1 via ptrace</text>
+
+  <!-- Bottom: the key flags band -->
+  <rect class="b-flag" x="60" y="386" width="780" height="50"/>
+  <text x="80" y="408" class="accent-t">The two flags that make this work:</text>
+  <text x="80" y="428" class="mono">--pid=container:main   joins the main container's PID namespace   ┃   --cap-add=SYS_PTRACE   allows ptrace attach</text>
+
+  <!-- Bottom: workflow -->
+  <text x="450" y="464" class="lbl" text-anchor="middle">Workflow:</text>
+  <text x="80" y="486" class="mono-sm">1. prod container is running normally (no debugger present)</text>
+  <text x="80" y="502" class="mono-sm">2. you notice an issue → spawn the sidecar with the flags above</text>
+  <text x="80" y="518" class="mono-sm">3. gdb attach in sidecar, debug interactively, exit sidecar → prod container untouched</text>
 </svg>

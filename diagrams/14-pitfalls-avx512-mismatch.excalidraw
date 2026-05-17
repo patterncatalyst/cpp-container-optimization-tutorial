@@ -1,45 +1,153 @@
 {
-    "type": "excalidraw",
-    "version": 2,
-    "source": "https://excalidraw.com",
-    "elements": [
-        {
-            "type": "text",
-            "version": 1,
-            "id": "13-pitfalls-avx512-mismatch-placeholder-text",
-            "x": 100,
-            "y": 100,
-            "width": 600,
-            "height": 40,
-            "text": "AVX-512 mismatch trap — replace this placeholder",
-            "fontSize": 24,
-            "fontFamily": 1,
-            "textAlign": "left",
-            "verticalAlign": "top",
-            "strokeColor": "#1a1a1a",
-            "backgroundColor": "transparent",
-            "fillStyle": "solid",
-            "strokeWidth": 1,
-            "strokeStyle": "solid",
-            "roughness": 1,
-            "opacity": 100,
-            "groupIds": [],
-            "frameId": null,
-            "roundness": null,
-            "seed": 1,
-            "boundElements": null,
-            "updated": 1,
-            "link": null,
-            "locked": false,
-            "containerId": null,
-            "originalText": "AVX-512 mismatch trap — replace this placeholder",
-            "lineHeight": 1.25,
-            "baseline": 18
-        }
-    ],
-    "appState": {
-        "gridSize": 20,
-        "viewBackgroundColor": "#fdfbf7"
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "type": "text", "version": 1, "id": "title",
+      "x": 160, "y": 16, "width": 580, "height": 24,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 20, "fontFamily": 1,
+      "text": "AVX-512 mismatch — when -march=native bites in containers",
+      "textAlign": "center", "verticalAlign": "middle"
     },
-    "files": {}
+    {
+      "type": "rectangle", "version": 1, "id": "build-host",
+      "x": 30, "y": 60, "width": 260, "height": 220,
+      "angle": 0, "strokeColor": "#5a8870", "backgroundColor": "#d8e8df",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["build-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "build-host-content",
+      "x": 50, "y": 70, "width": 220, "height": 200,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["build-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "Build host (your laptop / CI)\nIntel Sapphire Rapids — has AVX-512\n\n/proc/cpuinfo flags:\navx avx2 avx512f avx512dq\navx512cd avx512bw avx512vl ...\n\ngcc -march=native picks up ALL of these\n\n$ gcc -march=native -O3 ...\nemits AVX-512 instructions",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "image",
+      "x": 320, "y": 60, "width": 260, "height": 220,
+      "angle": 0, "strokeColor": "#b89540", "backgroundColor": "#f0e8d8",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["image-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "image-content",
+      "x": 340, "y": 70, "width": 220, "height": 200,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["image-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "Container image\nportable filesystem, NON-portable CPU code\n\n/usr/local/bin/app contains:\n  vmovdqa64 zmm0, [rdi]   ← AVX-512\n  vpaddq    zmm0, zmm0, zmm1\n  vmovdqa64 [rsi], zmm0\n\nimage is byte-identical regardless\nof which host it lands on",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "runtime",
+      "x": 610, "y": 60, "width": 260, "height": 220,
+      "angle": 0, "strokeColor": "#b86742", "backgroundColor": "#ecdfd8",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["runtime-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "runtime-content",
+      "x": 630, "y": 70, "width": 220, "height": 200,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["runtime-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "Runtime host (prod / cloud)\ne.g. AMD Zen 3, older Xeon, c5.large\n\n/proc/cpuinfo flags:\navx avx2  (no avx512!)\n\nCPU does not implement\nvmovdqa64 / zmm registers\n\n$ podman run app\nfirst AVX-512 instruction hits CPU",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "sigill-RED",
+      "x": 630, "y": 296, "width": 220, "height": 76,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "sigill-label-RED",
+      "x": 640, "y": 308, "width": 200, "height": 60,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 18, "fontFamily": 1,
+      "text": "SIGILL\nillegal instruction\nprocess aborts on the first hot path",
+      "textAlign": "center", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "fix-band",
+      "x": 30, "y": 400, "width": 840, "height": 120,
+      "angle": 0, "strokeColor": "#5a8870", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["fix-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "fix-title",
+      "x": 60, "y": 410, "width": 780, "height": 18,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["fix-group"],
+      "fontSize": 14, "fontFamily": 1,
+      "text": "The fix — choose a portable CPU baseline at build time, not the build host's",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "text", "version": 1, "id": "fix-option-1",
+      "x": 60, "y": 438, "width": 400, "height": 80,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["fix-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "Option 1 — x86-64 micro-architecture levels (recommended)\n  x86-64       baseline; works on any x86_64 CPU\n  x86-64-v2    SSE3-SSE4.2, popcnt — Nehalem era+\n  x86-64-v3    AVX, AVX2, BMI1/2, FMA — Haswell+ (most modern)\n  x86-64-v4    AVX-512 — opt-in only after surveying targets",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "text", "version": 1, "id": "fix-option-2",
+      "x": 490, "y": 438, "width": 380, "height": 80,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["fix-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "Option 2 — multi-arch builds + runtime dispatch\n  build two image variants:\n    app:v1.2-v3   (Haswell baseline)\n    app:v1.2-v4   (AVX-512 enabled)\n  → pick at deploy time via host CPU detection",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-build-image",
+      "x": 290, "y": 170, "width": 30, "height": 0,
+      "angle": 0, "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1.4, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [30, 0] ], "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-image-runtime",
+      "x": 580, "y": 170, "width": 30, "height": 0,
+      "angle": 0, "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1.4, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [30, 0] ], "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-runtime-sigill-RED",
+      "x": 740, "y": 266, "width": 0, "height": 30,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [0, 30] ], "endArrowhead": "arrow"
+    }
+  ],
+  "appState": { "viewBackgroundColor": "#fdfbf7", "gridSize": null },
+  "files": {}
 }

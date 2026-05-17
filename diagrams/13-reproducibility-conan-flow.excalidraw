@@ -1,45 +1,167 @@
 {
-    "type": "excalidraw",
-    "version": 2,
-    "source": "https://excalidraw.com",
-    "elements": [
-        {
-            "type": "text",
-            "version": 1,
-            "id": "12-reproducibility-conan-flow-placeholder-text",
-            "x": 100,
-            "y": 100,
-            "width": 600,
-            "height": 40,
-            "text": "Hermetic build pipeline — replace this placeholder",
-            "fontSize": 24,
-            "fontFamily": 1,
-            "textAlign": "left",
-            "verticalAlign": "top",
-            "strokeColor": "#1a1a1a",
-            "backgroundColor": "transparent",
-            "fillStyle": "solid",
-            "strokeWidth": 1,
-            "strokeStyle": "solid",
-            "roughness": 1,
-            "opacity": 100,
-            "groupIds": [],
-            "frameId": null,
-            "roundness": null,
-            "seed": 1,
-            "boundElements": null,
-            "updated": 1,
-            "link": null,
-            "locked": false,
-            "containerId": null,
-            "originalText": "Hermetic build pipeline — replace this placeholder",
-            "lineHeight": 1.25,
-            "baseline": 18
-        }
-    ],
-    "appState": {
-        "gridSize": 20,
-        "viewBackgroundColor": "#fdfbf7"
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "type": "text", "version": 1, "id": "title",
+      "x": 130, "y": 16, "width": 640, "height": 24,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 20, "fontFamily": 1,
+      "text": "Hermetic build flow — Conan + CMake, one lockfile per release",
+      "textAlign": "center", "verticalAlign": "middle"
     },
-    "files": {}
+    {
+      "type": "rectangle", "version": 1, "id": "inputs",
+      "x": 30, "y": 80, "width": 180, "height": 280,
+      "angle": 0, "strokeColor": "#4a73b8", "backgroundColor": "#e8f0fb",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["inputs-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "inputs-content",
+      "x": 40, "y": 90, "width": 160, "height": 260,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["inputs-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "Inputs\ndeclarative, in version control\n\nconanfile.txt\n[requires]\ngrpc/1.65.4\nopentelemetry-cpp/1.16.1\nhttplib/0.16.0\n\nconan profile\ncompiler=gcc\ncompiler.version=14\nbuild_type=Release\narch=x86_64\nos=Linux",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "conan",
+      "x": 250, "y": 80, "width": 200, "height": 280,
+      "angle": 0, "strokeColor": "#b89540", "backgroundColor": "#f0e8d8",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["conan-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "conan-content",
+      "x": 260, "y": 90, "width": 180, "height": 260,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["conan-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "conan install\nresolve + download deps\n\nwhat it does:\n1. read conanfile.txt\n2. apply profile settings\n3. resolve version graph\n4. download pkgs to cache\n5. compute binary IDs\n6. emit two artifacts →\n\n~/.conan2/p/ has the\ndownloaded sources\nand built binaries\nkeyed by binary ID",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "toolchain",
+      "x": 490, "y": 138, "width": 200, "height": 100,
+      "angle": 0, "strokeColor": "#5a8870", "backgroundColor": "#d8e8df",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["toolchain-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "toolchain-content",
+      "x": 500, "y": 148, "width": 180, "height": 80,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["toolchain-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "conan_toolchain.cmake\ngenerated; consumed by CMake\n\nset(CMAKE_CXX_COMPILER ...)\nset(CMAKE_PREFIX_PATH ...)\nfind_package(grpc 1.65.4 ...)",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "lockfile-RED",
+      "x": 490, "y": 240, "width": 200, "height": 118,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["lockfile-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "lockfile-content-RED",
+      "x": 500, "y": 250, "width": 180, "height": 100,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["lockfile-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "conan.lock\nthe entire pinning artifact\n\ngrpc/1.65.4#REV\n  abseil/20240722.0#REV\n  protobuf/5.27.0#REV\nopentelemetry-cpp/1.16.1#REV\n  → 41 transitive deps pinned",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "cmake-build",
+      "x": 730, "y": 178, "width": 150, "height": 84,
+      "angle": 0, "strokeColor": "#b86742", "backgroundColor": "#ecdfd8",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["cmake-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "cmake-build-content",
+      "x": 740, "y": 188, "width": 130, "height": 70,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["cmake-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "cmake + ninja\n--preset=conan\n\nbuild artifact:\nyour_binary",
+      "textAlign": "center", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "narrative-RED",
+      "x": 60, "y": 402, "width": 780, "height": 116,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "narrative-content-RED",
+      "x": 80, "y": 410, "width": 740, "height": 102,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "conan.lock — what it actually pins, and why CI rebuilds are then deterministic\n• every transitive dependency: version + revision hash (immutable identifier of the source archive)\n• every dependency's compile-time options (e.g. with_ssl=True, threading=True)\n• the resolved binary ID for each package (function of: settings + options + dep graph hashes)\n• commit conan.lock to git → conan install --lockfile=conan.lock anywhere = byte-identical resolution\n• without the lockfile, a transitive dep can publish a new revision overnight and your build silently changes",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-inputs-conan",
+      "x": 210, "y": 220, "width": 40, "height": 0,
+      "angle": 0, "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1.4, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [40, 0] ], "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-conan-toolchain",
+      "x": 450, "y": 180, "width": 40, "height": 0,
+      "angle": 0, "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1.4, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [40, 0] ], "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-conan-lock-RED",
+      "x": 450, "y": 260, "width": 40, "height": 0,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [40, 0] ], "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-toolchain-build",
+      "x": 690, "y": 188, "width": 40, "height": 32,
+      "angle": 0, "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1.4, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [40, 32] ], "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-lock-build-RED",
+      "x": 690, "y": 290, "width": 40, "height": -50,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [40, -50] ], "endArrowhead": "arrow"
+    }
+  ],
+  "appState": { "viewBackgroundColor": "#fdfbf7", "gridSize": null },
+  "files": {}
 }

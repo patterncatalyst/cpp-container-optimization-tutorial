@@ -1,14 +1,132 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" role="img" aria-label="Hermetic build pipeline placeholder">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 540" role="img"
+     aria-label="Hermetic build flow with Conan 2.x and CMake. Inputs (conanfile.txt declaring dependencies + a conan profile describing compiler and settings) feed into conan install, which resolves dependency versions and produces two outputs: conan_toolchain.cmake (consumed by CMake) and conan.lock (the snapshot pinning every transitive dependency version and option). CMake reads the toolchain via --preset, ninja builds, producing the final binary or container image. The lockfile is the entire reproducibility mechanism and is highlighted in red.">
   <defs>
+    <style><![CDATA[
+      .bg       { fill: #fdfbf7; }
+      .grid     { stroke: #e8e1d3; stroke-width: 0.5; fill: none; }
+      .band     { stroke-width: 1.5; rx: 6; ry: 6; }
+      .b-input  { fill: #e8f0fb; stroke: #4a73b8; }
+      .b-conan  { fill: #f0e8d8; stroke: #b89540; }
+      .b-cmake  { fill: #d8e8df; stroke: #5a8870; }
+      .b-output { fill: #ecdfd8; stroke: #b86742; }
+      .b-lock   { fill: #fdfbf7; stroke: #c0392b; stroke-width: 2; rx: 6; ry: 6; }
+      .b-cell   { fill: #fdfbf7; stroke-width: 1; rx: 4; ry: 4; }
+      .b-cell-i { fill: #fdfbf7; stroke: #4a73b8; stroke-width: 1; rx: 4; ry: 4; }
+      .b-cell-c { fill: #fdfbf7; stroke: #b89540; stroke-width: 1; rx: 4; ry: 4; }
+      .b-cell-m { fill: #fdfbf7; stroke: #5a8870; stroke-width: 1; rx: 4; ry: 4; }
+      .ttl      { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .ttl-big  { font: 700 16px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .lbl      { font: 600 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .mono     { font: 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .mono-sm  { font: 10px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #444; }
+      .sec      { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #555; }
+      .arrow    { stroke: #2d2d2d; stroke-width: 1.4; fill: none; }
+      .arrow-r  { stroke: #c0392b; stroke-width: 2; fill: none; }
+      .accent-t { font: 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+      .accent-l { font: italic 700 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+    ]]></style>
     <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e6dfd2" stroke-width="0.5"/>
+      <path d="M 20 0 L 0 0 0 20" class="grid"/>
     </pattern>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+    <marker id="arrowhead-r" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="9" markerHeight="9" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
   </defs>
-  <rect width="800" height="360" fill="#fdfbf7"/>
-  <rect width="800" height="360" fill="url(#grid)"/>
-  <rect x="40" y="40" width="720" height="280" rx="14" ry="14" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="6 4"/>
-  <text x="400" y="155" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="28" font-weight="700" fill="#1a1a1a">Hermetic build pipeline</text>
-  <text x="400" y="195" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="13" fill="#767676">12-reproducibility-conan-flow.svg</text>
-  <text x="400" y="245" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="14" fill="#4a4a4a">Diagram pending — see assets/diagrams/README.md to draw.</text>
+
+  <rect class="bg" width="900" height="540"/>
+  <rect width="900" height="540" fill="url(#grid)" opacity="0.4"/>
+
+  <!-- Title -->
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">Hermetic build flow — Conan + CMake, one lockfile per release</text>
+
+  <!-- Inputs column -->
+  <rect class="band b-input" x="30" y="80" width="180" height="280"/>
+  <text x="120" y="104" class="ttl" text-anchor="middle">Inputs</text>
+  <text x="120" y="120" class="sec" text-anchor="middle">declarative, in version control</text>
+
+  <rect class="b-cell-i" x="50" y="138" width="140" height="80"/>
+  <text x="60" y="156" class="lbl">conanfile.txt</text>
+  <text x="60" y="174" class="mono-sm">[requires]</text>
+  <text x="60" y="188" class="mono-sm">grpc/1.65.4</text>
+  <text x="60" y="202" class="mono-sm">opentelemetry-cpp/1.16.1</text>
+  <text x="60" y="216" class="mono-sm">httplib/0.16.0</text>
+
+  <rect class="b-cell-i" x="50" y="234" width="140" height="100"/>
+  <text x="60" y="252" class="lbl">conan profile</text>
+  <text x="60" y="270" class="mono-sm">compiler=gcc</text>
+  <text x="60" y="284" class="mono-sm">compiler.version=14</text>
+  <text x="60" y="298" class="mono-sm">build_type=Release</text>
+  <text x="60" y="312" class="mono-sm">arch=x86_64</text>
+  <text x="60" y="326" class="mono-sm">os=Linux</text>
+
+  <!-- Arrow inputs -> conan -->
+  <line x1="210" y1="220" x2="248" y2="220" class="arrow" marker-end="url(#arrowhead)"/>
+
+  <!-- Conan stage -->
+  <rect class="band b-conan" x="250" y="80" width="200" height="280"/>
+  <text x="350" y="104" class="ttl" text-anchor="middle">conan install</text>
+  <text x="350" y="120" class="sec" text-anchor="middle">resolve + download deps</text>
+
+  <rect class="b-cell-c" x="270" y="142" width="160" height="190"/>
+  <text x="350" y="160" class="lbl" text-anchor="middle">what it does:</text>
+  <text x="280" y="180" class="mono-sm">1. read conanfile.txt</text>
+  <text x="280" y="194" class="mono-sm">2. apply profile settings</text>
+  <text x="280" y="208" class="mono-sm">3. resolve version graph</text>
+  <text x="280" y="222" class="mono-sm">4. download pkgs to cache</text>
+  <text x="280" y="236" class="mono-sm">5. compute binary IDs</text>
+  <text x="280" y="250" class="mono-sm">6. emit two artifacts ↓</text>
+
+  <text x="350" y="280" class="sec" text-anchor="middle">~/.conan2/p/ has the</text>
+  <text x="350" y="294" class="sec" text-anchor="middle">downloaded sources</text>
+  <text x="350" y="308" class="sec" text-anchor="middle">and built binaries</text>
+  <text x="350" y="322" class="sec" text-anchor="middle">keyed by binary ID</text>
+
+  <!-- Conan -> outputs (two arrows) -->
+  <line x1="450" y1="180" x2="490" y2="180" class="arrow" marker-end="url(#arrowhead)"/>
+  <line x1="450" y1="260" x2="490" y2="260" class="arrow-r" marker-end="url(#arrowhead-r)"/>
+
+  <!-- Output: toolchain (top) -->
+  <rect class="band b-cmake" x="490" y="138" width="200" height="100"/>
+  <text x="590" y="160" class="ttl" text-anchor="middle">conan_toolchain.cmake</text>
+  <text x="590" y="176" class="sec" text-anchor="middle">generated; consumed by CMake</text>
+  <text x="500" y="196" class="mono-sm">set(CMAKE_CXX_COMPILER ...)</text>
+  <text x="500" y="210" class="mono-sm">set(CMAKE_PREFIX_PATH ...)</text>
+  <text x="500" y="224" class="mono-sm">find_package(grpc 1.65.4 ...)</text>
+
+  <!-- Output: lockfile (bottom) - THE ACCENT -->
+  <rect class="b-lock" x="490" y="240" width="200" height="118"/>
+  <text x="590" y="262" class="accent-t" text-anchor="middle">conan.lock</text>
+  <text x="590" y="278" class="accent-l" text-anchor="middle">the entire pinning artifact</text>
+  <line x1="510" y1="284" x2="670" y2="284" stroke="#c0392b" stroke-width="0.5" opacity="0.5"/>
+  <text x="500" y="300" class="mono-sm">grpc/1.65.4#REV</text>
+  <text x="500" y="314" class="mono-sm">  abseil/20240722.0#REV</text>
+  <text x="500" y="328" class="mono-sm">  protobuf/5.27.0#REV</text>
+  <text x="500" y="342" class="mono-sm">opentelemetry-cpp/1.16.1#REV</text>
+  <text x="500" y="356" class="mono-sm">  → 41 transitive deps pinned</text>
+
+  <!-- Arrows toolchain + lock -> CMake -->
+  <line x1="690" y1="188" x2="730" y2="220" class="arrow" marker-end="url(#arrowhead)"/>
+  <line x1="690" y1="290" x2="730" y2="240" class="arrow-r" marker-end="url(#arrowhead-r)"/>
+
+  <!-- CMake stage -->
+  <rect class="band b-output" x="730" y="178" width="150" height="84"/>
+  <text x="805" y="200" class="ttl" text-anchor="middle">cmake + ninja</text>
+  <text x="805" y="216" class="sec" text-anchor="middle">--preset=conan</text>
+  <text x="740" y="236" class="mono-sm">build artifact:</text>
+  <text x="740" y="252" class="mono">your_binary</text>
+
+  <!-- Bottom: lockfile narrative -->
+  <rect class="b-lock" x="60" y="402" width="780" height="116"/>
+  <text x="450" y="424" class="accent-t" text-anchor="middle">conan.lock — what it actually pins, and why CI rebuilds are then deterministic</text>
+  <text x="80" y="448" class="mono-sm">• every transitive dependency: version + revision hash (immutable identifier of the source archive)</text>
+  <text x="80" y="464" class="mono-sm">• every dependency's compile-time options (e.g. with_ssl=True, threading=True)</text>
+  <text x="80" y="480" class="mono-sm">• the resolved binary ID for each package (function of: settings + options + dep graph hashes)</text>
+  <text x="80" y="496" class="mono-sm">• commit conan.lock to git → conan install --lockfile=conan.lock anywhere = byte-identical resolution</text>
+  <text x="80" y="514" class="mono-sm">• without the lockfile, a transitive dep can publish a new revision overnight and your build silently changes</text>
 </svg>

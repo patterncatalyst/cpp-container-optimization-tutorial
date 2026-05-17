@@ -1,45 +1,159 @@
 {
-    "type": "excalidraw",
-    "version": 2,
-    "source": "https://excalidraw.com",
-    "elements": [
-        {
-            "type": "text",
-            "version": 1,
-            "id": "07-io-uring-rings-placeholder-text",
-            "x": 100,
-            "y": 100,
-            "width": 600,
-            "height": 40,
-            "text": "io_uring SQ/CQ rings — replace this placeholder",
-            "fontSize": 24,
-            "fontFamily": 1,
-            "textAlign": "left",
-            "verticalAlign": "top",
-            "strokeColor": "#1a1a1a",
-            "backgroundColor": "transparent",
-            "fillStyle": "solid",
-            "strokeWidth": 1,
-            "strokeStyle": "solid",
-            "roughness": 1,
-            "opacity": 100,
-            "groupIds": [],
-            "frameId": null,
-            "roundness": null,
-            "seed": 1,
-            "boundElements": null,
-            "updated": 1,
-            "link": null,
-            "locked": false,
-            "containerId": null,
-            "originalText": "io_uring SQ/CQ rings — replace this placeholder",
-            "lineHeight": 1.25,
-            "baseline": 18
-        }
-    ],
-    "appState": {
-        "gridSize": 20,
-        "viewBackgroundColor": "#fdfbf7"
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "type": "text", "version": 1, "id": "title",
+      "x": 130, "y": 16, "width": 640, "height": 24,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 20, "fontFamily": 1,
+      "text": "io_uring — two rings, shared memory, syscall amortization",
+      "textAlign": "center", "verticalAlign": "middle"
     },
-    "files": {}
+    {
+      "type": "rectangle", "version": 1, "id": "app",
+      "x": 60, "y": 60, "width": 780, "height": 80,
+      "angle": 0, "strokeColor": "#4a73b8", "backgroundColor": "#e8f0fb",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "app-label",
+      "x": 80, "y": 70, "width": 740, "height": 60,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 13, "fontFamily": 1,
+      "text": "Application (user-space)\nio_uring_get_sqe() → fill SQE → io_uring_submit()   |   io_uring_wait_cqe() → read CQE → process result\nyour code, your buffers, never blocks on the kernel for individual ops",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "shared-band-RED",
+      "x": 60, "y": 180, "width": 780, "height": 180,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "shared-label-RED",
+      "x": 80, "y": 188, "width": 740, "height": 20,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "shared memory (mmap)  —  this boundary is the entire point  —  no copy, no syscall per op",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "sq",
+      "x": 100, "y": 220, "width": 320, "height": 120,
+      "angle": 0, "strokeColor": "#b89540", "backgroundColor": "#f0e8d8",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["sq-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "sq-label",
+      "x": 120, "y": 232, "width": 280, "height": 100,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["sq-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "Submission Queue (SQ)\nring buffer of SQEs that the app fills\n\n[ SQE: READ fd=3 ] [ SQE: WRITE fd=5 ]\n[ SQE: ACCEPT fd=4 ] [ SQE: SEND fd=6 ]\n[ ... ] [ empty ]",
+      "textAlign": "center", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "cq",
+      "x": 480, "y": 220, "width": 320, "height": 120,
+      "angle": 0, "strokeColor": "#5a8870", "backgroundColor": "#d8e8df",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["cq-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "cq-label",
+      "x": 500, "y": 232, "width": 280, "height": 100,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["cq-group"],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "Completion Queue (CQ)\nring buffer of CQEs that the kernel fills\n\n[ CQE: res=128 ] [ CQE: res=4096 ]\n[ CQE: res=fd ] [ CQE: res=512 ]\n[ ... ] [ empty ]",
+      "textAlign": "center", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "kern",
+      "x": 60, "y": 380, "width": 780, "height": 80,
+      "angle": 0, "strokeColor": "#b86742", "backgroundColor": "#ecdfd8",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "kern-label",
+      "x": 80, "y": 388, "width": 740, "height": 64,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 13, "fontFamily": 1,
+      "text": "Kernel\nio_uring worker reads SQEs, dispatches to vfs / network / block layer, writes CQEs on completion\nwith IORING_SETUP_SQPOLL the kernel polls the SQ on its own — zero syscalls for steady-state I/O",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "comparison",
+      "x": 60, "y": 478, "width": 780, "height": 50,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "comparison-label",
+      "x": 80, "y": 486, "width": 740, "height": 34,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "Traditional read/write:  1 syscall per op × N ops  =  N context switches\nio_uring:                0-1 syscalls per batch of N ops  =  near-zero context switches at high QPS",
+      "textAlign": "left", "verticalAlign": "middle"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-app-sq",
+      "x": 225, "y": 140, "width": 0, "height": 40,
+      "angle": 0, "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1.4, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [0, 40] ], "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-cq-app",
+      "x": 675, "y": 180, "width": 0, "height": -40,
+      "angle": 0, "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1.4, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [0, -40] ], "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-kern-sq",
+      "x": 225, "y": 378, "width": 0, "height": -32,
+      "angle": 0, "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1.4, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [0, -32] ], "endArrowhead": "arrow"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-kern-cq",
+      "x": 675, "y": 346, "width": 0, "height": 32,
+      "angle": 0, "strokeColor": "#2d2d2d", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1.4, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [0, 32] ], "endArrowhead": "arrow"
+    }
+  ],
+  "appState": { "viewBackgroundColor": "#fdfbf7", "gridSize": null },
+  "files": {}
 }

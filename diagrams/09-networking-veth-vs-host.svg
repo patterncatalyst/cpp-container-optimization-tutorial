@@ -1,14 +1,145 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" role="img" aria-label="Container networking modes placeholder">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 540" role="img"
+     aria-label="Three container networking modes compared side by side. Host networking: container shares the host's network namespace, no isolation, lowest latency. veth+bridge: kernel-level virtual ethernet pair connects the container's namespace to a host bridge, full kernel TCP/IP stack. slirp4netns (rootless default): a userspace TCP/IP stack process intermediates between the container and the host kernel, doubling every packet through user-space; this is the latency bottleneck for rootless containers and is highlighted in red.">
   <defs>
+    <style><![CDATA[
+      .bg       { fill: #fdfbf7; }
+      .grid     { stroke: #e8e1d3; stroke-width: 0.5; fill: none; }
+      .band     { stroke-width: 1.5; rx: 6; ry: 6; }
+      .b-host   { fill: #d8e8df; stroke: #5a8870; }
+      .b-veth   { fill: #f0e8d8; stroke: #b89540; }
+      .b-slirp  { fill: #ecdfd8; stroke: #b86742; }
+      .b-cell   { fill: #fdfbf7; stroke-width: 0.7; rx: 3; ry: 3; }
+      .b-cell-h { fill: #fdfbf7; stroke: #5a8870; stroke-width: 0.7; rx: 3; ry: 3; }
+      .b-cell-v { fill: #fdfbf7; stroke: #b89540; stroke-width: 0.7; rx: 3; ry: 3; }
+      .b-cell-s { fill: #fdfbf7; stroke: #b86742; stroke-width: 0.7; rx: 3; ry: 3; }
+      .b-accent { fill: #fdfbf7; stroke: #c0392b; stroke-width: 2; rx: 3; ry: 3; }
+      .ttl      { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .ttl-big  { font: 700 16px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .lbl      { font: 600 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .mono     { font: 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .mono-sm  { font: 10px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #444; }
+      .sec      { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #555; }
+      .arrow    { stroke: #2d2d2d; stroke-width: 1.4; fill: none; }
+      .arrow-r  { stroke: #c0392b; stroke-width: 2; fill: none; }
+      .accent-t { font: 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+      .accent-l { font: italic 700 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+      .ok-l     { font: italic 700 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #2d6e4a; }
+    ]]></style>
     <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e6dfd2" stroke-width="0.5"/>
+      <path d="M 20 0 L 0 0 0 20" class="grid"/>
     </pattern>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+    <marker id="arrowhead-r" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
   </defs>
-  <rect width="800" height="360" fill="#fdfbf7"/>
-  <rect width="800" height="360" fill="url(#grid)"/>
-  <rect x="40" y="40" width="720" height="280" rx="14" ry="14" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="6 4"/>
-  <text x="400" y="155" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="28" font-weight="700" fill="#1a1a1a">Container networking modes</text>
-  <text x="400" y="195" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="13" fill="#767676">08-networking-veth-vs-host.svg</text>
-  <text x="400" y="245" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="14" fill="#4a4a4a">Diagram pending — see assets/diagrams/README.md to draw.</text>
+
+  <rect class="bg" width="900" height="540"/>
+  <rect width="900" height="540" fill="url(#grid)" opacity="0.4"/>
+
+  <!-- Title -->
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">Container networking — three modes, three latency profiles</text>
+
+  <!-- LEFT column: host networking -->
+  <rect class="band b-host" x="30" y="60" width="280" height="430"/>
+  <text x="170" y="84" class="ttl" text-anchor="middle">host networking</text>
+  <text x="170" y="100" class="sec" text-anchor="middle">--network=host</text>
+  <text x="170" y="116" class="sec" text-anchor="middle">no namespace isolation</text>
+
+  <rect class="b-cell-h" x="60" y="138" width="220" height="40"/>
+  <text x="170" y="156" class="lbl" text-anchor="middle">container process</text>
+  <text x="170" y="170" class="mono-sm" text-anchor="middle">writes to socket fd</text>
+
+  <line x1="170" y1="180" x2="170" y2="208" class="arrow" marker-end="url(#arrowhead)"/>
+  <text x="180" y="196" class="mono-sm">socket()</text>
+
+  <rect class="b-cell-h" x="60" y="208" width="220" height="40"/>
+  <text x="170" y="226" class="lbl" text-anchor="middle">host kernel TCP/IP stack</text>
+  <text x="170" y="240" class="mono-sm" text-anchor="middle">no intermediate layer</text>
+
+  <line x1="170" y1="248" x2="170" y2="276" class="arrow" marker-end="url(#arrowhead)"/>
+
+  <rect class="b-cell-h" x="60" y="276" width="220" height="40"/>
+  <text x="170" y="294" class="lbl" text-anchor="middle">host NIC driver</text>
+  <text x="170" y="308" class="mono-sm" text-anchor="middle">wire</text>
+
+  <line x1="60" y1="350" x2="280" y2="350" stroke="#5a8870" stroke-width="0.5" opacity="0.5"/>
+  <text x="170" y="372" class="ttl" text-anchor="middle">Latency</text>
+  <text x="170" y="394" class="ok-l" text-anchor="middle">≈ bare-metal</text>
+  <text x="170" y="414" class="sec" text-anchor="middle">no isolation overhead</text>
+
+  <text x="170" y="446" class="ttl" text-anchor="middle">Trade-off</text>
+  <text x="170" y="468" class="sec" text-anchor="middle">no port mapping needed</text>
+  <text x="170" y="482" class="sec" text-anchor="middle">no port-conflict protection</text>
+
+  <!-- MIDDLE column: veth + bridge -->
+  <rect class="band b-veth" x="320" y="60" width="280" height="430"/>
+  <text x="460" y="84" class="ttl" text-anchor="middle">veth + bridge</text>
+  <text x="460" y="100" class="sec" text-anchor="middle">--network=bridge (rootful default)</text>
+  <text x="460" y="116" class="sec" text-anchor="middle">kernel-level virtual ethernet</text>
+
+  <rect class="b-cell-v" x="350" y="138" width="220" height="40"/>
+  <text x="460" y="156" class="lbl" text-anchor="middle">container netns</text>
+  <text x="460" y="170" class="mono-sm" text-anchor="middle">eth0 (in container)</text>
+
+  <line x1="460" y1="180" x2="460" y2="208" class="arrow" marker-end="url(#arrowhead)"/>
+  <text x="475" y="197" class="mono-sm">veth pair</text>
+
+  <rect class="b-cell-v" x="350" y="208" width="220" height="40"/>
+  <text x="460" y="226" class="lbl" text-anchor="middle">host bridge (podman0)</text>
+  <text x="460" y="240" class="mono-sm" text-anchor="middle">virtual switch in kernel</text>
+
+  <line x1="460" y1="248" x2="460" y2="276" class="arrow" marker-end="url(#arrowhead)"/>
+
+  <rect class="b-cell-v" x="350" y="276" width="220" height="40"/>
+  <text x="460" y="294" class="lbl" text-anchor="middle">host kernel TCP/IP stack</text>
+  <text x="460" y="308" class="mono-sm" text-anchor="middle">forwards via iptables/nft</text>
+
+  <line x1="320" y1="350" x2="600" y2="350" stroke="#b89540" stroke-width="0.5" opacity="0.5"/>
+  <text x="460" y="372" class="ttl" text-anchor="middle">Latency</text>
+  <text x="460" y="394" class="ok-l" text-anchor="middle">+ tens of µs</text>
+  <text x="460" y="414" class="sec" text-anchor="middle">veth + bridge + NAT overhead</text>
+
+  <text x="460" y="446" class="ttl" text-anchor="middle">Trade-off</text>
+  <text x="460" y="468" class="sec" text-anchor="middle">isolation, port mapping</text>
+  <text x="460" y="482" class="sec" text-anchor="middle">requires root or rootlesskit</text>
+
+  <!-- RIGHT column: slirp4netns -->
+  <rect class="band b-slirp" x="610" y="60" width="280" height="430"/>
+  <text x="750" y="84" class="ttl" text-anchor="middle">slirp4netns</text>
+  <text x="750" y="100" class="sec" text-anchor="middle">--network=slirp4netns (rootless default)</text>
+  <text x="750" y="116" class="sec" text-anchor="middle">userspace TCP/IP stack</text>
+
+  <rect class="b-cell-s" x="640" y="138" width="220" height="40"/>
+  <text x="750" y="156" class="lbl" text-anchor="middle">container netns</text>
+  <text x="750" y="170" class="mono-sm" text-anchor="middle">eth0 (TAP device)</text>
+
+  <line x1="750" y1="180" x2="750" y2="208" class="arrow" marker-end="url(#arrowhead)"/>
+  <text x="765" y="197" class="mono-sm">tap fd</text>
+
+  <!-- RED ACCENT: slirp4netns userspace process -->
+  <rect class="b-accent" x="640" y="208" width="220" height="40"/>
+  <text x="750" y="226" class="accent-t" text-anchor="middle">slirp4netns process</text>
+  <text x="750" y="240" class="accent-l" text-anchor="middle">userspace TCP/IP stack</text>
+
+  <line x1="750" y1="248" x2="750" y2="276" class="arrow-r" marker-end="url(#arrowhead-r)"/>
+  <text x="765" y="266" class="accent-l">syscall</text>
+
+  <rect class="b-cell-s" x="640" y="276" width="220" height="40"/>
+  <text x="750" y="294" class="lbl" text-anchor="middle">host kernel TCP/IP stack</text>
+  <text x="750" y="308" class="mono-sm" text-anchor="middle">re-stacked from user-space</text>
+
+  <line x1="610" y1="350" x2="890" y2="350" stroke="#b86742" stroke-width="0.5" opacity="0.5"/>
+  <text x="750" y="372" class="ttl" text-anchor="middle">Latency</text>
+  <text x="750" y="394" class="accent-t" text-anchor="middle">+ hundreds of µs to ms</text>
+  <text x="750" y="414" class="accent-l" text-anchor="middle">two TCP/IP stacks per packet</text>
+
+  <text x="750" y="446" class="ttl" text-anchor="middle">Trade-off</text>
+  <text x="750" y="468" class="sec" text-anchor="middle">rootless out-of-the-box</text>
+  <text x="750" y="482" class="sec" text-anchor="middle">consider pasta as the upgrade</text>
 </svg>

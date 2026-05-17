@@ -15150,6 +15150,123 @@ comment delimiters react.
 
 **No code changes. No image rebuild. Pure diagram work.**
 
+### 2026-05-16 — r108: Later-section diagrams batch — §8, §9, §12, §13, §14 — diagrams path E COMPLETE
+
+Five placeholder diagrams promoted to real content, completing path E.
+Each is technical / system-level (more so than r107's earlier-section
+batch), each has a clear red accent at the punchline. G-43 audit
+(`<!--.*--[a-zA-Z]` grep across SVGs) ran clean.
+
+**1. `08-io-uring-rings`** — Vertical stack: Application (top, blue)
+→ shared memory band containing Submission Queue (gold, with SQE
+cells) + Completion Queue (green, with CQE cells) → Kernel (bottom,
+terracotta). Bidirectional arrows app↔SQ and CQ↔app; kernel→SQ/CQ
+arrows. **The shared-memory band is itself the accent: outlined in
+red with the labels "shared memory (mmap) — this boundary is the
+entire point — no copy, no syscall per op."** Bottom comparison
+panel: "Traditional: 1 syscall per op × N ops vs io_uring: 0-1
+syscalls per batch of N ops."
+Files: 9 KB SVG + 8 KB excalidraw (17 elements).
+
+**2. `09-networking-veth-vs-host`** — Three-column comparison of
+networking modes. Left (host network, green): app → kernel TCP/IP
+directly, ≈ bare-metal latency. Middle (veth+bridge, gold): container
+netns → veth pair → host bridge → kernel, +tens of µs. Right
+(slirp4netns, terracotta): container netns → tap fd → **slirp4netns
+userspace TCP/IP stack (red accent box) → host kernel TCP/IP**, +
+hundreds of µs to ms. Each column has its data path + latency profile
++ trade-offs.
+Files: 9 KB SVG + 6 KB excalidraw (11 elements).
+
+**3. `12-debug-sidecar-pattern`** — Two containers side by side
+inside a red-dashed band labeled "shared PID namespace
+(--pid=container:main)". Left: main container (production, UBI
+micro, PID 1 = your service). Right: ephemeral debug sidecar (gdb +
+debug symbols, ~400 MB). **Red ptrace arrow from sidecar to main's
+PID 1 labeled "gdb attach via ptrace".** Red flag band at bottom
+documents the two flags that enable it. Workflow narrative at the
+foot.
+Files: 7 KB SVG + 6 KB excalidraw (12 elements).
+
+**4. `13-reproducibility-conan-flow`** — Left-to-right pipeline:
+Inputs (conanfile.txt + profile, blue) → conan install (gold) →
+two outputs: conan_toolchain.cmake (green, top) + **conan.lock
+(red, bottom — the entire pinning artifact)** → cmake+ninja
+(terracotta) → binary. Red arrows from conan to lockfile and from
+lockfile to build emphasize the pinning flow. Bottom red band: a
+5-bullet narrative of what conan.lock actually pins (revision hashes,
+options, binary IDs) and why CI rebuilds are then deterministic.
+Files: 9 KB SVG + 9 KB excalidraw (18 elements).
+
+**5. `14-pitfalls-avx512-mismatch`** — Three-column build → image
+→ runtime pipeline (green → gold → terracotta). Build host has
+AVX-512, gcc -march=native picks it up. Image preserves the AVX-512
+instructions (with literal vmovdqa64 / zmm0 mnemonics shown).
+Runtime host (Zen 3 or older Intel) lacks AVX-512, first instruction
+hits CPU → **SIGILL red panel** below the runtime column. Bottom
+band: the fix — Option 1 (x86-64 micro-architecture levels v2/v3/v4)
++ Option 2 (multi-arch builds with runtime dispatch).
+Files: 8 KB SVG + 8 KB excalidraw (16 elements).
+
+**Diagram progress after r108: 15 of 15 done. PATH E COMPLETE.**
+
+- ✓ §2 four-layers (pre-existing)
+- ✓ §2 threading-models (pre-existing)
+- ✓ §3 raii-discipline (pre-existing)
+- ✓ §7 allocator-stack (r106)
+- ✓ §10 otel-stack (r106)
+- ✓ §11 cgroup-tree (r106)
+- ✓ §1 prerequisites-toolchain (r107)
+- ✓ §4 image-strategy-multistage (r107)
+- ✓ §5 compile-time-pgo-flow (r107)
+- ✓ §6 stl-layout-flat-vs-node (r107)
+- ✓ §8 io-uring-rings (r108)
+- ✓ §9 networking-veth-vs-host (r108)
+- ✓ §12 debug-sidecar-pattern (r108)
+- ✓ §13 reproducibility-conan-flow (r108)
+- ✓ §14 pitfalls-avx512-mismatch (r108)
+
+**Style consistency check across all 15:** every diagram now uses
+the §2-reference style — warm pastel palette (`#fdfbf7` background,
+blue/gold/terracotta/green band fills), semantic SVG with CSS
+classes, grid background, ARIA labels for accessibility, one red
+accent per diagram pointing at the punchline. Each shipped as
+paired `.svg` (rendered output Jekyll embeds) + `.excalidraw`
+(editable JSON source for anyone wanting to modify in Excalidraw).
+
+**G-43 audit** ran clean across all r108 diagrams — no `--` inside
+XML comments. Pattern: `grep -E '<!--.*--[a-zA-Z]' diagrams/*.svg`
+during pre-commit.
+
+**Files changed in r108 (11):**
+
+- `diagrams/08-io-uring-rings.{svg,excalidraw}`: real
+- `diagrams/09-networking-veth-vs-host.{svg,excalidraw}`: real
+- `diagrams/12-debug-sidecar-pattern.{svg,excalidraw}`: real
+- `diagrams/13-reproducibility-conan-flow.{svg,excalidraw}`: real
+- `diagrams/14-pitfalls-avx512-mismatch.{svg,excalidraw}`: real
+- `_plans/reconciliation-plan.md`: this r108 entry
+
+**No code changes. No image rebuild. Pure diagram work.**
+
+**Updated option-1 plan status:**
+
+| Path | State |
+|---|---|
+| A. demo-06 | ✓ complete |
+| B. demo-05 | ✓ complete |
+| D. Section prose (3 §-anchors) | ✓ complete |
+| E. Excalidraw diagrams (15 total) | ✓ **complete (r108)** |
+| C. demo-07 quality-pipeline | next active work |
+| F. PPTX | last; will reference the verified work + diagrams |
+
+The natural next move is path C (build out demo-07). It's the only
+remaining demo work and is currently a stub; the quality-pipeline
+lesson is core to §12 (analysis-debugging). After C, path F (PPTX)
+consolidates everything: the three §-anchor mini-essays, the seven
+verified demos (01-06 verified; 07 to be verified through Round
+A/B), and the 15 diagrams as visual anchors for the slide deck.
+
 ---
 
 ## Known divergences from the PRD

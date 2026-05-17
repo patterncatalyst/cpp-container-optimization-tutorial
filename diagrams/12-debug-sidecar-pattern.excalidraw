@@ -1,45 +1,119 @@
 {
-    "type": "excalidraw",
-    "version": 2,
-    "source": "https://excalidraw.com",
-    "elements": [
-        {
-            "type": "text",
-            "version": 1,
-            "id": "11-debug-sidecar-pattern-placeholder-text",
-            "x": 100,
-            "y": 100,
-            "width": 600,
-            "height": 40,
-            "text": "Ephemeral gdb sidecar — replace this placeholder",
-            "fontSize": 24,
-            "fontFamily": 1,
-            "textAlign": "left",
-            "verticalAlign": "top",
-            "strokeColor": "#1a1a1a",
-            "backgroundColor": "transparent",
-            "fillStyle": "solid",
-            "strokeWidth": 1,
-            "strokeStyle": "solid",
-            "roughness": 1,
-            "opacity": 100,
-            "groupIds": [],
-            "frameId": null,
-            "roundness": null,
-            "seed": 1,
-            "boundElements": null,
-            "updated": 1,
-            "link": null,
-            "locked": false,
-            "containerId": null,
-            "originalText": "Ephemeral gdb sidecar — replace this placeholder",
-            "lineHeight": 1.25,
-            "baseline": 18
-        }
-    ],
-    "appState": {
-        "gridSize": 20,
-        "viewBackgroundColor": "#fdfbf7"
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "type": "text", "version": 1, "id": "title",
+      "x": 150, "y": 16, "width": 600, "height": 24,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 20, "fontFamily": 1,
+      "text": "Ephemeral debug sidecar — gdb without rebuilding the prod image",
+      "textAlign": "center", "verticalAlign": "middle"
     },
-    "files": {}
+    {
+      "type": "rectangle", "version": 1, "id": "shared-ns-RED",
+      "x": 40, "y": 80, "width": 820, "height": 280,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "dashed",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "shared-ns-label-RED",
+      "x": 60, "y": 88, "width": 780, "height": 18,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "shared PID namespace  —  containers see each other's processes  —  --pid=container:main",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "main",
+      "x": 80, "y": 120, "width": 340, "height": 220,
+      "angle": 0, "strokeColor": "#4a73b8", "backgroundColor": "#e8f0fb",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["main-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "main-content",
+      "x": 100, "y": 130, "width": 300, "height": 200,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["main-group"],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "Main container  —  production\nstripped, no debug tools, smallest image\n\nPID 1: your C++ service\n/usr/local/bin/myservice\nUBI micro base, ~26 MB total\n\nContainerfile:\n  FROM ubi-micro\n  COPY --from=build /app /\n  ENTRYPOINT [\"/app\"]",
+      "textAlign": "center", "verticalAlign": "top"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "sidecar",
+      "x": 480, "y": 120, "width": 340, "height": 220,
+      "angle": 0, "strokeColor": "#b86742", "backgroundColor": "#ecdfd8",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["sidecar-group"],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "sidecar-content",
+      "x": 500, "y": 130, "width": 300, "height": 200,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": ["sidecar-group"],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "Debug sidecar  —  ephemeral\nheavy, only running during a debug session\n\ngdb + debug symbols + glibc-debug\neu-stack, valgrind, strace, perf\n~400 MB image, fine for ad-hoc use\n\nLaunch command:\n  podman run -it --rm \\\n    --pid=container:main \\\n    --cap-add=SYS_PTRACE  debug:latest",
+      "textAlign": "left", "verticalAlign": "top"
+    },
+    {
+      "type": "arrow", "version": 1, "id": "arrow-ptrace-RED",
+      "x": 500, "y": 210, "width": -100, "height": 0,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "points": [ [0, 0], [-100, 0] ], "endArrowhead": "arrow"
+    },
+    {
+      "type": "text", "version": 1, "id": "ptrace-label-RED",
+      "x": 410, "y": 196, "width": 80, "height": 14,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "gdb attach PID 1\nvia ptrace",
+      "textAlign": "center", "verticalAlign": "middle"
+    },
+    {
+      "type": "rectangle", "version": 1, "id": "flag-band-RED",
+      "x": 60, "y": 386, "width": 780, "height": 50,
+      "angle": 0, "strokeColor": "#c0392b", "backgroundColor": "#fdfbf7",
+      "fillStyle": "solid", "strokeWidth": 1.5, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "roundness": { "type": 3 }
+    },
+    {
+      "type": "text", "version": 1, "id": "flag-band-label-RED",
+      "x": 80, "y": 394, "width": 740, "height": 36,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 12, "fontFamily": 1,
+      "text": "The two flags that make this work:\n--pid=container:main   joins the main container's PID namespace  |  --cap-add=SYS_PTRACE   allows ptrace attach",
+      "textAlign": "left", "verticalAlign": "middle"
+    },
+    {
+      "type": "text", "version": 1, "id": "workflow",
+      "x": 60, "y": 458, "width": 780, "height": 80,
+      "angle": 0, "strokeColor": "#1a1a1a", "backgroundColor": "transparent",
+      "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
+      "roughness": 1, "opacity": 100, "groupIds": [],
+      "fontSize": 11, "fontFamily": 1,
+      "text": "Workflow:\n1. prod container is running normally (no debugger present)\n2. you notice an issue → spawn the sidecar with the flags above\n3. gdb attach in sidecar, debug interactively, exit sidecar → prod container untouched",
+      "textAlign": "left", "verticalAlign": "top"
+    }
+  ],
+  "appState": { "viewBackgroundColor": "#fdfbf7", "gridSize": null },
+  "files": {}
 }
