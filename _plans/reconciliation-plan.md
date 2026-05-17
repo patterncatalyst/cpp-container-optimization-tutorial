@@ -16745,6 +16745,193 @@ to be in any stage that uses it (or the toolchain base needs
 to enable EPEL once for all downstream stages — which is the
 shape demo-07 uses).
 
+### 2026-05-17 — r117: Round A verification — G-46 captured (libabigail not in EPEL 9 either)
+
+After r116 added EPEL, the build proceeded further. cppcheck
+now installs cleanly. But **libabigail does NOT install**:
+
+```
+Extra Packages for Enterprise Linux 9 - x86_64   16 MB/s |  21 MB     00:01
+Extra Packages for Enterprise Linux 9 openh264  2.0 kB/s | 2.5 kB     00:01
+No match for argument: libabigail
+Error: Unable to find a match: libabigail
+```
+
+EPEL was successfully downloaded (21 MB of metadata) and cppcheck
+resolved through it (no error for cppcheck this time — only
+libabigail). So **libabigail is genuinely not in EPEL 9**.
+
+**Root cause analysis (web-researched):**
+
+1. **Fedora has it** in main repos as `libabigail` (versions 2.5
+   through 2.8 across Fedora 41-43, current).
+2. **EPEL 7-8 had it** historically (per pkgs.org); EPEL 9 does
+   NOT. The packaging path through EPEL stopped at EL 8.
+3. **RHEL 9 ships libabigail 2.6** in its full CodeReady Builder
+   repository (per Red Hat's "Considerations in adopting RHEL 9"
+   PDF docs). But this is the *subscription-gated* CRB repo.
+4. **UBI 9's CRB subset** (what the user's dnf output showed
+   enabled as "Red Hat Universal Base Image 9 (RPMs) - CodeRea")
+   is a *trimmed* version of RHEL's CRB. It includes most build
+   libraries but not community-maintained analysis tools like
+   libabigail.
+5. **Oracle Linux 9 has it** in `ol9-codeready-builder-x86_64`
+   (per pkgs.org), but Oracle Linux's CRB is independently curated
+   and includes packages that UBI's doesn't.
+
+**Three options considered, chose Option A (build from source):**
+
+| Option | Pros | Cons | Decision |
+|---|---|---|---|
+| A. Build libabigail from source in a separate builder stage | Stays "UBI everywhere"; demonstrates multi-stage pattern again; pinnable to a known version | +3-5 min on first build, cached thereafter | ✓ |
+| B. Switch toolchain to Fedora base | Fast; uses official Fedora packaging | New non-UBI exception to project's stated preference | ✗ |
+| C. Make abi stage optional (skip if libabigail unavailable) | Simple | Breaks the §13 ABI compat lesson the demo is supposed to teach | ✗ |
+
+Option A keeps the tutorial preference and is itself a useful
+mini-demonstration of building a third-party dep from source —
+the same pattern demo-04's Containerfile uses for parts of its
+OTel/gRPC chain.
+
+**Fix in Containerfile — new libabigail-builder stage:**
+
+Added a new builder stage before the toolchain stage:
+
+```dockerfile
+FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS libabigail-builder
+RUN rm -f /etc/yum.repos.d/redhat.repo && \
+    sed -i 's/^enabled=1/enabled=0/' \
+        /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
+RUN dnf install -y --setopt=install_weak_deps=False \
+        gcc gcc-c++ make git autoconf automake libtool pkgconfig \
+        libxml2-devel elfutils-devel \
+    && dnf clean all
+RUN cd /tmp \
+ && git clone https://sourceware.org/git/libabigail.git \
+ && cd libabigail \
+ && git checkout libabigail-2.6 \
+ && ./autogen.sh \
+ && ./configure --prefix=/usr/local --disable-static \
+ && make -j"$(nproc)" \
+ && make install \
+ && cd / && rm -rf /tmp/libabigail
+```
+
+The toolchain stage:
+1. Removed `libabigail` from the main dnf install (no longer trying
+   to install from repos)
+2. Added `libxml2` and `elfutils-libs` (the *runtime* deps libabigail
+   needs to *use* at runtime — the corresponding -devel packages live
+   only in the libabigail-builder stage)
+3. Added `COPY --from=libabigail-builder /usr/local /usr/local` to
+   bring abidiff/abidw/abilint binaries + libabigail shared libs into
+   the toolchain
+4. PATH/LD_LIBRARY_PATH updated to include /usr/local/bin and
+   /usr/local/lib
+
+Pinned to release tag `libabigail-2.6` for reproducibility. Same
+version that RHEL 9 ships.
+
+**Stage graph after r117:**
+
+```
+libabigail-builder ──→ toolchain ──→ build ──→ analyzer
+                                              ├→ tests
+                                              ├→ asan
+                                              └→ abi
+                                       svc (separate; ubi-minimal)
+                                       gdbserver (separate; ubi)
+```
+
+The libabigail-builder is a dead-end stage — its only purpose is to
+produce binaries that get copied into toolchain. It's discarded after
+the build. The runtime image (`svc`) never sees libabigail.
+
+**Round A verification status after r117:**
+
+| Step | r114 | r115 | r116 | r117 |
+|---|---|---|---|---|
+| host-side lockfile regen | ✗ gcc 16 | ✓ fallback | ✓ | ✓ |
+| dnf install cppcheck | n/a | ✗ "no match" | ✓ EPEL | ✓ |
+| dnf install libabigail | n/a | n/a | ✗ "no match" | **✓ source build** |
+| analyzer stage runs | n/a | not reached | not reached | next to verify |
+
+**Next likely issues to watch for in r118+:**
+
+Same list as r116, plus:
+1. `run-clang-tidy` script path on UBI 9.
+2. Conan sanitizer-flag propagation to gtest (asan stage).
+3. cppcheck noise against demo source.
+4. **NEW** — `git clone` from `sourceware.org/git/libabigail.git`
+   could be slow or rate-limited from some networks. If it fails,
+   the alternative is to download a tarball release from
+   `https://sourceware.org/pub/libabigail/` instead. (Not yet
+   implemented; deferred until we see it fail.)
+5. **NEW** — the `git checkout libabigail-2.6` assumes that tag
+   exists. If libabigail's tag naming convention changed (e.g., to
+   `v2.6` or `2.6` instead of `libabigail-2.6`), the build fails
+   with a clear error. Reproducibility note: tag naming on git
+   repos is sometimes inconsistent across projects; if this breaks,
+   we'd pin to a specific commit hash instead.
+
+**Files changed in r117 (2):**
+
+- `examples/demo-07-quality-pipeline/Containerfile`: new
+  libabigail-builder stage + removed libabigail from dnf list +
+  COPY tools into toolchain + libxml2/elfutils-libs runtime deps
+- `_plans/reconciliation-plan.md`: this r117 entry + G-46 catalog
+
+---
+
+## Gotchas (running catalog) — continued
+
+### G-46 · libabigail not packaged in EPEL 9 (r117)
+
+**Symptom.** Even with EPEL 9 enabled (G-45 fix in place), `dnf
+install libabigail` fails:
+
+```
+Extra Packages for Enterprise Linux 9 - x86_64   16 MB/s |  21 MB
+No match for argument: libabigail
+Error: Unable to find a match: libabigail
+```
+
+**Cause.** libabigail's packaging trajectory:
+- Fedora's main repos: yes, current versions (2.6+ as of 2026)
+- EPEL 7-8: yes (historical)
+- EPEL 9: **no** — the package wasn't continued for EL 9
+- RHEL 9 full CodeReady Builder: yes, version 2.6, subscription-gated
+- UBI 9's CRB subset: no — trimmed from the full RHEL CRB
+- Oracle Linux 9 CRB: yes (but Oracle's CRB is independently curated)
+
+This is a real packaging gap, not a fixable repo configuration.
+
+**Fix.** Build libabigail from source in a dedicated multi-stage
+builder, then `COPY --from=libabigail-builder /usr/local /usr/local`
+into your main toolchain. Pin to a known-stable tag
+(`libabigail-2.6` matches what RHEL ships). Add the runtime deps
+(`libxml2`, `elfutils-libs`) to the consuming stage; the
+corresponding `-devel` packages need only exist in the builder.
+
+This is also a useful mini-demonstration of the multi-stage
+build pattern when a specific tool isn't packaged for your base
+distro. The same shape applies any time you need a tool that's
+in Fedora but not in UBI/RHEL/Rocky/Alma (or vice versa).
+
+**Build time.** ~3-5 minutes on a modern machine for libabigail
+specifically; cached as a single layer after first build.
+
+**Where else this applies.** The pattern (a dedicated builder
+stage for a single from-source tool, COPY-into-toolchain
+afterward) generalizes to any "we want tool X but the package
+is missing from our base" situation. Useful for:
+- Newer ccache than the distro ships
+- Specific clang-format versions
+- Custom static-analysis tools
+- Pinned `mold` linker version
+
+Audit on next pass: if demo-08 or future demos need other
+not-in-EPEL tools, this is the template.
+
 ---
 
 ## Known divergences from the PRD

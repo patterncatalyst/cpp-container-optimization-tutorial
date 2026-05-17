@@ -1,5 +1,41 @@
 ARG UBI_VERSION=9.4
 
+# ---- libabigail builder stage ----
+# libabigail (provider of abidiff/abidw used by the abi stage) is not
+# packaged in EPEL 9, and UBI 9's CRB subset doesn't include it either.
+# Red Hat ships it in RHEL 9's full CodeReady Builder repo but that's
+# subscription-gated and not available in UBI. Building from source in a
+# dedicated builder stage keeps the "UBI everywhere" tutorial preference
+# (see G-46 in the reconciliation plan). This stage is ~3-5 min on first
+# build, cached as one layer thereafter.
+FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS libabigail-builder
+RUN rm -f /etc/yum.repos.d/redhat.repo && \
+    sed -i 's/^enabled=1/enabled=0/' \
+        /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
+RUN dnf install -y --setopt=install_weak_deps=False \
+        gcc \
+        gcc-c++ \
+        make \
+        git \
+        autoconf \
+        automake \
+        libtool \
+        pkgconfig \
+        libxml2-devel \
+        elfutils-devel \
+    && dnf clean all
+# Clone libabigail and check out a known-stable release tag. Full clone
+# (not --depth=1) because we need git history to resolve the tag.
+RUN cd /tmp \
+ && git clone https://sourceware.org/git/libabigail.git \
+ && cd libabigail \
+ && git checkout libabigail-2.6 \
+ && ./autogen.sh \
+ && ./configure --prefix=/usr/local --disable-static \
+ && make -j"$(nproc)" \
+ && make install \
+ && cd / && rm -rf /tmp/libabigail
+
 # ---- toolchain base ----
 FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS toolchain
 
@@ -9,12 +45,11 @@ RUN rm -f /etc/yum.repos.d/redhat.repo && \
     sed -i 's/^enabled=1/enabled=0/' \
         /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
 
-# Enable EPEL 9 — UBI 9 doesn't ship cppcheck or libabigail in its
-# core repos; both live in EPEL (Extra Packages for Enterprise Linux).
+# Enable EPEL 9 — UBI 9 doesn't ship cppcheck in its core repos.
+# (libabigail is built from source in the libabigail-builder stage above
+# because it's not in EPEL 9 either; see G-46.)
 # CRB (CodeReady Builder) is already enabled in UBI 9 by default, which
 # is the prerequisite for installing many EPEL packages.
-# G-45: this is the canonical fix for "No match for argument: cppcheck"
-# (or libabigail) when building C++ analysis pipelines on a UBI base.
 RUN dnf install -y \
         https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
 
@@ -24,14 +59,21 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         ninja-build \
         clang-tools-extra \
         cppcheck \
-        libabigail \
         gdb-gdbserver \
         python3-pip \
         git \
+        libxml2 \
+        elfutils-libs \
     && pip install --no-cache-dir 'conan>=2.0,<3.0' \
     && dnf clean all
-ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
-ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64
+
+# Copy libabigail tools (abidiff, abidw, abilint, etc.) + shared libs
+# from the builder stage. The runtime deps (libxml2, elfutils-libs) are
+# already installed above.
+COPY --from=libabigail-builder /usr/local /usr/local
+
+ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:/usr/local/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64:/usr/local/lib
 
 # ---- build stage ----
 FROM toolchain AS build
