@@ -20,6 +20,10 @@
                {% if page.url contains '/examples' %}class="is-current"{% endif %}>
                 Examples
             </a>
+            <a href="{{ '/bibliography/' | relative_url }}"
+               {% if page.url contains '/bibliography' %}class="is-current"{% endif %}>
+                Bibliography
+            </a>
             <a href="{{ '/plans/reconciliation-plan/' | relative_url }}"
                {% if page.layout == 'plan' %}class="is-current"{% endif %}>
                 Plan

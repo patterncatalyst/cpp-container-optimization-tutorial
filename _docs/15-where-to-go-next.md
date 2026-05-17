@@ -36,6 +36,12 @@ extends what we did:
   service is fast. The architectural patterns that survive scale
   and that don't paint you into ABI corners.
 
+For the full annotated bibliography — extended treatment of each
+book, suggested reading orders depending on where you're starting
+from, and a section-by-section cross-reference of which book this
+tutorial points at where — see the
+[**Bibliography page**]({{ '/bibliography/' | relative_url }}).
+
 ## Topics deliberately skipped
 
 - **Coroutines (C++20).** Worth a tutorial of their own; the

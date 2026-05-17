@@ -681,3 +681,31 @@ pre code { background: transparent; padding: 0; color: inherit; font-size: .92em
     }
 }
 */
+
+
+/* Bibliography cross-reference matrix */
+.biblio-matrix {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    font-size: 0.95em;
+}
+.biblio-matrix th,
+.biblio-matrix td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--rule, #e5e1d6);
+}
+.biblio-matrix thead th {
+    background: var(--bg-soft, #f5f0e0);
+    border-bottom: 2px solid var(--rule, #e5e1d6);
+}
+.biblio-matrix tbody td:not(:first-child) {
+    text-align: center;
+    width: 14%;
+    color: var(--accent, #b54a2c);
+    font-weight: 600;
+}
+.biblio-matrix tbody tr td:first-child {
+    width: 44%;
+}

@@ -8,8 +8,8 @@
 
 ## 1. Summary
 
-**One sentence:** A 1.5–3 hour PPTX presentation, an untimed companion
-Jekyll tutorial site, and six runnable Podman demos that teach
+**One sentence:** A 3-hour PPTX presentation, an untimed companion
+Jekyll tutorial site, and seven runnable Podman demos that teach
 intermediate C++ engineers how to reason about and measure C++20/23
 performance under realistic container constraints.
 
@@ -17,7 +17,7 @@ performance under realistic container constraints.
 
 | Target            | Time budget                            | Source of truth                                | What lands here                                                            |
 |-------------------|-----------------------------------------|-------------------------------------------------|-----------------------------------------------------------------------------|
-| **PPTX deck**     | 1.5–3 hours when delivered live         | Generated from the section content + diagrams   | Pre-recorded demo videos, screenshots from a real run, the diagrams as slides |
+| **PPTX deck**     | 3 hours when delivered live             | Generated from the section content + diagrams   | Pre-recorded demo videos, screenshots from a real run, the diagrams as slides |
 | **Jekyll site**   | As long as it needs to be (no cap)      | The `_docs/` collection, written for self-paced reading | Full prose, every code listing, every command, the reconciliation plan       |
 | **Demos**         | Each is a standalone runnable example   | `examples/demo-XX-*/`                           | Live during the talk *or* skipped in favor of pre-recorded video; always available for the reader to run themselves |
 
@@ -25,8 +25,8 @@ The relationship: the site is the comprehensive reference; the deck is
 a curated path through it; the demos are examples used in both. Per-
 section "duration" fields in `_docs/` are the **reading time** estimate
 for the site, not the talking time for the deck. The deck's pacing is
-its own concern — see §3's "Two delivery paths" subsection for how the
-1.5h and 3h cuts relate.
+its own concern — the section table in §5 columns out the talk-time
+budget per section.
 
 **One paragraph:** C++ performance advice is plentiful but almost
 always assumes a bare-metal mental model — a single tuned host, a
@@ -102,15 +102,13 @@ moment.
 - A reader who finishes can reproduce every measurement in the
   tutorial on their own Fedora 44 host without consulting other
   resources.
-- All six demos run end-to-end via `./demo.sh` on Fedora 44 with
+- All seven demos run end-to-end via `./demo.sh` on Fedora 44 with
   Podman 5.x, rootless, no manual fixups.
 - Every section has a paired Excalidraw diagram (SVG + JSON) that
   is consistent across the Jekyll site and the PPTX deck.
-- The PPTX deck can be delivered in 1.5 hours (high-level pass,
-  pre-recorded demo videos, no live demos) or in 3 hours (every
-  demo run live, full Q&A allowance). The Jekyll site is the
-  comprehensive long-form reference and is not constrained by talk
-  time.
+- The PPTX deck delivers in 3 hours with every demo run live and a
+  full Q&A allowance. The Jekyll site is the comprehensive long-form
+  reference and is not constrained by talk time.
 
 ### Non-goals
 
@@ -169,44 +167,61 @@ Jekyll site has its own per-section reading time in the front-matter
 of each `_docs/*.md` file (often longer; reading is more thorough than
 talking).
 
-**PPTX total estimated talk time: 2h 46m** (the 3-hour cut, with every
-demo run live).
+**PPTX total estimated talk time: ~2h 36m** (the full 3-hour cut with
+every demo run live, leaving ~25 minutes for Q&A and live-demo
+overrun).
 
-**1.5-hour PPTX cut**: keep §0–2, §3 + Demo 1 video, §6, §7 + Demo 3
-video, §9 + Demo 4 video, §13 highlights, §14. Skip §4 (PGO can be
-mentioned in passing), §5 (link to site), §8, §10–§12 (link to site
-and the demos for self-paced runs).
-
-**Jekyll site total**: untimed. Read top-to-bottom or sample by
-section; every section is self-contained enough to enter cold.
+**Jekyll site total**: ~3h 45m reading time across the 17 sections.
+Untimed in practice — read top-to-bottom or sample by section; every
+section is self-contained enough to enter cold.
 
 ### Sections
 
-| §  | Title                                                              | Purpose                                                                            | PPTX talk | Demo |
-|----|--------------------------------------------------------------------|------------------------------------------------------------------------------------|-----------|------|
-| 0  | Outline                                                            | Reader's map; what to expect, what's out of scope                                  | 2 min     | —    |
-| 1  | Prerequisites                                                      | Fedora 44, Podman 5.x, the toolchain (GCC 14 / Clang 18, Conan 2, CMake, Ninja)    | 10 min    | —    |
-| 2  | Introduction & Mental Model                                        | Why container constraints change C++ perf reasoning; the four-layer model          | 8 min     | —    |
-| 3  | Container Strategy: UBI, ubi-micro, multi-stage builds               | When to use which base; layer caching; the AVX-512 mismatch trap                   | 12 min    | 1    |
-| 4  | Compile-Time Wins: LTO, PGO, constexpr                             | What each does, when each is worth the build-time tax, instrumentation runs        | 12 min    | 1    |
-| 5  | STL, Layout, and C++20/23 Containers                               | `std::vector` vs `std::deque`, C++23 `flat_map`/`flat_set`, silent overhead        | 15 min    | 2    |
-| 6  | Memory Management: Allocators, Huge Pages, cgroups v2, OOM        | PMR, `madvise(MADV_HUGEPAGE)`, mimalloc/jemalloc, `memory.max`, `malloc_trim()`, OOM killer, RSS vs working set, the LinuxMemoryChecker pattern | 15 min    | 2    |
-| 7  | I/O Latency: io_uring, Async gRPC, SO_REUSEPORT                    | Where syscall overhead actually lives; building blocks for low-tail-latency I/O    | 15 min    | 3    |
-| 8  | Networking & Kernel Parameters                                     | veth pairs vs host networking, sysctl tuning, when to use `--network=host`         | 10 min    | 3    |
-| 9  | Observability & Profiling: Grafana Stack, perf, eBPF               | The compose stack; OTel from C++; `perf`, `bcc`, `bpftrace` against containers     | 15 min    | 4    |
-| 10 | Noisy Neighbor Isolation: cgroups, CPU pinning, NUMA               | Two-tenant scenario; cpuset, cpu.weight, io.weight, `numactl --membind`            | 12 min    | 5    |
-| 11 | Static Analysis & Debugging in Containers                          | cppcheck + clang-tidy pipeline; AddressSanitizer/Valgrind in containers; Meta's Object Introspection; ephemeral gdb sidecar; gdbserver | 15 min    | 6    |
-| 12 | Reproducibility & ABI: Conan, CMake Presets, Hermetic Builds       | Conan lockfiles, CMake presets, ABI tracking with `abidiff`, hermetic CI           | 12 min    | 6    |
-| 13 | Pitfalls: AVX-512 mismatch, abstraction overhead, build delays     | The traps people fall into and how each one shows up in the metrics                | 10 min    | —    |
-| 14 | Where to Go Next                                                   | Pointers to deeper resources; the four reference books                             | 3 min     | —    |
+| §  | Title                                                                  | Purpose                                                                                                | PPTX talk | Demo |
+|----|------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------|-----------|------|
+| 0  | Outline & reading order                                                | Reader's map: what to expect, what's out of scope, the four reading paths                              | 2 min     | —    |
+| 1  | Prerequisites                                                          | Fedora 44, Podman 5.x, the toolchain (GCC 14 / Clang 18, Conan 2, CMake, Ninja), cgroup v2 delegation  | 8 min     | —    |
+| 2  | Introduction & Mental Model                                            | Why container constraints change C++ perf reasoning; the four-layer model                              | 10 min    | —    |
+| 3  | RAII & Container Resource Discipline                                   | RAII as the discipline that holds across process lifecycle, request lifecycle, and cgroup constraints  | 8 min     | —    |
+| 4  | Container Strategy: UBI, ubi-micro, multi-stage                        | When to use which base; layer caching; the toolchain-in-runtime anti-pattern                           | 10 min    | 1    |
+| 5  | Compile-Time Wins: LTO, PGO, constexpr                                 | What each does, when each is worth the build-time tax, instrumentation runs                            | 10 min    | 1    |
+| 6  | STL, Layout, and C++20/23 Containers                                   | `unordered_map` vs `map` vs `flat_map` vs `vector` linear scan; cache locality at scale                | 12 min    | 2    |
+| 7  | Memory Management: Allocators, Huge Pages, cgroups v2, OOM             | PMR, mimalloc, jemalloc design, `madvise(MADV_HUGEPAGE)`, `memory.max`, OOM killer, RSS vs working set | 12 min    | 6    |
+| 8  | I/O Latency: io_uring, Async gRPC, SO_REUSEPORT                        | Where syscall overhead actually lives; multishot accept, provided-buffer rings, async gRPC             | 12 min    | 3    |
+| 9  | Networking & Kernel Parameters                                         | veth pairs vs host networking, sysctl tuning, when to use `--network=host`                             | 10 min    | 3    |
+| 10 | Observability & Profiling: OTel, Grafana Stack, perf, eBPF             | OTel from C++ (Simple vs Batch processors); Tempo/Loki/Mimir; `perf`, `bcc`, `bpftrace` against containers | 12 min  | 4    |
+| 11 | Noisy Neighbor Isolation: cgroups, CPU pinning, NUMA                   | Two-tenant scenario; cpuset, cpu.weight, io.weight, `numactl --membind`                                | 10 min    | 5    |
+| 12 | Static Analysis & Debugging in Containers                              | cppcheck + clang-tidy pipeline; sanitizers in containers; gdbserver sidecar; abidiff in CI             | 15 min    | 7    |
+| 13 | Reproducibility & ABI: Conan, CMake Presets, Hermetic Builds, Coverage | Conan lockfiles, CMake presets, ABI tracking with `abidiff`, hermetic CI, coverage instrumentation     | 12 min    | 7    |
+| 14 | Pitfalls                                                               | AVX-512 mismatch, abstraction overhead, build delays, instruction-set traps, the things people miss    | 10 min    | —    |
+| 15 | Where to Go Next                                                       | Pointers to deeper resources; bibliography page; the four reference books                              | 3 min     | —    |
+| 16 | Appendix A — Conan, autotools, and UBI 9's minimal perl                | Reference appendix: how the perl-modules dependency cascade landed; not presented in the deck          | (ref only) | — |
 
-**PPTX 3-hour cut total: 2h 46m talk time** (excluding Q&A, room reset, and live-demo overrun).
+### Reference companion: the Statelessness section
+
+In addition to the linear §0–§16 tutorial body, the site hosts a
+12-document **Statelessness reference** at
+[`/reference/statelessness/`](/reference/statelessness/). This is
+the depth track: the conceptual material that the main tutorial
+sections gesture at but don't have room to develop. Each doc
+stands alone (1500-4000 words) with its own diagram. The
+collection covers the deployment-posture / RAII / PMR / process-
+scoped state / threading / 12-factor C++ / state externalization /
+ephemeral filesystem / health-checks / gRPC microservices /
+build-tooling spectrum. The §3 prose links to it as the canonical
+deep dive; readers who want only the linear path can skip it
+entirely.
 
 ### Optional appendices
 
-- A: A short PMR allocator cookbook
-- B: kernel parameter cheat-sheet for low-latency C++ services
-- C: a worked example of catching an ABI break with `abidiff` in CI
+- **A** (shipped): Conan, autotools, and UBI 9's minimal perl —
+  the worked example of how to bridge a from-source build against
+  a minimal-distro target.
+
+The original PRD anticipated additional appendices (B: kernel
+parameter cheat-sheet, C: ABI break worked example); their
+material landed inline in §9 and §13 respectively rather than
+needing dedicated appendices.
 
 ---
 
@@ -214,21 +229,25 @@ section; every section is self-contained enough to enter cold.
 
 ### Will this tutorial have runnable code examples?
 
-Yes — six demos, each self-contained under `examples/<demo>/` with a
-single entry point `./demo.sh` plus a corresponding test script
+Yes — seven demos, each self-contained under `examples/demo-NN-*/` with
+a single entry point `./demo.sh` plus a corresponding test script
 under `scripts/test-<demo>.sh` for CI verification.
 
-### The six demos
+### The seven demos
 
-| # | Name                | Topic mapping                                                                                                                  | Runs via                                |
-|---|---------------------|--------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------|
-| 1 | image-strategy      | UBI vs UBI-micro, multi-stage, LTO, PGO, ABI labels — §3, §4, §12                                                                | `podman build` + `podman run`           |
-| 2 | stl-layout          | `std::vector` vs `boost::container::flat_map` vs `std::unordered_map` cache-locality benchmark with cgroup memory pressure — §6 (PMR/huge pages/mimalloc moved to §7 prose since demo-02's scope tightened to STL-only — see _plans/reconciliation-plan.md r55) | `podman run` with cgroup limits         |
-| 3 | io-uring-grpc       | io_uring TCP echo + async gRPC service with `SO_REUSEPORT`; `hey` for load — §7, §8                                            | `podman compose up` (2 services)        |
-| 4 | observability       | The full stack: Grafana + Prometheus + Tempo + Loki + Mimir; OTel-instrumented C++ service; `perf record` + `bpftrace` probes  | `podman compose up` (full stack)        |
-| 5 | isolation           | Noisy neighbor: two C++ services contending for CPU + memory + I/O; `--cpuset-cpus`, `cpu.weight`, NUMA pinning, veth latency  | `podman compose up` (2 tenants + load)  |
-| 6 | memory-and-allocators | `std::allocator` vs `std::pmr::synchronized_pool_resource` vs `mimalloc`, MAP_HUGETLB + cgroup memory.high pressure, OTel latency histograms — §7 (added in r70; was promised by §7 prose but had no demo until now) | `podman compose up` (LGTM stack + svc) |
-| 7 | quality-pipeline    | cppcheck + clang-tidy + googletest/gmock + abidiff + hermetic Conan/CMake build + gdbserver sidecar — §11, §12 (moved from slot 6 in r70)                | `podman build` + `podman run` (CI-shaped) |
+| # | Name                  | Topic mapping                                                                                                                          | Runs via                                |
+|---|-----------------------|----------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------|
+| 1 | image-strategy        | UBI vs UBI-micro, multi-stage, LTO, PGO, ABI labels — §4, §5, §13                                                                       | `podman build` + `podman run`           |
+| 2 | stl-layout            | `unordered_map` vs `map` vs `boost::container::flat_map` vs `vector` linear scan; cache-locality benchmark with cgroup memory pressure — §6 | `podman run` with cgroup limits         |
+| 3 | io-uring-grpc         | Direct liburing, Asio io_uring executor, async gRPC server — all three in one binary, wired into the LGTM stack — §8, §9              | `podman compose up` (svc + LGTM)        |
+| 4 | observability         | C++ HTTP service instrumented with OpenTelemetry traces/metrics/logs; `grafana/otel-lgtm` all-in-one bundle; optional bpftrace probes — §10 | `podman compose up` (full stack)        |
+| 5 | isolation             | Noisy-neighbor twin-tenant scenario; baseline, unisolated, `cpu.weight`, `cpuset.cpus` pinning compared — §11                          | `podman compose up` (2 tenants + load)  |
+| 6 | memory-and-allocators | `std::allocator` vs `std::pmr` (monotonic + sync_pool) vs `mimalloc`; batch, HTTP-serve, and OTel-instrumented observe modes — §7      | `./demo.sh` batch + `podman compose up` |
+| 7 | quality-pipeline      | cppcheck + clang-tidy + googletest/gmock + abidiff + hermetic Conan/CMake build + gdbserver sidecar — §12, §13                         | `podman build` + `podman run` (CI-shaped) |
+
+Each demo has its own page on the site at `/examples/demo-NN-name/`
+that renders the demo's README with cross-references back to the
+tutorial sections it deepens.
 
 ### Languages and tools
 
@@ -242,9 +261,9 @@ under `scripts/test-<demo>.sh` for CI verification.
 - **gRPC** (C++) for the network demo; auto-generated stubs via
   Conan
 - **Podman 5.x** + **Podman Compose** as the runtime; rootless
-- Load gen with **`hey`**; JSON munging with **`jq`**
+- Load gen with **`hey`** (HTTP) and **`ghz`** (gRPC); JSON munging with **`jq`**
 - Observability: **Grafana**, **Prometheus**, **Tempo**, **Loki**,
-  **Mimir** — all official upstream images via `podman compose`
+  **Mimir** via the `grafana/otel-lgtm` all-in-one bundle
 
 ### Test strategy
 
@@ -305,7 +324,7 @@ title slide via the `pptx` skill flow.
 
 ### Verification metrics
 
-- All six demos pass `scripts/test-all-demos.sh` on Fedora 44 with
+- All seven demos pass `scripts/test-all-demos.sh` on Fedora 44 with
   Podman 5.x rootless
 - Reconciliation plan shows every section row as `verified`
 - §1 prerequisites instructions tested on a fresh Fedora 44 VM and
@@ -368,13 +387,19 @@ The tutorial points readers to specific chapters of these books for
 deeper coverage of any topic the tutorial only introduces. The
 tutorial is positioned as a runnable companion, not a replacement.
 
+The site's [**Bibliography page**](/bibliography/) consolidates the
+four books with extended annotations, a section-by-section
+cross-reference of which book deepens which section, and suggested
+reading orders depending on where the reader is starting from.
+
 Ghosh's book complements Enberg's: where Enberg covers latency as a
 general-systems problem, Ghosh walks through a concrete low-latency
 C++ ecosystem (trading-system framing, but the patterns —
 lock-free queues, custom memory pools, busy-spin vs futex, NIC
-configuration — generalize). It's the natural pointer for §6 (memory
-pools), §7 (I/O latency), and §10 (CPU pinning, NUMA) for readers who
-want a full worked example outside the container framing.
+configuration — generalize). It's the natural pointer for §7
+(memory pools), §8 (I/O latency), and §11 (CPU pinning, NUMA) for
+readers who want a full worked example outside the container
+framing.
 
 ### Dependencies
 
@@ -405,7 +430,7 @@ substitution.
 | AVX-512 demo SIGILLs on the presenter's machine                                | Low    | Med        | Demo intentionally produces this; `--cpu-set` flag or `-march=` override documented              |
 | Reader is on macOS via `podman machine` and the cgroup demos don't behave      | Med    | High       | §1 explicitly warns; §10 (noisy neighbor) marked "Linux host required"                           |
 | Reference books cited too closely, drifting toward displacement summary        | High   | Low        | Editorial pass: every cite is a pointer ("see Iglberger ch. 4 for the full pattern"), never a substitute |
-| Tutorial too long; readers don't finish                                        | High   | Med        | Sectioned so partial reads work; outline calls out the 1.5h vs 3h paths                          |
+| Tutorial too long; readers don't finish                                        | High   | Med        | Sectioned so partial reads work; outline calls out the suggested reading paths in §0           |
 | Tutorial too compressed; misses the "why"                                      | Med    | Med        | Each section opens with a "why this matters" and closes with a measurable claim                  |
 | AVX-512 vs AVX2 vs `-march=native` confuses readers without recent CPUs        | Med    | Med        | §13 includes `lscpu | grep avx` as the first step and a tested fallback flag set                 |
 | The grpc + io_uring demo build time exceeds reasonable patience in a live demo | Med    | High       | Pre-built layer published; demo.sh detects and pulls instead of rebuilding                       |
@@ -475,6 +500,15 @@ substitution.
 | 2026-05-09 | Grafana stack (Prometheus + Tempo + Loki + Mimir) for observability        | Single vendor's open-source stack; one compose file; one auth model; readers learn it once |
 | 2026-05-09 | The four reference books are pointed-at, not summarized                    | Both honest about what this tutorial *is* (a runnable companion) and respects authors' work |
 | 2026-05-09 | One Excalidraw diagram per section minimum, paired SVG + JSON              | Source-available, scales for the PPTX, editable without proprietary tooling                |
+| 2026-05-12 | Seventh demo (quality-pipeline) — split out of original demo 6              | demo-06 became the memory/allocator deep dive; the cppcheck/abidiff/gdbserver material has its own surface area worth a dedicated demo |
+| 2026-05-13 | RAII section (§3) added between Introduction and Container Strategy        | The discipline that holds across process / request / cgroup lifecycle deserves its own treatment before the layer-specific sections build on it |
+| 2026-05-14 | Statelessness reference collection added at `/reference/statelessness/`    | The conceptual depth track around process- vs request-scoped state needed more room than §3 prose could carry; 12 docs, each linked to a tutorial section |
+| 2026-05-15 | PPTX deliverable is 3-hour only — drop the 1.5-hour cut                    | The 3-hour cut is the design target; a 1.5-hour cut was a maintenance burden producing a strictly inferior experience |
+| 2026-05-15 | Per-demo Jekyll wrapper pages at `/examples/demo-NN-*/`                    | The READMEs are the source of truth for terminal users; the wrapper pages render the same content with cross-references for browser readers, generated via `scripts/regen-examples-collection.sh` |
+| 2026-05-16 | jemalloc dropped from demo-06's variants                                   | GCC 14's stricter C conformance vs jemalloc 5.3.1's pre-2024 source didn't yield to either Conan recipe tweaks or env-CFLAGS injection within reasonable build-time budget; §7 prose covers jemalloc's design as an alternative without requiring the binary to build it |
+| 2026-05-17 | Annotated bibliography page at `/bibliography/`                            | Inline citations are pointers, not annotations; readers asking "which book should I read next" deserve a single page that consolidates the four reference books with their angle, when-to-reach-for, and section-by-section cross-reference |
+| 2026-05-17 | `scripts/check-liquid.py` static analyzer as a pre-push hook               | Jekyll's Liquid templating treats every literal `{%` and `{{` as parser-visible; documenting the syntax in prose creates recursion bugs unless authors are disciplined. The analyzer enforces the discipline mechanically |
+| 2026-05-17 | Editorial pass to strip authoring artifacts from reader-facing content     | Round annotations (`(r##)`) and "scope per round" sections add noise without value for the reader; the reconciliation plan retains the full history |
 
 ---
 

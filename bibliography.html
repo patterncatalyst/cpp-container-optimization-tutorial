@@ -1,0 +1,303 @@
+---
+layout: default
+title: Bibliography
+description: The four reference books this tutorial points at, with annotations and a section-by-section cross-reference of where each book deepens what the tutorial introduces.
+permalink: /bibliography/
+---
+
+<section class="hero hero--compact">
+    <div class="container">
+        <span class="hero__eyebrow">Bibliography</span>
+        <h1>The four reference books, and where each one extends this tutorial.</h1>
+        <p class="hero__lead">
+            This tutorial is positioned as a runnable companion to a small
+            set of excellent books — not a replacement for any of them.
+            Each book has its own angle, its own depth on a specific
+            axis, and a different reading order. Below: what each book
+            covers, when to reach for it, and the section-by-section
+            cross-reference showing which parts of this tutorial draw on
+            which sources.
+        </p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container container-prose">
+
+<h2>Andrist &amp; Sehr — <em>C++ High Performance</em>, 2nd Edition</h2>
+
+<p>
+Björn Andrist and Viktor Sehr, Packt, 2020.
+The closest analogue to this tutorial in book form. Deep on language
+machinery, lighter on container context — which is exactly the gap
+this tutorial fills.
+</p>
+
+<h3>What it covers</h3>
+
+<p>
+Performance from the language side: cache-conscious data structures,
+move semantics and copy elision, allocator design, parallel STL,
+async I/O patterns, the &ldquo;why&rdquo; behind each modern C++ feature when
+performance is the goal. Chapters 6 (CPU and memory architecture),
+7 (memory management with custom allocators), and 11 (concurrency)
+are particularly close to material this tutorial introduces and
+measures.
+</p>
+
+<h3>When to read it</h3>
+
+<p>
+<strong>Before this tutorial</strong> if you want the deep language story
+on each technique before seeing it measured in a container. <strong>After
+this tutorial</strong> if you want to extend any pattern (PMR, lock-free
+queues, parallel algorithms) into territory this tutorial only points
+at. The two work in either order — they answer adjacent questions.
+</p>
+
+<h3>What this tutorial points at it for</h3>
+
+<ul>
+<li><strong>§5</strong> (Compile-time wins) — the LTO/PGO mechanics</li>
+<li><strong>§6</strong> (STL &amp; layout) — cache-conscious container choice</li>
+<li><strong>§7</strong> (Memory management) — PMR design rationale, custom allocators, the whole chapter 7</li>
+<li><strong>§8</strong> (I/O latency) — async patterns, coroutines that we didn't cover</li>
+<li><strong>§11</strong> (Noisy neighbors) — the parallel STL and thread-pool material</li>
+<li><strong>§14</strong> (Pitfalls) — the over-abstraction and silent-overhead patterns</li>
+</ul>
+
+<h2>Iglberger — <em>C++ Software Design</em></h2>
+
+<p>
+Klaus Iglberger, O'Reilly, 2022. Design principles and patterns for
+high-quality software. Less about raw speed, more about what
+survives at scale and what doesn't.
+</p>
+
+<h3>What it covers</h3>
+
+<p>
+The classical design patterns rebuilt for modern C++ — Strategy,
+Visitor, Command, Bridge, Adapter — with hard-won opinions about
+which ones are still worth carrying and which were artifacts of
+pre-template C++. The book's central argument is that loose coupling
+through value-based polymorphism (<code>std::variant</code>,
+<code>std::function</code>, type erasure) beats inheritance-based
+polymorphism for most modern designs. The Bridge / PIMPL chapter
+discusses lifetime ownership in a way that connects directly to
+PMR allocator design.
+</p>
+
+<h3>When to read it</h3>
+
+<p>
+<strong>After</strong> you've got a fast service. The patterns matter when
+you've shipped, the requirements changed, and you need to extend
+without breaking. Iglberger is what helps you avoid painting yourself
+into ABI corners.
+</p>
+
+<h3>What this tutorial points at it for</h3>
+
+<ul>
+<li><strong>§2</strong> (Introduction) — the four-layer mental model loosely tracks Iglberger's separation-of-concerns argument</li>
+<li><strong>§6</strong> (STL &amp; layout) — value-based polymorphism vs virtual dispatch trade-offs</li>
+<li><strong>§12</strong> (Static analysis &amp; debugging) — what a clean type design enables for the analyzers</li>
+<li><strong>§13</strong> (Reproducibility &amp; ABI) — ABI stability follows from Iglberger's loose-coupling argument</li>
+<li><strong>§14</strong> (Pitfalls) — over-abstraction is the dual problem to under-abstraction</li>
+<li>The <a href="{{ '/reference/statelessness/' | relative_url }}">Statelessness reference</a> section draws on Iglberger throughout — especially Doc 02 (RAII), Doc 03 (PMR), and Doc 06 (12-factor) where lifetime ownership intersects design pattern</li>
+</ul>
+
+<h2>Enberg — <em>Latency: Reduce delay in software systems</em></h2>
+
+<p>
+Pekka Enberg, Manning, 2024.
+The systems-side complement to Andrist &amp; Sehr. Treats latency as the
+problem and walks through the techniques.
+</p>
+
+<h3>What it covers</h3>
+
+<p>
+What latency actually is and where it accumulates — syscalls,
+context switches, cache misses, network hops, lock contention.
+Detailed treatment of the alternatives to traditional blocking I/O
+(<code>io_uring</code>, kernel bypass, busy-spin vs futex), what
+allocator strategies look like under sustained load
+(mimalloc/jemalloc/tcmalloc compared from the Helsinki perf group's
+measurements), and the &ldquo;general-purpose allocator tax&rdquo; thesis that
+informs much of §7. Less language-specific than Andrist &amp; Sehr;
+mostly applies whether you're writing C++, Rust, or Go.
+</p>
+
+<h3>When to read it</h3>
+
+<p>
+<strong>Before or alongside</strong> this tutorial. Where this tutorial says
+&ldquo;use <code>io_uring</code>,&rdquo; Enberg explains <em>why</em> the syscall
+model has been the bottleneck and what alternatives have looked
+like over the past decade. The mental model carries through every
+section that talks about scheduling, I/O, or kernel-side behavior.
+</p>
+
+<h3>What this tutorial points at it for</h3>
+
+<ul>
+<li><strong>§7</strong> (Memory management) — the allocator-tax thesis, chapter 3 is the canonical reference</li>
+<li><strong>§8</strong> (I/O latency) — <code>io_uring</code> motivation, the syscall-cost model</li>
+<li><strong>§9</strong> (Networking &amp; kernel) — kernel-bypass alternatives and their trade-offs</li>
+<li><strong>§10</strong> (Observability) — where to look in the kernel for latency that doesn't show up in application telemetry</li>
+<li><strong>§11</strong> (Noisy neighbors) — CPU scheduling and the priority-inheritance discussion</li>
+<li><strong>§14</strong> (Pitfalls) — the patterns of why low-level performance work goes wrong</li>
+</ul>
+
+<h2>Ghosh — <em>Building Low Latency Applications with C++</em></h2>
+
+<p>
+Sourav Ghosh, Packt, 2023.
+The full worked example. Where the other three books cover individual
+techniques, Ghosh builds an entire low-latency trading ecosystem
+from scratch in modern C++ — order book, matching engine, market
+data feed, network layer, the lot.
+</p>
+
+<h3>What it covers</h3>
+
+<p>
+The trading-system framing is incidental; the value is seeing every
+pattern this tutorial introduces composed into one running system.
+Lock-free queues for the matching engine, custom memory pools for
+per-message allocation, busy-spin vs futex for the producer-consumer
+boundary, NUMA-aware thread placement, kernel-bypass networking with
+solarflare/onload — all in one body of code. The book is also a
+case study in the discipline of latency-sensitive C++ design:
+nothing dynamic on the hot path, no exceptions in the matcher, all
+allocations pre-sized at startup.
+</p>
+
+<h3>When to read it</h3>
+
+<p>
+<strong>Read it after this tutorial</strong> if you want to see the patterns at
+full scale. <strong>Read it before</strong> if you want a worked example to
+compare ours against — Ghosh's design choices are an excellent
+anchor for &ldquo;wait, why didn't this tutorial do it that way?&rdquo;
+conversations.
+</p>
+
+<h3>What this tutorial points at it for</h3>
+
+<ul>
+<li><strong>§7</strong> (Memory management) — pre-allocated pools and the &ldquo;no allocation on hot path&rdquo; discipline</li>
+<li><strong>§8</strong> (I/O latency) — the kernel-bypass walkthroughs and busy-spin vs futex decision</li>
+<li><strong>§11</strong> (Noisy neighbors) — NUMA-aware design at the architectural level</li>
+<li><strong>§12</strong> (Static analysis &amp; debugging) — what an &ldquo;all sanitizers, all the time&rdquo; CI looks like for latency-sensitive code</li>
+<li><strong>§15</strong> (Where to go next) — Ghosh is the &ldquo;build a complete system&rdquo; recommendation for any reader who wants to extend this tutorial's patterns into a full architecture</li>
+</ul>
+
+<h2>Cross-reference matrix</h2>
+
+<p>
+The full mapping of section and reference doc to books. A check
+mark means the section explicitly cites the book; subdued cells mean
+the book's material is relevant but not directly cited in the
+prose.
+</p>
+
+<table class="biblio-matrix">
+<thead>
+<tr>
+<th>Section / Doc</th>
+<th>Andrist &amp; Sehr</th>
+<th>Iglberger</th>
+<th>Enberg</th>
+<th>Ghosh</th>
+</tr>
+</thead>
+<tbody>
+<tr><td><strong>Tutorial body</strong></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>§2 Introduction</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td>§3 RAII</td><td>✓</td><td>✓</td><td></td><td></td></tr>
+<tr><td>§4 Image strategy</td><td>✓</td><td>✓</td><td></td><td></td></tr>
+<tr><td>§5 Compile-time wins</td><td>✓</td><td>✓</td><td></td><td></td></tr>
+<tr><td>§6 STL &amp; layout</td><td>✓</td><td>✓</td><td></td><td></td></tr>
+<tr><td>§7 Memory management</td><td>✓</td><td></td><td>✓</td><td>✓</td></tr>
+<tr><td>§8 I/O latency</td><td>✓</td><td></td><td>✓</td><td>✓</td></tr>
+<tr><td>§9 Networking &amp; kernel</td><td></td><td></td><td>✓</td><td></td></tr>
+<tr><td>§10 Observability</td><td>✓</td><td></td><td>✓</td><td></td></tr>
+<tr><td>§11 Noisy neighbors</td><td>✓</td><td></td><td>✓</td><td>✓</td></tr>
+<tr><td>§12 Static analysis &amp; debugging</td><td></td><td>✓</td><td></td><td>✓</td></tr>
+<tr><td>§13 Reproducibility &amp; ABI</td><td></td><td>✓</td><td></td><td></td></tr>
+<tr><td>§14 Pitfalls</td><td>✓</td><td>✓</td><td>✓</td><td></td></tr>
+<tr><td>§15 Where to go next</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><strong>Statelessness reference</strong></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>00 Index</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td>01 Deployment posture</td><td></td><td>✓</td><td>✓</td><td></td></tr>
+<tr><td>02 RAII</td><td></td><td>✓</td><td>✓</td><td></td></tr>
+<tr><td>03 PMR</td><td></td><td>✓</td><td>✓</td><td></td></tr>
+<tr><td>04 Process-scoped state</td><td></td><td>✓</td><td>✓</td><td></td></tr>
+<tr><td>05 Threading</td><td></td><td>✓</td><td>✓</td><td></td></tr>
+<tr><td>06 Twelve-factor</td><td></td><td>✓</td><td></td><td></td></tr>
+<tr><td>07 State externalization</td><td></td><td></td><td>✓</td><td></td></tr>
+<tr><td><strong>Demos</strong></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Demo 06 (memory &amp; allocators)</td><td>✓</td><td>✓</td><td>✓</td><td></td></tr>
+</tbody>
+</table>
+
+<h2>One more — the gotcha book</h2>
+
+<p>
+A fifth book worth mentioning separately, since the
+<a href="{{ '/reference/statelessness/' | relative_url }}">statelessness reference</a>
+section cites it heavily:
+</p>
+
+<p>
+<strong>Yonts, <em>100 C++ Mistakes and How to Avoid Them</em></strong>.
+A pattern-language treatment of the specific mistakes that show
+up over and over in production C++. Allocator type-erasure traps,
+container/allocator mismatches, dangling references across
+ownership boundaries, lifetime confusion in the presence of
+exceptions — the cluster of mistakes that PMR in particular makes
+easy to commit. Less foundational than the four reference books
+above, but the highest-density-per-page treatment of &ldquo;here's
+exactly the thing you're about to do wrong&rdquo; that we found.
+</p>
+
+<h2>Citation discipline</h2>
+
+<p>
+Per the project's editorial constraint: every citation in this
+tutorial is a <strong>pointer</strong> — &ldquo;see Iglberger ch. 4 for the full
+pattern&rdquo; — not a displacing summary. The books exist; if this
+tutorial replaced reading them, we'd be doing the authors and the
+reader a disservice. This bibliography is meant to make the
+pointers easier to follow, not to compress the books into bullet
+points.
+</p>
+
+<h2>Reading paths</h2>
+
+<p>
+A few suggested orders, depending on your starting point:
+</p>
+
+<ul>
+<li><strong>If you already write C++ daily and want to learn the container side:</strong>
+this tutorial → Ghosh (for the full-system perspective) → Iglberger (for the design follow-up).</li>
+<li><strong>If you came from systems / SRE work and the C++ feels rusty:</strong>
+Andrist &amp; Sehr (for language refresh) → this tutorial → Enberg (for the latency mental model).</li>
+<li><strong>If you're preparing for a perf-focused interview:</strong>
+this tutorial → Enberg (theory of latency) → Andrist &amp; Sehr (language deep-dive). The questions you'll get are mostly in the intersection.</li>
+<li><strong>If you've never measured anything you've optimized:</strong>
+this tutorial first — every claim has a runnable demo with a number on it. Then Enberg for the framework that makes measurement a habit.</li>
+</ul>
+
+<p>
+Whichever order you choose, the goal is the same: build a coherent
+mental model that you can defend with measurements on your own
+hardware.
+</p>
+
+    </div>
+</section>

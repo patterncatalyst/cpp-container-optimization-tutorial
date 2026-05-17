@@ -91,6 +91,7 @@ def analyze() -> list[str]:
         + list(Path("_reference").rglob("*.md"))
         + list(Path("_examples").glob("*.md"))
         + [Path("index.html"), Path("examples.html"), Path("diagrams.html")]
+        + [Path("bibliography.html")]
         + [Path("reference/statelessness.html")]
     )
 

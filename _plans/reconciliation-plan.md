@@ -20859,6 +20859,140 @@ reader-facing content. The Liquid analyzer still reports clean.
 - 3 regenerated `_examples/*.md` files (demos 03, 06, 07)
 - `_plans/reconciliation-plan.md` — this entry
 
+### 2026-05-17 — r136: PRD update + annotated bibliography page (items 5 + 12)
+
+The two remaining items from the Round C punch list before the
+PPTX-only round (r137) and Path F.
+
+#### Item 12 — Annotated bibliography page
+
+New file: `bibliography.html` (Jekyll-rendered at `/bibliography/`).
+Consolidates the four reference books from the project's editorial
+constraints into one page with:
+
+- **Extended annotations** for each book — what it covers, when to
+  read it (before / alongside / after this tutorial), what chapters
+  apply where
+- **Section-by-section cross-reference matrix** showing which
+  tutorial section and which `_reference/statelessness/` doc draws
+  on which book. Each row is a section or reference doc; columns
+  are the four books; checkmarks indicate explicit citations in
+  prose
+- **Suggested reading paths** for four reader profiles (daily-C++
+  → container learner, systems/SRE → C++ refresher,
+  interview-prep, "I've never measured anything I've optimized")
+- A separate mention for Yonts's *100 C++ Mistakes* — heavily
+  cited in the `_reference/statelessness/` collection but distinct
+  from the four canonical books, so listed in its own section
+
+Books covered with extended annotations:
+
+  1. Andrist & Sehr, *C++ High Performance* 2e (Packt, 2020) —
+     the language deep-dive; ch. 6, 7, 11 are most directly close
+     to tutorial material
+  2. Iglberger, *C++ Software Design* (O'Reilly, 2022) — the
+     architectural follow-up; loose-coupling argument that
+     connects to PMR lifetime ownership and ABI stability
+  3. Enberg, *Latency: Reduce delay in software systems* (Manning,
+     2024) — the systems-side complement; allocator-tax thesis,
+     io_uring motivation, syscall-cost model
+  4. Ghosh, *Building Low Latency Applications with C++* (Packt,
+     2023) — the full worked example; trading-system framing
+     incidental, value is seeing every pattern composed into one
+     running system
+
+Supporting infrastructure:
+
+- New CSS rule `.biblio-matrix` in `assets/css/site.css`: simple
+  table styling with bg-soft header row, centered checkmark cells,
+  fixed first-column width
+- Header nav updated to include "Bibliography" between "Examples"
+  and "Plan"
+- §15 (Where to Go Next) gets a closing paragraph linking out to
+  the full bibliography for extended treatment
+- `scripts/check-liquid.py` scope extended to include the new
+  `bibliography.html` file in its checks
+
+#### Item 5 — PRD update
+
+The PRD was last meaningfully updated 2026-05-09, pre-Round-C.
+It still said "six demos", referred to a "1.5-hour PPTX cut" that
+was dropped earlier, used the old 14-section structure (§1-§14)
+when the tutorial now has 16 sections plus an appendix (§0-§16),
+and had no decision-log entries for the Round A/B/C work.
+
+Updates landed surgically (didn't rewrite the whole file):
+
+  - **§1 Summary** — "six runnable Podman demos" → "seven";
+    "1.5-3 hour PPTX" → "3-hour PPTX"; table row updated; the
+    sentence about "see §3's 'Two delivery paths'" replaced with
+    a pointer to §5's section table
+  - **§3 Goals** — "All six demos" → "All seven"; the bullet
+    about "PPTX deck delivered in 1.5 hours OR in 3 hours"
+    replaced with "PPTX deck delivers in 3 hours"
+  - **§5 Section outline** — entire section table rewritten to
+    reflect current 16 sections (§0-§15) + appendix (§16). New
+    columns and rows include the RAII section (§3, didn't
+    previously exist), the renumbered §6-§14, the appendix.
+    Total talk time updated to ~2h 36m. New subsection
+    "Reference companion: the Statelessness section" describes
+    the 12-doc reference collection that didn't exist when the
+    PRD was first written. "Optional appendices" reduced to just
+    A (shipped); the B and C appendices anticipated in the
+    original landed inline in §9 and §13 respectively
+  - **§6 Runnable examples** — "six demos" → "seven"; the demo
+    table rewritten to reflect current state with corrected
+    section mappings (e.g., demo-01 now maps to §4, §5, §13;
+    was §3, §4, §12 before renumbering). Each demo description
+    cleaned of round-history artifacts. Added "ghz" alongside
+    "hey" in the load-gen mention (the gRPC demo uses both).
+    New paragraph noting the per-demo Jekyll wrapper pages at
+    `/examples/demo-NN-name/`
+  - **§8 Success metrics** — "All six demos pass" → "All seven"
+  - **§9 Reference materials** — new paragraph linking to the
+    bibliography page. Section numbers in Ghosh's complementary-
+    coverage paragraph updated for the renumbering (§6/§7/§10 →
+    §7/§8/§11)
+  - **§10 Risks** — the "Tutorial too long" risk's mitigation
+    no longer mentions "1.5h vs 3h paths"; now refers to the
+    suggested reading paths in §0
+  - **§13 Decision log** — 8 new entries appended capturing
+    Round A/B/C decisions:
+      * Seventh demo split out of original demo 6 (2026-05-12)
+      * RAII section (§3) added (2026-05-13)
+      * Statelessness reference collection at
+        /reference/statelessness/ (2026-05-14)
+      * PPTX 3-hour only (2026-05-15)
+      * Per-demo Jekyll wrapper pages (2026-05-15)
+      * jemalloc dropped from demo-06 variants (2026-05-16)
+      * Annotated bibliography page (2026-05-17)
+      * Liquid analyzer as pre-push check (2026-05-17)
+      * Editorial pass to strip authoring artifacts (2026-05-17)
+
+The original 2026-05-09 decision-log entries are preserved as
+historical record; new entries are dated by when the decision
+was actually made (during the Round B / Round C work). The "Six
+demos" entry from 2026-05-09 remains in the log as the original
+intent; the 2026-05-12 entry above documents the move to seven.
+
+#### Verification
+
+Liquid analyzer reports clean. Header nav now shows
+Tutorial / Diagrams / Examples / Bibliography / Plan / GitHub ↗.
+The cross-reference matrix in the bibliography page renders as a
+styled table. The PRD now reads coherent top-to-bottom against the
+current shipped state.
+
+#### Files changed
+
+- `bibliography.html` (new — 9.7 KB)
+- `_includes/header.html` (added Bibliography nav link)
+- `assets/css/site.css` (appended .biblio-matrix table styling)
+- `_docs/15-where-to-go-next.md` (closing paragraph linking out)
+- `scripts/check-liquid.py` (added bibliography.html to scope)
+- `PRD.md` (substantial update — see above)
+- `_plans/reconciliation-plan.md` (this entry)
+
 ---
 
 ## Known divergences from the PRD
