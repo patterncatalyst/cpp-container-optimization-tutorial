@@ -20433,8 +20433,6 @@ When editing a demo README, run `./scripts/regen-examples-collection.sh`
 to refresh `_examples/`. Commit the regenerated collection files
 alongside the README changes. The script is idempotent — re-running
 on no-change READMEs is safe.
-
-{% raw %}
 ### 2026-05-17 — r134.1: hotfix — Jekyll build failure from r134
 
 **The breakage.**
@@ -20447,9 +20445,9 @@ a hard failure plus warnings. Two distinct bugs introduced in r134:
 Generator script wrote this line at the top of each
 `_examples/demo-NN-name.md`:
 
-    > The full source for this demo lives in [`examples/demo-NN/`]({{ site.github.repository_url }}/tree/main/...)
+    > The full source for this demo lives in [`examples/demo-NN/`]({% raw %}{{ site.github.repository_url }}{% endraw %}/tree/main/...)
 
-`{{ site.github.repository_url }}` is provided by the
+`{% raw %}{{ site.github.repository_url }}{% endraw %}` is provided by the
 `jekyll-github-metadata` plugin (which is configured) — but the
 plugin needs to know WHICH repo. It autodetects from one of:
 
@@ -20464,7 +20462,7 @@ FAILS.
 The fix: switch to the pattern already used elsewhere in the site
 (e.g., in `examples.html`):
 
-    https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/...
+    https://github.com/{% raw %}{{ site.github_username }}{% endraw %}/{% raw %}{{ site.github_repo }}{% endraw %}/tree/main/...
 
 These values ARE set explicitly in `_config.yml`:
 
@@ -20483,23 +20481,22 @@ Two lines in `_reference/statelessness/10-grpc-microservices.md`,
 inside fenced `cpp` code blocks, contained C++ initializer lists:
 
     span_{tracer().StartSpan("PriceOrder",
-                             {{"correlation_id", correlation_id_}})},
+                             {% raw %}{{"correlation_id", correlation_id_}}{% endraw %})},
 
-    rc.span().AddEvent("tax_exempt", {{"customer_id", customer.id}});
+    rc.span().AddEvent("tax_exempt", {% raw %}{{"customer_id", customer.id}}{% endraw %});
 
-The `{{` is C++17 nested-initializer-list syntax for the OTel
+The double-brace is C++17 nested-initializer-list syntax for the OTel
 `StartSpan` and `AddEvent` overloads taking an
 `std::initializer_list<std::pair<...>>`. Jekyll's Liquid templating
-parses the whole markdown — including code fences — for `{{...}}`
-output statements before passing to Kramdown for markdown
-rendering. Liquid sees `{{ ... , ... }}` and emits a warning
-("Expected end_of_string but found comma"), then mangles the
-output.
+parses the whole markdown — including code fences — for output
+statements before passing to Kramdown for markdown rendering. Liquid
+sees a comma inside an output statement, emits a warning ("Expected
+end_of_string but found comma"), then mangles the output.
 
-The fix: wrap each affected code block in `{% raw %}` /
-`{% endraw %}` tags. Liquid treats everything inside as opaque
-literal text, leaving the code untouched. Both fixes minimal —
-just two wrap pairs.
+The fix: wrap each affected code block in a raw escape using the
+&#123;% raw %&#125; ... &#123;% endraw %&#125; tag pair. Liquid
+treats everything inside as opaque literal text, leaving the code
+untouched. Both fixes minimal — just two wrap pairs.
 
 Wrapped:
   - the `RequestContext` class definition (lines 85-142)
@@ -20512,8 +20509,8 @@ because Liquid tags between fenced blocks are invisible to GFM.
 #### Defensive sweep
 
 After the fixes, audited all `.md` files in `_docs/`, `_examples/`,
-and `_reference/` for any other `{{ ... }}` constructs that aren't
-real Jekyll Liquid references. Found three more in
+and `_reference/` for any other output-statement constructs that
+aren't real Jekyll Liquid references. Found three more in
 `examples/demo-03-io-uring-grpc/security/README.md` (Podman format
 strings), but that file is under `examples/` which is excluded from
 the Jekyll build, so they're harmless. No other rogue patterns.
@@ -20533,12 +20530,9 @@ This rule now lives in a comment at the top of
   config values; add comment documenting the rule)
 - 7 regenerated `_examples/*.md` files (now using safe URL pattern)
 - `_reference/statelessness/10-grpc-microservices.md` (4 lines
-  added — two `{% raw %}` / `{% endraw %}` pairs wrapping the
-  affected code blocks)
+  added — two raw / endraw pairs wrapping the affected code blocks)
 - `_plans/reconciliation-plan.md` (this entry)
-{% endraw %}
 
-{% raw %}
 ### 2026-05-17 — r134.2: hotfix-of-the-hotfix — Liquid recursion in the plan file
 
 **The bug, brutally.**
@@ -20547,75 +20541,144 @@ The r134.1 plan entry I added was supposed to document the Liquid
 build failure and explain the fix. To explain the fix, the prose
 quoted the problematic constructs verbatim:
 
-  - The C++ initializer lists: `{{"correlation_id", correlation_id_}}`
-    and `{{"customer_id", customer.id}}`
-  - The plugin-dependent reference: `{{ site.github.repository_url }}`
-  - The placeholder constructs: `{{ ... , ... }}` and `{{ ... }}`
+  - The C++ initializer lists with comma-bearing
+    output-statement-looking syntax
+  - The plugin-dependent `site.github.repository_url` reference
+  - Various placeholder constructs using literal "..." inside double
+    braces
 
-These appeared in PROSE inside the plan entry — outside any code
-fence, just in a regular paragraph. The plan file is in the `plans`
+These appeared in PROSE inside the plan entry (outside any code
+fence, just regular paragraphs). The plan file is in the `plans`
 collection (`output: true`, served at `/plans/reconciliation-plan/`),
-so Jekyll renders it like any other content file. Liquid runs over
-the whole file BEFORE Kramdown. It saw the prose-embedded
-constructs and tried to parse them as Liquid output statements.
+so Jekyll renders it like any other content file. Liquid ran over
+the whole file BEFORE Kramdown, saw the prose-embedded constructs,
+and tried to parse them as Liquid output statements. Result:
+warnings on each, plus a fatal error on the
+`site.github.repository_url` mention (the plugin reference is still
+broken whether it's in code or in prose).
 
-Result:
+The fix attempt that DIDN'T work was wrapping the entire r134.1
+entry in a single raw block. That introduced a second-order bug.
 
-  - Liquid warnings on each prose-quoted comma'd construct
-    ({{"correlation_id", ...}}, etc.)
-  - Fatal error on the `{{ site.github.repository_url }}` mention,
-    because that's still a real (failing) plugin reference, just
-    quoted in prose.
+#### Why a single wrapping raw block fails
 
-The build re-failed with the SAME `No repo name found` exception
-the r134.1 entry was supposed to be eliminating. Documenting a
-trap by demonstrating it is one way to test it.
+A raw escape is delimited by the literal tag pair
+&#123;% raw %&#125; ... &#123;% endraw %&#125;. Liquid's parser
+scans for these tags AS LITERAL TEXT — backticks, code fences,
+indentation don't hide them. So if the prose INSIDE a raw block
+mentions the literal text `&#123;% endraw %&#125;` (e.g., in a
+sentence explaining how raw blocks work), Liquid sees that first
+literal endraw as the actual closing tag and exits raw mode. Any
+later real endraw becomes orphan, and Liquid errors with
+"Unknown tag 'endraw'".
+
+That's exactly what happened: the r134.1 entry's prose explained
+the fix by quoting the literal tag names. The wrapping raw block
+was closed early by the first prose mention; the real closer at
+the end of the entry became orphan; build failed.
+
+#### The actual fix
+
+  1. Remove the wrapping raw block from the r134.1 entry.
+  2. Wrap each individual hazardous Liquid construct INLINE — every
+     occurrence of `&#123;% raw %&#125;...&#123;% endraw %&#125;` is now surgical, not
+     enveloping.
+  3. For prose mentions of the raw/endraw tag names themselves
+     (where the source needs to show the literal syntax for
+     pedagogy), use HTML entities: `&#123;% raw %&#125;` and
+     `&#123;% endraw %&#125;`. The browser renders the entities as
+     `{` and `}`; Liquid never sees a literal `{` so it doesn't
+     parse them as tags.
+
+This convention scales: a plan entry can discuss raw/endraw to any
+depth without recursing into the same bug, because the prose
+mentions are always entity-escaped and only the truly hazardous
+constructs are inline-wrapped in actual raw tags.
+
+#### Also caught: pre-existing bare reference
+
+Line 20013 (in the r132 plan entry) contained a bare
+`⏱ {% raw %}{{ doc.duration }}{% endraw %}` reference in inline
+code that was rendering as empty in the HTML output (the variable
+`doc.duration` is undefined in plan-page context). Not a build
+failure, just silently wrong. Inline-escaped in this round.
+
+#### New tool: `scripts/check-liquid.py`
+
+Static analyzer that detects the failure modes WITHOUT running the
+full Jekyll build. Catches:
+
+  - comma without a preceding filter pipe inside output statements
+    (e.g., `{% raw %}{{ a, b }}{% endraw %}`)
+  - `site.github.*` plugin-dependent references in non-raw contexts
+
+Context-aware: skips fenced code blocks, ignores raw/endraw mentions
+inside backticks (prose vs actual tag), and recognizes valid Liquid
+filter comma syntax. Exit 0 if clean, 1 if hazards found — useful as
+a pre-push hook. The analyzer does NOT yet check for the
+"literal endraw inside wrapping raw" case (the bug fixed in this
+entry); that's the r134.3 addition.
+
+#### Files changed
+
+- `_plans/reconciliation-plan.md`:
+  - Rewrote r134.1 entry to remove the wrapping raw block; each
+    hazard inline-escaped; tag-name mentions converted to HTML
+    entities
+  - Rewrote r134.2 entry following the same convention
+  - Line 20013's bare reference now inline-escaped
+- `scripts/check-liquid.py` (new pre-push check)
+
+### 2026-05-17 — r134.3: enforce the inline-raw + entity-escape convention
+
+**The bug from r134.2.**
+
+The r134.2 plan entry tried to fix r134.1 by wrapping the r134.1
+entry in a single raw block. That introduced a second bug: literal
+`&#123;% endraw %&#125;` mentions in the wrapped entry's prose
+closed the wrap prematurely, and the real closing tag at the entry
+boundary became orphan. Build re-failed with
+"Unknown tag 'endraw'".
 
 **The fix.**
 
-Wrap the entire r134.1 plan entry in `{% raw %}` ... `{% endraw %}`.
-Liquid treats the contents as literal text; the prose is then
-rendered as-is by Kramdown. Now `{{"correlation_id", correlation_id_}}`
-appears in the rendered plan page as that literal text, instead of
-triggering a Liquid parse.
+Rewrote both r134.1 and r134.2 entries to follow a single robust
+convention:
 
-Also caught while sweeping: line 20013 (in the r132 plan entry)
-contained a bare `\`⏱ {{ doc.duration }}\`` reference in inline
-code. Jekyll was silently rendering it as `<code>⏱ </code>` (empty
-after the icon) because `doc.duration` is undefined in plan-page
-context. Not a build failure, but wrong output. Fixed with an
-inline `{% raw %}{{ doc.duration }}{% endraw %}` escape so it
-renders literally.
+  - No entry-wrapping raw blocks at all.
+  - Each individual hazardous Liquid construct (comma in an output
+    statement, `site.github.*` reference, literal "..." placeholder
+    inside double braces) is wrapped INLINE with its own
+    `&#123;% raw %&#125; ... &#123;% endraw %&#125;` pair.
+  - Prose mentions of the raw/endraw tag names themselves are
+    written using HTML entities: `&#123;` and `&#125;` in place of
+    `{` and `}`. Liquid only matches literal `{%`, so entity-
+    escaped braces are invisible to it; the browser renders the
+    entities as `{` and `}` so readers see the literal syntax.
 
-**Procedural rule (added permanently).**
+This convention is self-stable: a plan entry can discuss the
+raw/endraw machinery to any depth without recursion, because the
+entity-escaped mentions never look like real tags.
 
-When a plan entry — or any markdown file in a `output: true`
-collection — discusses Liquid syntax, the entire entry's prose
-discussion must be wrapped in `{% raw %}` ... `{% endraw %}`. This
-applies whether the offending pattern is:
+#### Analyzer extension
 
-  - C++ initializer lists like `{{key, value}}`
-  - Plugin-dependent references quoted in prose
-  - Liquid placeholders in documentation (e.g., `{{ variable }}` shown
-    as an example)
-  - Anything else with `{{` or `{%` that the writer intends as text,
-    not as a template instruction
+Extended `scripts/check-liquid.py` to detect the third failure mode:
+a raw block that contains a literal `&#123;% endraw %&#125;` somewhere
+in the source between its opening and closing tags. When this
+pattern appears, the analyzer flags the file because Liquid will
+close the raw block early. The analyzer is now position-aware
+enough to find this: it tracks raw-block depth and reports when an
+endraw appears inside a still-open raw region.
 
-Existing file already had five `{% raw %}` blocks (around lines 288,
-399, 4546, 5251, 13266) protecting Podman format strings and
-existing Liquid-template examples — so this convention is already
-in use in the plan. The r134.1 entry just forgot to follow it.
+#### Files changed
 
-**Files changed.**
+- `_plans/reconciliation-plan.md` — r134.1 and r134.2 entries
+  rewritten; r134.3 entry added (this one)
+- `scripts/check-liquid.py` — third pattern detector added
 
-- `_plans/reconciliation-plan.md`:
-  - Wrapped the entire r134.1 entry (lines 20437-20539) in
-    `{% raw %}` ... `{% endraw %}`
-  - Escaped inline `{{ doc.duration }}` reference at line 20013
-    with `{% raw %}{{ doc.duration }}{% endraw %}`
-  - This entry pre-wrapped in `{% raw %}` to avoid the same
-    problem recursively
-{% endraw %}
+---
+
+
 
 ---
 
