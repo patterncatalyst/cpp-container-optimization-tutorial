@@ -1,7 +1,7 @@
 ---
 layout: default
 title: "Optimizing Modern C++ with Containers"
-description: "A 1.5–3 hour PPTX presentation, an untimed companion Jekyll site, and six runnable Podman demos that teach modern-C++ performance under realistic container constraints."
+description: "A 1.5–3 hour PPTX presentation, an untimed companion Jekyll site, and seven runnable Podman demos that teach modern-C++ performance under realistic container constraints."
 ---
 
 <section class="hero">
@@ -9,10 +9,10 @@ description: "A 1.5–3 hour PPTX presentation, an untimed companion Jekyll site
         <span class="hero__eyebrow">Hands-on tutorial</span>
         <h1>Modern C++ performance,&nbsp;in&nbsp;containers.</h1>
         <p class="hero__lead">
-            Fifteen tutorial sections, six runnable Podman demos, an
-            instrumented Grafana stack, and 13 Excalidraw diagrams that
-            explain where C++20/23 performance work actually lives once
-            your code is shipping in an OCI image.
+            Fifteen tutorial sections, seven runnable Podman demos, an
+            instrumented Grafana stack, and diagrams that explain
+            where C++20/23 performance work actually lives once your
+            code is shipping in an OCI image.
         </p>
         <div class="hero__chips">
             <span class="chip chip--accent">Fedora 44</span>
@@ -43,12 +43,8 @@ description: "A 1.5–3 hour PPTX presentation, an untimed companion Jekyll site
                 <span class="stat__label">Tutorial sections</span>
             </div>
             <div class="stat">
-                <span class="stat__value">6</span>
+                <span class="stat__value">7</span>
                 <span class="stat__label">Runnable Podman demos</span>
-            </div>
-            <div class="stat">
-                <span class="stat__value">13</span>
-                <span class="stat__label">Excalidraw diagrams</span>
             </div>
             <div class="stat">
                 <span class="stat__value">1.5–3h</span>
@@ -140,14 +136,14 @@ description: "A 1.5–3 hour PPTX presentation, an untimed companion Jekyll site
                 <span class="doc-card__icon" aria-hidden="true">📐</span>
                 <span>
                     <span class="doc-card__title">Excalidraw diagrams</span>
-                    <span class="doc-card__desc">13 architecture and flow diagrams in an embedded gallery — click for fullscreen, download .excalidraw to edit.</span>
+                    <span class="doc-card__desc">Architecture and flow diagrams in an embedded gallery — click for fullscreen, download .excalidraw to edit.</span>
                 </span>
             </a>
             <a class="doc-card" href="{{ '/examples/' | relative_url }}">
                 <span class="doc-card__icon" aria-hidden="true">📦</span>
                 <span>
-                    <span class="doc-card__title">Six runnable demos</span>
-                    <span class="doc-card__desc">image strategy · memory & STL · io_uring + gRPC · observability · noisy neighbors · quality pipeline.</span>
+                    <span class="doc-card__title">Seven runnable demos</span>
+                    <span class="doc-card__desc">image strategy · STL &amp; layout · io_uring + gRPC · observability · noisy neighbors · memory &amp; allocators · quality pipeline.</span>
                 </span>
             </a>
             <a class="doc-card" href="{{ '/docs/15-where-to-go-next/' | relative_url }}">
@@ -161,7 +157,7 @@ description: "A 1.5–3 hour PPTX presentation, an untimed companion Jekyll site
                 <span class="doc-card__icon" aria-hidden="true">🏛️</span>
                 <span>
                     <span class="doc-card__title">Statelessness reference set</span>
-                    <span class="doc-card__desc">Twelve reference docs (~42K words) on C++20/23 services on containers — deployment posture, RAII, PMR, threading, 12-factor, gRPC capstone, build tooling appendix.</span>
+                    <span class="doc-card__desc">Companion reference set on C++20/23 service design for Linux containers — deployment posture, RAII, PMR, threading, 12-factor, gRPC capstone, build tooling appendix. Statelessness as the through-line.</span>
                 </span>
             </a>
         </div>

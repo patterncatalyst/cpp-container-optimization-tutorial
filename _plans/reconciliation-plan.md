@@ -19773,11 +19773,102 @@ fixes. Most likely culprits:
 | r127-docs | §12 reading coverage output | shipped |
 | r128 | `--demo-findings` flag | shipped + verified |
 | r128.1 | clang-tidy `-quiet` polish | shipped + verified |
-| **r129** | **`--hermetic-check` flag** | **this round** |
+| r129 | `--hermetic-check` flag | shipped + VERIFIED (byte-identical confirmed) |
 
-After r129 verifies (or after the iteration to fix non-hermeticity if
-any): **Path F (PPTX rendering 14 sections + appendix)** — the final
-deliverable for the project.
+After r129 verified byte-identical builds on the user's host
+(SHA-256 match for both demo07-svc 1,193,336 bytes and
+libdemo07_channel.so 94,136 bytes), **Round B closed**. User
+proposed a polish pass (Round C, 12-item punch list) before
+proceeding to Path F (PPTX).
+
+## Round C — polish pass (before PPTX)
+
+The 12-item list from the user, broken into rounds:
+
+| Round | Items | What lands |
+|---|---|---|
+| **r130** | 3, 4, 7, 9 | Onboarding folder, remove legacy reference/statelessness.html, drop counts from index.html descriptions, fix six→seven demos throughout |
+| r131 | 8, 10 | Reading-time audit; simplify diagram captions |
+| r132 | 1 | 11 excalidraw + 11 SVG pairs for Statelessness sections 01–11 |
+| r133 | 2 | Per-demo Jekyll wrapper pages rendering existing READMEs + augment READMEs with more rationale/output relevance |
+| r134 | 5, 6, 12 | Cross-reference audit + link bibliography sections + update PRD.md |
+| r135 | 11 (note only) | Confirm PPTX is 3-hour-only |
+
+### 2026-05-17 — r130: onboarding folder + index.html descriptions + count corrections
+
+**The five things this round fixes.**
+
+1. **Onboarding folder.** Root had 6 .md files including 3 that are
+   "read-once-at-setup" docs. Created `onboarding/`, moved
+   `GETTING-STARTED.md`, `PUSHING-TO-GITHUB.md`,
+   `STARTING-WITH-CLAUDE.md` into it. Added `onboarding/README.md`
+   as an index with the "start here" reading order. Updated root
+   README's "Quick start" pointer + repository-layout block.
+   Root is now: `README.md`, `PRD.md`, `CONTRIBUTING.md` (down from 6).
+
+2. **Legacy `reference/statelessness.html` removal.** The new
+   Jekyll collection at `_reference/statelessness/` (12 .md files,
+   00-index + 01-11) is the live version. The legacy single-file
+   `reference/statelessness.html` (143 lines) was a stale leftover
+   from the pre-collection era. Removed file + empty directory.
+
+3. **Demo count six → seven.** Project shipped a 7th demo (demo-07
+   quality pipeline) but `index.html` and `README.md` still said
+   "six runnable demos" in multiple places. Fixed:
+   - `index.html` description meta tag
+   - `index.html` hero lead paragraph
+   - `index.html` stats tile value (6 → 7)
+   - `index.html` "Six runnable demos" card title → "Seven runnable
+     demos", AND expanded the card description from 6 condensed
+     topics to 7 distinct ones (split prior "memory & STL" into
+     "STL & layout" + "memory & allocators")
+   - `README.md` intro paragraph
+
+4. **"13 Excalidraw diagrams" count removed.** Number is fluid
+   (Round C will add 11 more for Statelessness, totaling 24+),
+   committing to a specific count creates maintenance burden.
+   Fixed:
+   - Hero lead paragraph: "and 13 Excalidraw diagrams that explain"
+     → "and diagrams that explain"
+   - Stats tile: REMOVED the entire "13 Excalidraw diagrams" tile
+     (now 4 tiles: sections, demos, talk-time, books cited — works
+     visually as a 2x2 or single row)
+   - Diagrams gallery card description: "13 architecture and flow
+     diagrams..." → "Architecture and flow diagrams..."
+
+5. **Statelessness card description rewrite.** Original copy:
+   "Twelve reference docs (~42K words) on C++20/23 services on
+   containers — deployment posture, RAII, PMR, threading, 12-factor,
+   gRPC capstone, build tooling appendix."
+   New copy:
+   "Companion reference set on C++20/23 service design for Linux
+   containers — deployment posture, RAII, PMR, threading, 12-factor,
+   gRPC capstone, build tooling appendix. Statelessness as the
+   through-line."
+   Drops "Twelve" count + "(~42K words)" metric; keeps substance
+   plus the framing sentence.
+
+**Verification observations:**
+
+- User said "verify-stacks.sh and pre-pull.sh have older copies in
+  root" — investigated thoroughly: NO copies in root. Only the
+  `scripts/` copies exist. The cleanup the user expected was
+  already done somewhere in earlier rounds, or never happened
+  (the user's recollection may have been from a different point in
+  history). Both scripts retained as the user confirmed they're
+  legit utilities.
+
+**Files changed (count):**
+- 3 root .md files MOVED to `onboarding/`
+- 1 file CREATED: `onboarding/README.md` (43 lines, the folder index)
+- 1 file REMOVED: `reference/statelessness.html`
+- 1 directory REMOVED: `reference/` (now empty)
+- 2 files EDITED: `README.md` (3 line edits) and `index.html`
+  (~25 line edits across 3 sections)
+
+**Net:** root went from 6 .md files to 3. Site copy is now
+count-free where the user requested it, and accurate where it
+wasn't (the 6→7 demo count correction).
 
 ---
 

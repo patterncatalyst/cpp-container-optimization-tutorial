@@ -1,6 +1,6 @@
 # Optimizing Modern C++ with Containers
 
-A 1.5-3 hour technical presentation, paired Jekyll site, and six
+A 1.5-3 hour technical presentation, paired Jekyll site, and seven
 runnable Podman demos that teach modern-C++ performance work under
 realistic container constraints — on Fedora 44, end-to-end,
 rootless.
@@ -10,9 +10,11 @@ and the PPTX presentation. The tutorial is structured so it can be
 delivered live in 1.5 hours (high-level pass, pre-recorded demos)
 or in 3 hours (every demo run live in front of the audience).
 
-> **Quick start:** see [GETTING-STARTED.md](GETTING-STARTED.md)
+> **Quick start:** see [onboarding/GETTING-STARTED.md](onboarding/GETTING-STARTED.md)
 > for the step-by-step setup. This README explains what's here and
-> why.
+> why. For more onboarding material (pushing the site to GitHub
+> Pages, working with Claude on the project), see the
+> [`onboarding/`](onboarding/) folder.
 
 ## What's in scope
 
@@ -44,9 +46,11 @@ See [PRD.md](PRD.md) §3 for the complete non-goals list.
 ```
 .
 ├── PRD.md                   ← the project's source-of-intent
+├── onboarding/              ← getting-started + repo workflow docs
 ├── _plans/
 │   └── reconciliation-plan.md  ← what's verified vs. claimed
 ├── _docs/                   ← tutorial sections (00 … 14)
+├── _reference/              ← reference docs (e.g., Statelessness collection)
 ├── _layouts/                ← Jekyll wrappers (default, tutorial, plan)
 ├── _includes/               ← header, footer, excalidraw embed
 ├── assets/
