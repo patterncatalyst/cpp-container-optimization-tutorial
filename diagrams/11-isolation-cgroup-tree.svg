@@ -1,14 +1,128 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" role="img" aria-label="cgroup v2 weight &amp; cpuset placeholder">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 580" role="img"
+     aria-label="cgroup v2 hierarchy for demo-05: host root contains user-1000.slice with the systemd Delegate drop-in, which contains podman.scope, which contains demo05-a (tenant-a, latency-sensitive, cpu.weight=100, cpuset.cpus=0-10) and demo05-b (tenant-b, CPU-bound, cpu.weight=10, cpuset.cpus=11-21). The verified Round B results are shown at the bottom: baseline p99 2.30 ms, unisolated 24.7 ms, weighted 9.0 ms, pinned 1.80 ms.">
   <defs>
+    <style><![CDATA[
+      .bg       { fill: #fdfbf7; }
+      .grid     { stroke: #e8e1d3; stroke-width: 0.5; fill: none; }
+      .band     { stroke-width: 1.5; rx: 6; ry: 6; }
+      .b-root   { fill: #fdfbf7; stroke: #2d2d2d; }
+      .b-slice  { fill: #f0e8d8; stroke: #b89540; }
+      .b-scope  { fill: #e8e1d3; stroke: #7a6f55; }
+      .b-a      { fill: #e8f0fb; stroke: #4a73b8; }
+      .b-b      { fill: #ecdfd8; stroke: #b86742; }
+      .b-result { fill: #fdfbf7; stroke: #c0392b; }
+      .ttl      { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .ttl-big  { font: 700 16px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .lbl      { font: 600 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .mono     { font: 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .mono-sm  { font: 10px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #444; }
+      .sec      { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #555; }
+      .role     { font: italic 600 11px -apple-system, system-ui, "Segoe UI", sans-serif; }
+      .role-a   { fill: #4a73b8; }
+      .role-b   { fill: #b86742; }
+      .arrow    { stroke: #2d2d2d; stroke-width: 1.4; fill: none; }
+      .arrow-r  { stroke: #c0392b; stroke-width: 2; fill: none; }
+      .accent   { fill: #c0392b; }
+      .accent-t { font: 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+      .res-h    { font: 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .res-v    { font: 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+    ]]></style>
     <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e6dfd2" stroke-width="0.5"/>
+      <path d="M 20 0 L 0 0 0 20" class="grid"/>
     </pattern>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+    <marker id="arrowhead-r" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
   </defs>
-  <rect width="800" height="360" fill="#fdfbf7"/>
-  <rect width="800" height="360" fill="url(#grid)"/>
-  <rect x="40" y="40" width="720" height="280" rx="14" ry="14" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="6 4"/>
-  <text x="400" y="155" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="28" font-weight="700" fill="#1a1a1a">cgroup v2 weight &amp; cpuset</text>
-  <text x="400" y="195" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="13" fill="#767676">10-isolation-cgroup-tree.svg</text>
-  <text x="400" y="245" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="14" fill="#4a4a4a">Diagram pending — see assets/diagrams/README.md to draw.</text>
+
+  <rect class="bg" width="900" height="580"/>
+  <rect width="900" height="580" fill="url(#grid)" opacity="0.4"/>
+
+  <!-- Title -->
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">cgroup v2 hierarchy — demo-05 isolation scenarios</text>
+
+  <!-- Host root cgroup -->
+  <rect class="band b-root" x="340" y="50" width="220" height="46"/>
+  <text x="450" y="73" class="ttl" text-anchor="middle">host root cgroup</text>
+  <text x="450" y="89" class="mono-sm" text-anchor="middle">/sys/fs/cgroup</text>
+
+  <!-- Arrow root -> slice -->
+  <line x1="450" y1="96" x2="450" y2="120" class="arrow" marker-end="url(#arrowhead)"/>
+
+  <!-- user-1000.slice (the delegated slice) -->
+  <rect class="band b-slice" x="240" y="120" width="420" height="82"/>
+  <text x="450" y="142" class="ttl" text-anchor="middle">user-1000.slice</text>
+  <text x="450" y="160" class="mono" text-anchor="middle">Delegate = cpu cpuset io memory pids</text>
+  <text x="450" y="178" class="sec" text-anchor="middle">G-40: the systemd drop-in that enables every box below</text>
+  <text x="450" y="194" class="mono-sm" text-anchor="middle">/etc/systemd/system/user@.service.d/delegate.conf</text>
+
+  <!-- Arrow slice -> scope -->
+  <line x1="450" y1="202" x2="450" y2="226" class="arrow" marker-end="url(#arrowhead)"/>
+
+  <!-- podman.scope -->
+  <rect class="band b-scope" x="370" y="226" width="160" height="38"/>
+  <text x="450" y="250" class="ttl" text-anchor="middle">podman.scope</text>
+
+  <!-- Branching arrows scope -> tenants -->
+  <path class="arrow" d="M 420 264 L 420 290 L 220 290 L 220 320" marker-end="url(#arrowhead)"/>
+  <path class="arrow" d="M 480 264 L 480 290 L 680 290 L 680 320" marker-end="url(#arrowhead)"/>
+
+  <!-- tenant-a (demo05-a, latency-sensitive) -->
+  <rect class="band b-a" x="80" y="320" width="280" height="140"/>
+  <text x="220" y="343" class="ttl" text-anchor="middle">demo05-a</text>
+  <text x="220" y="360" class="role role-a" text-anchor="middle">tenant-a — latency-sensitive C++ HTTP server</text>
+  <line x1="100" y1="370" x2="340" y2="370" stroke="#4a73b8" stroke-width="0.5" opacity="0.5"/>
+  <text x="100" y="388" class="mono">cpu.weight     = 100  (default)</text>
+  <text x="100" y="406" class="mono">cpuset.cpus    = 0-10</text>
+  <text x="100" y="424" class="mono">memory.high    = (unset)</text>
+  <text x="100" y="442" class="mono-sm" fill="#666">workload: 200 µs per request,</text>
+  <text x="100" y="456" class="mono-sm" fill="#666">          idle between requests</text>
+
+  <!-- tenant-b (demo05-b, noisy neighbor) -->
+  <rect class="band b-b" x="540" y="320" width="280" height="140"/>
+  <text x="680" y="343" class="ttl" text-anchor="middle">demo05-b</text>
+  <text x="680" y="360" class="role role-b" text-anchor="middle">tenant-b — CPU-bound batch workload</text>
+  <line x1="560" y1="370" x2="800" y2="370" stroke="#b86742" stroke-width="0.5" opacity="0.5"/>
+  <text x="560" y="388" class="mono">cpu.weight     = </text>
+  <text x="660" y="388" class="accent-t">10</text>
+  <text x="685" y="388" class="mono-sm" fill="#666">← the weight knob</text>
+  <text x="560" y="406" class="mono">cpuset.cpus    = </text>
+  <text x="675" y="406" class="accent-t">11-21</text>
+  <text x="722" y="406" class="mono-sm" fill="#666">← the pin knob</text>
+  <text x="560" y="424" class="mono">memory.high    = (unset)</text>
+  <text x="560" y="442" class="mono-sm" fill="#666">workload: every thread always</text>
+  <text x="560" y="456" class="mono-sm" fill="#666">          runnable, steady CPU</text>
+
+  <!-- Results band -->
+  <rect class="band b-result" x="80" y="488" width="740" height="76"/>
+  <text x="450" y="508" class="res-h" text-anchor="middle">Verified Round B results (p99 tenant-a latency, r102)</text>
+
+  <!-- Result columns -->
+  <text x="180" y="534" class="lbl" text-anchor="middle">baseline (alone)</text>
+  <text x="180" y="550" class="res-v" text-anchor="middle">p99 = 2.30 ms</text>
+  <text x="180" y="558" class="sec" text-anchor="middle">1.0×</text>
+
+  <text x="360" y="534" class="lbl" text-anchor="middle">unisolated</text>
+  <text x="360" y="550" class="res-v" text-anchor="middle">p99 = </text>
+  <text x="400" y="550" class="accent-t">24.7 ms</text>
+  <text x="360" y="558" class="accent-t" text-anchor="middle">10.7×</text>
+
+  <text x="540" y="534" class="lbl" text-anchor="middle">weighted</text>
+  <text x="540" y="550" class="res-v" text-anchor="middle">p99 = 9.00 ms</text>
+  <text x="540" y="558" class="sec" text-anchor="middle">3.9× (cpu.weight)</text>
+
+  <text x="720" y="534" class="lbl" text-anchor="middle">pinned</text>
+  <text x="720" y="550" class="res-v" text-anchor="middle">p99 = 1.80 ms</text>
+  <text x="720" y="558" class="sec" text-anchor="middle">0.78× (cpuset.cpus)</text>
+
+  <!-- Vertical separators in results band -->
+  <line x1="270" y1="496" x2="270" y2="556" stroke="#e8e1d3" stroke-width="0.5"/>
+  <line x1="450" y1="496" x2="450" y2="556" stroke="#e8e1d3" stroke-width="0.5"/>
+  <line x1="630" y1="496" x2="630" y2="556" stroke="#e8e1d3" stroke-width="0.5"/>
 </svg>

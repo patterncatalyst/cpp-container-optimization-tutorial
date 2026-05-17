@@ -1,14 +1,132 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" role="img" aria-label="Allocator stack placeholder">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 580" role="img"
+     aria-label="The C++ memory allocator stack from application code down through PMR (with the cache-locality bonus), the chosen allocator (glibc/jemalloc/mimalloc), kernel page cache, the cgroup memory.high throttle, the cgroup memory.max ceiling, and finally the host. The cost actually lives at the first-write page fault, not at malloc itself; that arrow is shown in red. Verified r96 batch-mode PMR numbers are at the bottom: PMR is 2.12x faster than std::allocator at p50.">
   <defs>
+    <style><![CDATA[
+      .bg       { fill: #fdfbf7; }
+      .grid     { stroke: #e8e1d3; stroke-width: 0.5; fill: none; }
+      .band     { stroke-width: 1.5; rx: 6; ry: 6; }
+      .b-app    { fill: #e8f0fb; stroke: #4a73b8; }
+      .b-pmr    { fill: #d8e8df; stroke: #5a8870; }
+      .b-alloc  { fill: #f0e8d8; stroke: #b89540; }
+      .b-page   { fill: #ecdfd8; stroke: #b86742; }
+      .b-cgrp-h { fill: #fbe6c2; stroke: #d68a1e; }
+      .b-cgrp-m { fill: #f5e2ce; stroke: #b8721a; }
+      .b-host   { fill: #e8e1d3; stroke: #7a6f55; }
+      .b-result { fill: #fdfbf7; stroke: #c0392b; }
+      .ttl      { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .ttl-big  { font: 700 16px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .lbl      { font: 600 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .mono     { font: 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .mono-sm  { font: 10px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #444; }
+      .sec      { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #555; }
+      .role     { font: italic 600 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #444; }
+      .arrow    { stroke: #2d2d2d; stroke-width: 1.4; fill: none; }
+      .arrow-r  { stroke: #c0392b; stroke-width: 2.5; fill: none; }
+      .arrow-l  { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #444; }
+      .accent   { fill: #c0392b; }
+      .accent-t { font: 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+      .accent-l { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+      .res-h    { font: 700 13px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .res-v    { font: 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+    ]]></style>
     <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e6dfd2" stroke-width="0.5"/>
+      <path d="M 20 0 L 0 0 0 20" class="grid"/>
     </pattern>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+    <marker id="arrowhead-r" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="10" markerHeight="10" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
   </defs>
-  <rect width="800" height="360" fill="#fdfbf7"/>
-  <rect width="800" height="360" fill="url(#grid)"/>
-  <rect x="40" y="40" width="720" height="280" rx="14" ry="14" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="6 4"/>
-  <text x="400" y="155" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="28" font-weight="700" fill="#1a1a1a">Allocator stack</text>
-  <text x="400" y="195" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="13" fill="#767676">06-allocator-stack.svg</text>
-  <text x="400" y="245" text-anchor="middle" font-family="-apple-system, system-ui, sans-serif" font-size="14" fill="#4a4a4a">Diagram pending — see assets/diagrams/README.md to draw.</text>
+
+  <rect class="bg" width="900" height="580"/>
+  <rect width="900" height="580" fill="url(#grid)" opacity="0.4"/>
+
+  <!-- Title -->
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">The C++ allocator stack — where the cost actually lives</text>
+
+  <!-- Application -->
+  <rect class="band b-app" x="200" y="60" width="500" height="44"/>
+  <text x="450" y="84" class="ttl" text-anchor="middle">C++ application</text>
+  <text x="450" y="100" class="mono-sm" text-anchor="middle">std::vector&lt;T&gt; v;  v.push_back(...);  pmr::vector&lt;T&gt; vp{&amp;arena};</text>
+
+  <line x1="450" y1="104" x2="450" y2="124" class="arrow" marker-end="url(#arrowhead)"/>
+
+  <!-- PMR layer -->
+  <rect class="band b-pmr" x="200" y="124" width="500" height="60"/>
+  <text x="450" y="146" class="ttl" text-anchor="middle">std::pmr resource (optional, often request-scoped)</text>
+  <text x="220" y="166" class="mono">monotonic_buffer_resource → bump-allocate from a hot arena</text>
+  <text x="220" y="180" class="mono">unsynchronized_pool_resource → fixed-size object pools</text>
+
+  <line x1="450" y1="184" x2="450" y2="204" class="arrow" marker-end="url(#arrowhead)"/>
+
+  <!-- Allocator -->
+  <rect class="band b-alloc" x="200" y="204" width="500" height="60"/>
+  <text x="450" y="226" class="ttl" text-anchor="middle">allocator (LD_PRELOAD or default)</text>
+  <text x="220" y="246" class="mono">glibc malloc / jemalloc / mimalloc / tcmalloc</text>
+  <text x="220" y="260" class="sec">"returns to OS quickly?" is the column that matters in a container</text>
+
+  <!-- Red accent arrow: WHERE THE COST IS -->
+  <line x1="450" y1="264" x2="450" y2="294" class="arrow-r" marker-end="url(#arrowhead-r)"/>
+  <text x="465" y="282" class="accent-l">page fault on first write</text>
+
+  <!-- Page cache + kernel memory -->
+  <rect class="band b-page" x="200" y="294" width="500" height="60"/>
+  <text x="450" y="316" class="ttl" text-anchor="middle">kernel page cache + page table</text>
+  <text x="220" y="336" class="mono">first write to a page: minor or major fault → page table update</text>
+  <text x="220" y="350" class="sec">this is the latency event, not malloc() returning a pointer</text>
+
+  <line x1="450" y1="354" x2="450" y2="374" class="arrow" marker-end="url(#arrowhead)"/>
+
+  <!-- cgroup memory.high (throttle) -->
+  <rect class="band b-cgrp-h" x="200" y="374" width="500" height="40"/>
+  <text x="220" y="394" class="ttl">cgroup memory.high (throttle)</text>
+  <text x="450" y="394" class="mono">→ kernel reclaims aggressively;</text>
+  <text x="565" y="408" class="mono-sm" fill="#444">your process keeps running, tail degrades</text>
+
+  <line x1="450" y1="414" x2="450" y2="434" class="arrow" marker-end="url(#arrowhead)"/>
+
+  <!-- cgroup memory.max (ceiling) -->
+  <rect class="band b-cgrp-m" x="200" y="434" width="500" height="40"/>
+  <text x="220" y="454" class="ttl">cgroup memory.max (ceiling)</text>
+  <text x="450" y="454" class="accent-t">→ OOM killer fires;</text>
+  <text x="563" y="468" class="mono-sm" fill="#444">on memory.current, not on RSS</text>
+
+  <line x1="450" y1="474" x2="450" y2="494" class="arrow" marker-end="url(#arrowhead)"/>
+
+  <!-- Host -->
+  <rect class="band b-host" x="200" y="494" width="500" height="34"/>
+  <text x="450" y="516" class="ttl" text-anchor="middle">host kernel + RAM</text>
+
+  <!-- Result panel on right -->
+  <rect class="band b-result" x="720" y="124" width="160" height="200"/>
+  <text x="800" y="146" class="res-h" text-anchor="middle">PMR result (r96)</text>
+  <text x="800" y="160" class="sec" text-anchor="middle">batch mode, 200 iters/req</text>
+
+  <text x="740" y="184" class="lbl">std::allocator</text>
+  <text x="740" y="200" class="mono">p50  8.66 µs</text>
+  <text x="740" y="214" class="mono">p99 15.29 µs</text>
+
+  <text x="740" y="240" class="lbl">std::pmr</text>
+  <text x="740" y="256" class="accent-t">p50  4.08 µs</text>
+  <text x="740" y="270" class="accent-t">p99  5.61 µs</text>
+  <text x="740" y="288" class="accent-l">2.12× faster</text>
+
+  <text x="740" y="312" class="sec">(serve mode: no win — see §7 prose)</text>
+
+  <!-- Vertical labels showing the layers -->
+  <text x="180" y="90" class="role" text-anchor="end">your code</text>
+  <text x="180" y="154" class="role" text-anchor="end">C++ stdlib</text>
+  <text x="180" y="234" class="role" text-anchor="end">user-space</text>
+  <text x="180" y="324" class="role" text-anchor="end">kernel</text>
+  <text x="180" y="394" class="role" text-anchor="end">cgroup v2</text>
+  <text x="180" y="454" class="role" text-anchor="end">cgroup v2</text>
+  <text x="180" y="514" class="role" text-anchor="end">host</text>
+
+  <!-- Footnote -->
+  <text x="450" y="552" class="sec" text-anchor="middle">"Allocation cost isn't malloc(). It's the page fault that follows the first write to a page glibc just handed out."</text>
 </svg>

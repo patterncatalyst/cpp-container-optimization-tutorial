@@ -14885,6 +14885,171 @@ static analysis + CI lesson. New Round A/B sequence expected,
 likely with new gotchas (G-43+). Then path E — PPTX slides
 referencing all the verified work.
 
+### 2026-05-16 — r106: Plan change — diagrams replace PPTX as path E; PPTX → path F. First three diagrams (§-anchors) shipped.
+
+User flagged that the diagram work hadn't been getting the
+attention the original PRD called for: *"A diagram should be
+included for each section in excalidraw with svg and json per
+diagram and embedded in the jekyll site and the pptx."* The
+section prose rounds (§7, §10, §11) reference `{% raw %}{% include excalidraw.html name="..." %}{% endraw %}`
+tags that resolve to placeholder diagrams — they render but
+they're empty gray boxes with a "draw me" prompt. The diagrams
+ARE part of the section content, not separate polish.
+
+**Plan change accepted:**
+
+| Old | New |
+|---|---|
+| E. PPTX slides (last) | **E. Excalidraw diagrams for every section** |
+| (no F) | **F. PPTX slides (last; references all the verified work)** |
+
+Updated option-1 plan:
+
+- A. demo-06 ✓ (r88-r96)
+- B. demo-05 ✓ (Round A r94, Round B r102)
+- D. Section prose (three §-anchors ✓: §11 r103, §10 r104, §7 r105)
+- **C. demo-07 quality-pipeline** — stub, next demo buildout
+- **E. Excalidraw diagrams** — IN PROGRESS, this round
+- **F. PPTX** — last, integrates everything above
+
+**State of diagrams going into r106:**
+
+Audit showed every diagram referenced by the sections exists on
+disk as a `.svg` + `.excalidraw` pair, but most are 1.1-1.3 KB
+placeholders containing a single text element ("draw me"
+prompt). Two sections (§2 introduction-four-layers, §2 threading-
+models) and one partial (§3 raii-discipline) have real content.
+The other 12 are placeholder stubs.
+
+**Established style (from the §2 reference diagrams):**
+
+The canonical existing diagrams are **hand-written semantic SVG
+with CSS classes** (not Excalidraw exports despite the README's
+"hand-drawn sketchy" claim). They use:
+
+- Warm pastel palette: `#fdfbf7` background, `#e8f0fb`/`#4a73b8`
+  (toolchain blue), `#f0e8d8`/`#b89540` (image gold),
+  `#ecdfd8`/`#b86742` (kernel terracotta), `#d8e8df`/`#5a8870`
+  (runtime green), `#fbe6c2`/`#d68a1e` (warm tan),
+  `#c0392b` (THE accent red, used sparingly per style guide)
+- Semantic CSS classes (`b-app`, `b-sdk`, `arrow`, `accent-t`, etc.)
+- System sans-serif for general text, ui-monospace for code/values
+- Grid background pattern for visual consistency
+- ARIA labels with full diagram description for accessibility
+
+r106 matches that style verbatim for the three §-anchor diagrams.
+
+**Three diagrams shipped in r106 (the §-anchors with the
+strongest finished prose backing):**
+
+1. **`07-allocator-stack`** — 7-layer vertical stack: C++ app →
+   PMR resource (highlighted as the §7 hook) → allocator
+   (glibc/jemalloc/mimalloc/tcmalloc) → kernel page cache (with
+   the **page-fault arrow in red** as the "where the cost lives"
+   accent per §7's opening line) → cgroup memory.high (throttle)
+   → cgroup memory.max (OOM ceiling) → host. Right-side panel
+   shows the verified r96 PMR result: std::allocator p50 8.66 µs
+   vs PMR p50 4.08 µs vs PMR p99 5.61 µs — **2.12× faster in
+   batch mode**. Footnote quotes the §7 opening line.
+   Files: 8 KB SVG + 13 KB excalidraw JSON.
+
+2. **`10-observability-otel-stack`** — left-to-right data flow:
+   C++ app → OTel-cpp SDK (with **SpanProcessor and
+   LogRecordProcessor boxes outlined in red as "THE decision"**)
+   → OTLP/gRPC → otel-lgtm container → fans out to Tempo
+   (traces), Mimir/Prometheus (metrics), Loki (logs) → Grafana
+   UI on top. Bottom two panels show the per-span cost breakdown
+   (Simple's 75-200 µs blocking work vs Batch's 1-2 µs atomic
+   enqueue) and the verified r88 numbers (18,469 → 2,170 →
+   28,000 req/s — the **8.5× collapse** annotated in red).
+   Files: 10 KB SVG + 13 KB excalidraw JSON.
+
+3. **`11-isolation-cgroup-tree`** — top-to-bottom cgroup
+   hierarchy: host root → user-1000.slice (with the systemd
+   Delegate= config from G-40 shown as the key enabler) →
+   podman.scope → splits into demo05-a (tenant-a, blue,
+   cpu.weight=100, cpuset.cpus=0-10) and demo05-b (tenant-b,
+   terracotta, **cpu.weight=10 and cpuset.cpus=11-21 as the
+   tuning knobs**). Bottom band shows verified Round B results
+   from r102: baseline 2.30 ms → unisolated 24.7 ms (**10.7×**
+   in red) → weighted 9.0 ms (3.9×) → pinned 1.80 ms (0.78×).
+   Files: 8 KB SVG + 9 KB excalidraw JSON.
+
+**Style guidance applied (from diagrams/README.md):**
+
+- ✓ One canvas, one idea per diagram
+- ✓ Labeled arrows (not bare lines)
+- ✓ Accent red `#c0392b` used sparingly — exactly one accent per
+  diagram: PMR's 2.12× row in §7, the "8.5× collapse" in §10,
+  the unisolated 10.7× row in §11. The accent points at the
+  punchline.
+- ✓ ARIA labels for accessibility (matches §2 reference)
+- ✓ Grid background pattern (matches §2 reference)
+- ✓ Paired SVG + Excalidraw JSON for each (the JSON has valid
+  Excalidraw v2 structure with rectangles/text/arrows, can be
+  opened in https://excalidraw.com for editing if anyone wants
+  to change the diagram visually — the SVG is the rendered
+  output the site embeds)
+
+**Note on the SVG vs JSON pairing:**
+
+The JSON is *not* an export of the SVG (no automated tooling
+between them). They are independently maintained: the SVG is
+the rendered output Jekyll embeds, and the JSON is for future
+editability by anyone who wants to open the diagram in Excalidraw
+and modify it visually. If someone re-exports from Excalidraw,
+the SVG will diverge from the hand-written one. That's a
+known trade-off documented in diagrams/README.md; the priority
+is the rendered output, with editability as the secondary
+deliverable.
+
+**Files changed in r106 (6 paired):**
+
+- `diagrams/07-allocator-stack.svg`: placeholder (1.1 KB, 1
+  element) → real (8 KB, allocator stack with page-fault accent)
+- `diagrams/07-allocator-stack.excalidraw`: placeholder (1.3 KB,
+  1 element) → real (13 KB, 25 elements)
+- `diagrams/10-observability-otel-stack.svg`: placeholder → real
+  (10 KB, OTel data flow with Simple/Batch accent)
+- `diagrams/10-observability-otel-stack.excalidraw`: placeholder →
+  real (13 KB, 24 elements)
+- `diagrams/11-isolation-cgroup-tree.svg`: placeholder → real
+  (8 KB, cgroup hierarchy with the 10.7× accent)
+- `diagrams/11-isolation-cgroup-tree.excalidraw`: placeholder →
+  real (9 KB, 17 elements)
+- `_plans/reconciliation-plan.md`: this r106 entry
+
+**No code changes. No image rebuild. Pure diagram-creation work
+matching the established §2 visual style.**
+
+**Diagram progress:** 3 of 15 done (§2 four-layers, §2 threading,
+§3 raii were already done; §7, §10, §11 done in r106). 9 left:
+§1, §4, §5, §6, §8, §9, §12, §13, §14.
+
+**Strategy for the remaining 9:**
+
+The remaining 9 sections have less verified-data backing than
+the three §-anchors did, which means the diagrams will be more
+conceptual than result-driven. They'll still hit the same style
+template (warm palette, semantic SVG, paired Excalidraw JSON,
+one-accent-per-diagram rule) but the "punchline number in red"
+device used in r106's three §-anchor diagrams won't apply
+uniformly — some diagrams are about mechanism rather than
+result.
+
+Proposed batching:
+
+- r107: §1 prerequisites-toolchain, §4 image-strategy-multistage,
+  §5 compile-time-pgo-flow, §6 stl-layout-flat-vs-node (the four
+  earlier-section diagrams; mostly conceptual / mechanism-
+  showing)
+- r108: §8 io-uring-rings, §9 networking-veth-vs-host, §12 debug-
+  sidecar-pattern, §13 reproducibility-conan-flow, §14 pitfalls-
+  avx512-mismatch (the five later-section diagrams; more
+  technical, more system-level)
+
+User can review r106 first, then we proceed with r107.
+
 ---
 
 ## Known divergences from the PRD
