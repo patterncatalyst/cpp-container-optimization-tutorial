@@ -82,6 +82,7 @@ Every subsystem receives `const Config&` (or the specific subsection it needs). 
 
 The per-request RAII bundle from Doc 02, fleshed out with PMR (Doc 03) and OTel scope (Doc 05):
 
+{% raw %}
 ```cpp
 #include <array>
 #include <chrono>
@@ -140,6 +141,7 @@ private:
     otel::trace::Scope                       scope_;
 };
 ```
+{% endraw %}
 
 The destruction order — scope first, span second, pool third, monotonic resource fourth — falls out of the member declaration order in reverse. The arena's no-op `do_deallocate` (Doc 03) means destroying the per-request `pmr::vector`s and `pmr::string`s inside the handler is essentially free; only the final monotonic-resource destruction reclaims the buffer.
 
@@ -294,6 +296,7 @@ The pattern from Doc 07 is intact: deadline-based `statement_timeout`, `invalida
 
 The `compute_tax` helper demonstrates outbound gRPC, using the channel cache and propagating both deadline and trace context (Doc 04, Doc 07):
 
+{% raw %}
 ```cpp
 std::int64_t PricingService::compute_tax(
     RequestContext& rc,
@@ -325,6 +328,7 @@ std::int64_t PricingService::compute_tax(
     return tresp.tax_cents();
 }
 ```
+{% endraw %}
 
 The trace context propagation — `propagate_trace_context` — uses the OTel C++ SDK's metadata-injection helper to attach the current span's W3C TraceContext headers to the outbound RPC. The tax service sees them, links its own span to the caller's, and the trace is connected end-to-end. This is the OTel side of the per-request span the `RequestContext` constructs.
 

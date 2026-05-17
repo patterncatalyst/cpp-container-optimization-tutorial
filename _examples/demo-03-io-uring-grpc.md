@@ -9,7 +9,7 @@ demo_dir: demo-03-io-uring-grpc
 github_path: examples/demo-03-io-uring-grpc
 ---
 
-> The full source for this demo lives in [`examples/demo-03-io-uring-grpc/`]({{ site.github.repository_url }}/tree/main/examples/demo-03-io-uring-grpc) — clone the repo, `cd` in, and `./demo.sh`.
+> The full source for this demo lives in [`examples/demo-03-io-uring-grpc/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-03-io-uring-grpc) — clone the repo, `cd` in, and `./demo.sh`.
 
 
 Three servers in one binary, all wired into the LGTM observability stack:

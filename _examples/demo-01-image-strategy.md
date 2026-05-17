@@ -9,7 +9,7 @@ demo_dir: demo-01-image-strategy
 github_path: examples/demo-01-image-strategy
 ---
 
-> The full source for this demo lives in [`examples/demo-01-image-strategy/`]({{ site.github.repository_url }}/tree/main/examples/demo-01-image-strategy) — clone the repo, `cd` in, and `./demo.sh`.
+> The full source for this demo lives in [`examples/demo-01-image-strategy/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-01-image-strategy) — clone the repo, `cd` in, and `./demo.sh`.
 
 
 ## What this demo shows

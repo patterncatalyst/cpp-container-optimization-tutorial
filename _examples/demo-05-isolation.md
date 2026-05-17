@@ -9,7 +9,7 @@ demo_dir: demo-05-isolation
 github_path: examples/demo-05-isolation
 ---
 
-> The full source for this demo lives in [`examples/demo-05-isolation/`]({{ site.github.repository_url }}/tree/main/examples/demo-05-isolation) — clone the repo, `cd` in, and `./demo.sh`.
+> The full source for this demo lives in [`examples/demo-05-isolation/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-05-isolation) — clone the repo, `cd` in, and `./demo.sh`.
 
 
 Tutorial section: §10 (Noisy neighbors and isolation)

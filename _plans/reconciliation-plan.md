@@ -20434,6 +20434,108 @@ to refresh `_examples/`. Commit the regenerated collection files
 alongside the README changes. The script is idempotent — re-running
 on no-change READMEs is safe.
 
+### 2026-05-17 — r134.1: hotfix — Jekyll build failure from r134
+
+**The breakage.**
+
+User ran the GitHub Pages build (`bundle exec jekyll build`) and got
+a hard failure plus warnings. Two distinct bugs introduced in r134:
+
+#### Bug 1 — `site.github.repository_url` triggers a fatal error
+
+Generator script wrote this line at the top of each
+`_examples/demo-NN-name.md`:
+
+    > The full source for this demo lives in [`examples/demo-NN/`]({{ site.github.repository_url }}/tree/main/...)
+
+`{{ site.github.repository_url }}` is provided by the
+`jekyll-github-metadata` plugin (which is configured) — but the
+plugin needs to know WHICH repo. It autodetects from one of:
+
+  1. `PAGES_REPO_NWO` environment variable (GitHub Actions sets this)
+  2. A `repository:` field in `_config.yml`
+  3. A git remote called `origin` pointing to github.com
+
+In the GitHub Actions Pages workflow used here, none of these are
+present where the plugin looks. Result: `No repo name found`, build
+FAILS.
+
+The fix: switch to the pattern already used elsewhere in the site
+(e.g., in `examples.html`):
+
+    https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/...
+
+These values ARE set explicitly in `_config.yml`:
+
+    github_username: patterncatalyst
+    github_repo: cpp-container-optimization-tutorial
+
+so they always resolve regardless of CI environment.
+
+Updated the generator (`scripts/regen-examples-collection.sh`) to
+emit this pattern, and re-ran it to regenerate all 7 `_examples/`
+pages.
+
+#### Bug 2 — C++ initializer-list syntax misread as Liquid
+
+Two lines in `_reference/statelessness/10-grpc-microservices.md`,
+inside fenced `cpp` code blocks, contained C++ initializer lists:
+
+    span_{tracer().StartSpan("PriceOrder",
+                             {{"correlation_id", correlation_id_}})},
+
+    rc.span().AddEvent("tax_exempt", {{"customer_id", customer.id}});
+
+The `{{` is C++17 nested-initializer-list syntax for the OTel
+`StartSpan` and `AddEvent` overloads taking an
+`std::initializer_list<std::pair<...>>`. Jekyll's Liquid templating
+parses the whole markdown — including code fences — for `{{...}}`
+output statements before passing to Kramdown for markdown
+rendering. Liquid sees `{{ ... , ... }}` and emits a warning
+("Expected end_of_string but found comma"), then mangles the
+output.
+
+The fix: wrap each affected code block in `{% raw %}` /
+`{% endraw %}` tags. Liquid treats everything inside as opaque
+literal text, leaving the code untouched. Both fixes minimal —
+just two wrap pairs.
+
+Wrapped:
+  - the `RequestContext` class definition (lines 85-142)
+  - the `compute_tax` helper definition (lines 297-327)
+
+Neither shows the raw tags in the rendered output (Liquid consumes
+them); GitHub's markdown view still renders the source readably
+because Liquid tags between fenced blocks are invisible to GFM.
+
+#### Defensive sweep
+
+After the fixes, audited all `.md` files in `_docs/`, `_examples/`,
+and `_reference/` for any other `{{ ... }}` constructs that aren't
+real Jekyll Liquid references. Found three more in
+`examples/demo-03-io-uring-grpc/security/README.md` (Podman format
+strings), but that file is under `examples/` which is excluded from
+the Jekyll build, so they're harmless. No other rogue patterns.
+
+#### Procedural lesson for the generator
+
+The generator's blockquote line should use ONLY config values that
+are guaranteed to exist regardless of build environment. Plugin-
+dependent values like `site.github.*` should be avoided unless the
+plugin is verified to work in every CI configuration the site uses.
+This rule now lives in a comment at the top of
+`scripts/regen-examples-collection.sh`.
+
+#### Files changed
+
+- `scripts/regen-examples-collection.sh` (use github_username/repo
+  config values; add comment documenting the rule)
+- 7 regenerated `_examples/*.md` files (now using safe URL pattern)
+- `_reference/statelessness/10-grpc-microservices.md` (4 lines
+  added — two `{% raw %}` / `{% endraw %}` pairs wrapping the
+  affected code blocks)
+- `_plans/reconciliation-plan.md` (this entry)
+
 ---
 
 ## Known divergences from the PRD

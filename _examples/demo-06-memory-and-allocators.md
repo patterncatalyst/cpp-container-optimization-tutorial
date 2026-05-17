@@ -9,7 +9,7 @@ demo_dir: demo-06-memory-and-allocators
 github_path: examples/demo-06-memory-and-allocators
 ---
 
-> The full source for this demo lives in [`examples/demo-06-memory-and-allocators/`]({{ site.github.repository_url }}/tree/main/examples/demo-06-memory-and-allocators) — clone the repo, `cd` in, and `./demo.sh`.
+> The full source for this demo lives in [`examples/demo-06-memory-and-allocators/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-06-memory-and-allocators) — clone the repo, `cd` in, and `./demo.sh`.
 
 
 Three allocator variants of the same C++23 binary, side-by-side on a

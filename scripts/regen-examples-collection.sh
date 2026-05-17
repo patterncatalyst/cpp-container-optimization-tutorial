@@ -10,6 +10,18 @@
 #
 #   ./scripts/regen-examples-collection.sh
 #
+# RULE (from r134.1 hotfix): when emitting Liquid references into the
+# generated frontmatter or body, use ONLY config values that are
+# guaranteed to exist regardless of build environment — e.g.
+# {{ site.github_username }} and {{ site.github_repo }}, which are set
+# explicitly in _config.yml. Avoid plugin-dependent values like
+# {{ site.github.repository_url }}: the jekyll-github-metadata plugin
+# needs PAGES_REPO_NWO, repository: in config, or an origin remote to
+# resolve, and the GitHub Actions Pages build doesn't always provide
+# any of those where the plugin looks. Using config values keeps the
+# pages building everywhere — local, Actions, mirror builds — without
+# environment plumbing.
+#
 # The script:
 #   - reads each examples/demo-NN-name/README.md
 #   - extracts the first H1 as the page title
@@ -111,7 +123,7 @@ for demo_dir in "$EXAMPLES_DIR"/demo-*; do
         echo "github_path: examples/$demo_name"
         echo "---"
         echo ""
-        echo "> The full source for this demo lives in [\`examples/$demo_name/\`]({{ site.github.repository_url }}/tree/main/examples/$demo_name) — clone the repo, \`cd\` in, and \`./demo.sh\`."
+        echo "> The full source for this demo lives in [\`examples/$demo_name/\`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/$demo_name) — clone the repo, \`cd\` in, and \`./demo.sh\`."
         echo ""
         echo "$body"
     } > "$out_file"

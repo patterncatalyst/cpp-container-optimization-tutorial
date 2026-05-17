@@ -9,7 +9,7 @@ demo_dir: demo-04-observability
 github_path: examples/demo-04-observability
 ---
 
-> The full source for this demo lives in [`examples/demo-04-observability/`]({{ site.github.repository_url }}/tree/main/examples/demo-04-observability) — clone the repo, `cd` in, and `./demo.sh`.
+> The full source for this demo lives in [`examples/demo-04-observability/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-04-observability) — clone the repo, `cd` in, and `./demo.sh`.
 
 
 Tutorial section: §10 (Observability & profiling)

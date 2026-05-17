@@ -9,7 +9,7 @@ demo_dir: demo-02-stl-layout
 github_path: examples/demo-02-stl-layout
 ---
 
-> The full source for this demo lives in [`examples/demo-02-stl-layout/`]({{ site.github.repository_url }}/tree/main/examples/demo-02-stl-layout) — clone the repo, `cd` in, and `./demo.sh`.
+> The full source for this demo lives in [`examples/demo-02-stl-layout/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-02-stl-layout) — clone the repo, `cd` in, and `./demo.sh`.
 
 
 Compares four key-value container designs on two operations, run once

@@ -9,7 +9,7 @@ demo_dir: demo-07-quality-pipeline
 github_path: examples/demo-07-quality-pipeline
 ---
 
-> The full source for this demo lives in [`examples/demo-07-quality-pipeline/`]({{ site.github.repository_url }}/tree/main/examples/demo-07-quality-pipeline) — clone the repo, `cd` in, and `./demo.sh`.
+> The full source for this demo lives in [`examples/demo-07-quality-pipeline/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-07-quality-pipeline) — clone the repo, `cd` in, and `./demo.sh`.
 
 
 Tutorial sections: §12 (Static Analysis & Debugging in Containers),
