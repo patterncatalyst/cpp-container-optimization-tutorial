@@ -17639,6 +17639,261 @@ that gets resolved properly on first run":
 Both fixes are needed together. Skip either and you get a different
 failure mode.
 
+### 2026-05-17 — r121: Round A verification — G-51 captured
+
+User ran r120. **Massive progress** — got past every prior gotcha
+and made it deep into the build stage. Key new milestones:
+
+```
+[3/4] STEP 7/7: RUN conan profile detect --force  &&
+                if [ -s conan.lock ]; then ...
+                else rm -f conan.lock && conan install . ... ; fi  &&
+                cmake --preset release-debuginfo  &&
+                cmake --build --preset release-debuginfo -j"$(nproc)"
+detect_api: Found cc=gcc-14.2.1
+[...]
+gtest/1.14.0: Not found in local cache, looking in remotes...
+gtest/1.14.0: Checking remote: conancenter
+gtest/1.14.0: Downloaded recipe revision f8f0757a574a8dd747d16af62d6eb1b7
+[...]
+gtest/1.14.0: Building from source
+[...]
+[100%] Built target gmock_main
+[...]
+gtest/1.14.0: Package 'a399991238364e76af16da39d8c748a67d395927' created
+[...]
+Install finished successfully
+```
+
+Everything I worried about in r120 worked:
+
+- ✓ G-50 rm-before-install: clean route through else-branch
+- ✓ conan reached conancenter (no firewall issues for this user)
+- ✓ gtest/1.14.0 downloaded + built from source inside the container
+- ✓ conan generated CMakeDeps + CMakeToolchain
+- ✓ `find_package(GTest)` config emitted
+- ✓ profiles correctly auto-detected gcc 14.2.1 with libstdc++11
+
+Then **cmake --preset release-debuginfo failed** with:
+
+```
+CMake Error at /usr/share/cmake/Modules/CMakeDetermineSystem.cmake:154 (message):
+  Could not find toolchain file:
+  /src/build/release-debuginfo/conan_toolchain.cmake
+```
+
+But conan's own output showed where it ACTUALLY put the toolchain:
+
+```
+conanfile.py (demo07/1.0.0): Writing generators to
+    /src/build/release-debuginfo/build/RelWithDebInfo/generators
+```
+
+Two different paths. **Path mismatch.**
+
+**G-51 root cause.** Conan's `cmake_layout()` helper (called from
+conanfile.py's `layout()` method) uses a nested directory layout:
+when invoked with `--output-folder=build/release-debuginfo` and
+`-s build_type=RelWithDebInfo`, it writes the toolchain file to:
+
+```
+<output-folder>/build/<BuildType>/generators/conan_toolchain.cmake
+```
+
+— that's `build/release-debuginfo/build/RelWithDebInfo/generators/`,
+NOT `build/release-debuginfo/`. Our CMakePresets.json's `_base`
+preset hardcoded the flat path:
+
+```json
+"CMAKE_TOOLCHAIN_FILE":
+    "${sourceDir}/build/${presetName}/conan_toolchain.cmake"
+```
+
+so CMake looked at the wrong place, didn't find it, and bailed before
+loading the toolchain (which explains the cascading errors after:
+"CMake was unable to find a build program corresponding to Ninja",
+"CMAKE_CXX_COMPILER not set" — these are downstream of the missing
+toolchain).
+
+**Fix options considered:**
+
+1. **Update preset paths to match cmake_layout's nested structure.**
+   Painful because the nested path depends on the build_type as a
+   string with mixed case (`RelWithDebInfo`, not `relwithdebinfo`),
+   which doesn't map cleanly to `${presetName}`. Each preset would
+   need a hard-coded nested path.
+
+2. **Inherit from conan's auto-generated `conan-relwithdebinfo`
+   preset.** This is the canonical conan 2.x + cmake_layout
+   integration: conan writes a `CMakeUserPresets.json` that defines
+   `conan-relwithdebinfo`, our `release-debuginfo` preset would
+   `inherit` from it. Idiomatic but adds dependency on conan-generated
+   presets being present at preset-resolution time, and requires
+   handling the `binaryDir` collision (conan's preset uses the nested
+   binaryDir, ours uses flat).
+
+3. **Drop `cmake_layout()` from conanfile.py.** Use a flat layout where
+   generators land directly at `--output-folder`. Our existing preset
+   paths work as-is.
+
+**Chosen: option 3.** Simplest, least disruption, our `--output-folder`
+becomes the actual build directory, which matches our `binaryDir`,
+which matches our `CMAKE_TOOLCHAIN_FILE` path. Every preset's paths
+line up. The only thing we lose is the multi-config build layout
+(having Debug + RelWithDebInfo side by side under one output folder),
+but we already use SEPARATE output folders per preset (`build/release-
+debuginfo` for build stage, `build/asan` for asan stage), so we never
+relied on conan's multi-config nesting anyway.
+
+```python
+def layout(self):
+    self.folders.generators = "."
+    self.folders.build = "."
+```
+
+Tiny cleanup also: the conanfile.py's class was still `Demo06Conan`
+from the demo-06 → demo-07 mass rename a few rounds back. Fixed to
+`Demo07Conan`. Cosmetic only.
+
+**Round A verification status after r121:**
+
+| Step | r114-r119 | r120 | r121 |
+|---|---|---|---|
+| host-side lockfile regen | ✓ (G-48) | ✓ | ✓ |
+| Stream 9 libabigail-builder | ✓ | ✓ | ✓ |
+| EPEL + toolchain installs | ✓ | ✓ | ✓ |
+| libabigail tools COPY | ✓ | ✓ | ✓ |
+| conan install in container | ✗ G-50 | ✓ (G-50 fix) | ✓ |
+| conan resolves gtest from conancenter | not reached | ✓ | ✓ |
+| **cmake --preset (toolchain location)** | not reached | ✗ G-51 | **next to verify** |
+| cmake build (compile demo source) | not reached | not reached | after G-51 |
+| analyzer (cppcheck + clang-tidy) | not reached | not reached | after build |
+| tests + asan + abi | not reached | not reached | after build |
+
+**Files changed in r121 (2):**
+
+- `examples/demo-07-quality-pipeline/conanfile.py`: G-51 — replace
+  `cmake_layout(self)` with explicit flat layout (`self.folders.
+  generators = "."`, `self.folders.build = "."`); drop now-unused
+  `cmake_layout` import; rename class `Demo06Conan` → `Demo07Conan`
+- `_plans/reconciliation-plan.md`: this r121 entry + G-51 catalog.
+
+**Next likely issues:**
+
+1. `run-clang-tidy` script path on UBI 9 — clang-tools-extra puts it
+   at `/usr/share/clang/run-clang-tidy.py` typically, not `$PATH`.
+   Our CMake `add_custom_target` may need adjustment.
+2. cppcheck false positives or real findings against demo source.
+3. clang-tidy strict mode (`WarningsAsErrors=*`) catching idiomatic
+   things in the demo we'd want to suppress.
+4. abi stage's reference file generation workflow.
+
+---
+
+## Gotchas (running catalog) — continued
+
+### G-51 · `cmake_layout()` nests generators; CMakePresets.json hardcodes flat paths (r121)
+
+**Symptom.** Inside a build stage after `conan install` succeeds:
+
+```
+CMake Error at .../CMakeDetermineSystem.cmake:154 (message):
+  Could not find toolchain file:
+  /src/build/release-debuginfo/conan_toolchain.cmake
+```
+
+even though conan reported it had written the toolchain successfully
+just moments earlier. Look closely at conan's output and you'll see
+the path conan ACTUALLY used:
+
+```
+conanfile.py: Writing generators to
+    /src/build/release-debuginfo/build/RelWithDebInfo/generators
+```
+
+— that's two layers deeper than CMake is looking.
+
+**Cause.** Conan 2.x's `cmake_layout()` helper (from `conan.tools.cmake`)
+sets up a **multi-config nested layout**:
+
+```
+<output-folder>/
+└── build/
+    └── <BuildType>/        ← "Debug", "Release", "RelWithDebInfo", "MinSizeRel"
+        └── generators/
+            ├── conan_toolchain.cmake
+            ├── <Package>Config.cmake (from CMakeDeps)
+            └── CMakePresets.json (with conan-<buildtype> preset)
+```
+
+The nested structure lets you build multiple build_types side by side
+in one output-folder. Useful for IDE-style workflows where you toggle
+between Debug and Release.
+
+But if your `CMakePresets.json` hardcodes a flat path:
+
+```json
+"CMAKE_TOOLCHAIN_FILE":
+    "${sourceDir}/build/${presetName}/conan_toolchain.cmake"
+```
+
+— that path doesn't include the `build/<BuildType>/generators/` nesting
+that cmake_layout produces. CMake doesn't find the file, can't load
+the toolchain, and falls back to defaults (which fail because gcc-toolset
+isn't on the default search path, ninja isn't `make`, etc.).
+
+**Fix.** Two reasonable approaches:
+
+1. **Inherit from conan's auto-generated preset (idiomatic).** Conan
+   writes a preset called `conan-<buildtype>` to `CMakeUserPresets.json`.
+   Inherit from it in your own preset:
+
+   ```json
+   {
+     "name": "release-debuginfo",
+     "inherits": ["_base", "conan-relwithdebinfo"]
+   }
+   ```
+
+   This is the recommended conan 2.x approach. Works correctly with
+   `cmake_layout()`. Costs: your preset names get tied to specific
+   build_types, and you need to manage `binaryDir` carefully (conan's
+   preset sets it to the nested path; if your preset also sets it,
+   the later one wins).
+
+2. **Use a flat layout (simpler for single-build-type workflows).**
+   Drop `cmake_layout()` from conanfile.py and use explicit folders:
+
+   ```python
+   def layout(self):
+       self.folders.generators = "."
+       self.folders.build = "."
+   ```
+
+   Now `--output-folder=build/release-debuginfo` IS the build directory,
+   the toolchain file lands at `build/release-debuginfo/conan_toolchain.
+   cmake` directly, and your hardcoded preset paths work as-is.
+
+This demo chose option 2 because each preset uses a SEPARATE
+`--output-folder` (`build/release-debuginfo` for the build stage,
+`build/asan` for the asan stage), so we never relied on the
+multi-config nesting anyway. Adopting option 2 means our flat
+preset paths just work.
+
+**Where else this applies.** Any project that:
+- Uses `cmake_layout()` in conanfile.py
+- Writes its own CMakePresets.json with hardcoded toolchain paths
+- Sees "Could not find toolchain file" after `conan install` succeeds
+
+Look in conan's output for the line `Writing generators to <path>` —
+that's the actual location. Update your preset to inherit from
+`conan-<buildtype>`, or drop `cmake_layout()`.
+
+The error message ("CMake was unable to find a build program
+corresponding to Ninja", "CMAKE_CXX_COMPILER not set") is a misleading
+cascade — the real cause is the missing toolchain file from a few
+lines earlier in the output.
+
 ---
 
 ## Known divergences from the PRD
