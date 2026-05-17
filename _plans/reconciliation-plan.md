@@ -16932,6 +16932,270 @@ is missing from our base" situation. Useful for:
 Audit on next pass: if demo-08 or future demos need other
 not-in-EPEL tools, this is the template.
 
+### 2026-05-17 — r118: Round A verification — G-47 + G-48 captured
+
+User ran r117. The libabigail-builder stage started and failed at
+the dnf install step:
+
+```
+Red Hat Universal Base Image 9 (RPMs) - BaseOS / AppStre / CodeRea
+No match for argument: elfutils-devel
+Error: Unable to find a match: elfutils-devel
+```
+
+All other r117 packages (gcc, gcc-c++, make, git, autoconf, automake,
+libtool, pkgconfig, libxml2-devel) resolved cleanly. Only
+`elfutils-devel` failed. Same pattern as G-46 (libabigail) and
+G-45 (cppcheck) before it: a package that's in the *full* RHEL 9
+CRB but trimmed from UBI 9's CRB subset.
+
+User also explicitly noted a second concern: the conan.lock placeholder
+file persists between tarball extractions, and we're now `rm -f`-ing
+it in demo.sh's fallback path. This would break the Containerfile's
+unconditional `COPY conan.lock` — though we haven't seen it bite yet
+because the build hasn't gotten past libabigail-builder.
+
+**Constraint clarified by user**: stick strictly to Red Hat + upstream
+Fedora ecosystem. No Oracle Linux. No SuSE. **This rules out**
+downloading libabigail RPMs from Oracle Linux's CRB (which has
+`libabigail-2.4-3.el9.x86_64.rpm`) as an alternative. Source build
+from sourceware.org (the actual upstream — where Fedora's elfutils
+and libabigail packages originate) IS allowed and aligns with the
+user's stated preference.
+
+**G-47 fix: build elfutils 0.190 from source** in the same libabigail-builder
+stage, before libabigail. New build sequence:
+
+```dockerfile
+FROM ubi9/ubi AS libabigail-builder
+
+# Build deps (no elfutils-devel — building it ourselves)
+RUN dnf install -y gcc gcc-c++ make git autoconf automake libtool \
+        pkgconfig m4 flex bison gettext \
+        libxml2-devel bzip2-devel xz-devel zlib-devel
+
+# Build elfutils 0.190 (same version RHEL 9 ships in full CRB)
+RUN cd /tmp \
+ && git clone https://sourceware.org/git/elfutils.git \
+ && cd elfutils && git checkout elfutils-0.190 \
+ && autoreconf -i \
+ && ./configure --prefix=/usr/local --disable-static \
+        --disable-debuginfod --disable-libdebuginfod \
+ && make -j"$(nproc)" && make install
+
+# Build libabigail 2.6 against our local elfutils
+RUN cd /tmp \
+ && git clone https://sourceware.org/git/libabigail.git \
+ && cd libabigail && git checkout libabigail-2.6 \
+ && ./autogen.sh \
+ && PKG_CONFIG_PATH=/usr/local/lib/pkgconfig \
+    CPPFLAGS=-I/usr/local/include \
+    LDFLAGS="-L/usr/local/lib -Wl,-rpath,/usr/local/lib" \
+    ./configure --prefix=/usr/local --disable-static \
+ && make -j"$(nproc)" && make install
+```
+
+`--disable-debuginfod`/`--disable-libdebuginfod` flags on elfutils skip
+the libcurl + libmicrohttpd build deps we don't need for ABI analysis.
+The `-Wl,-rpath,/usr/local/lib` linker flag bakes the local lib path
+into the libabigail binaries so they find our elfutils libs at runtime
+without needing LD_LIBRARY_PATH (though we set that too).
+
+Build time penalty: ~3-5 minutes for elfutils + ~3-5 minutes for
+libabigail = ~6-10 minutes for first build. Cached as layers after.
+
+**G-48 fix: truncate placeholder lockfile instead of deleting.**
+
+User correctly spotted that the script's `rm -f conan.lock` fallback
+breaks the Containerfile's unconditional `COPY conan.lock ./conan.lock`.
+Even though we haven't hit this yet (the build dies earlier), it would
+have bitten the next round.
+
+The two requirements:
+1. Containerfile's `COPY conan.lock` needs the file to EXIST on host
+2. Container's `if [ -s conan.lock ]` test needs the file to be EMPTY
+   for the fresh-resolve branch to fire
+
+Both satisfied by truncating to zero bytes (`> conan.lock`) instead
+of deleting. The file exists (size 0), so COPY succeeds; `[ -s ]`
+returns false because size is 0, so the container's else-branch
+(fresh resolve via `conan install --build=missing`) fires.
+
+```bash
+if [[ $regen_succeeded -eq 0 ]]; then
+  log_warn "truncating placeholder lockfile to zero bytes"
+  log_warn "the build container will resolve dependencies fresh on first run"
+  > conan.lock
+fi
+```
+
+Also improved the warning messages to explain WHY host regen often
+fails (conan validates the profile *before* applying `-s` overrides,
+so a stale profile with an unsupported gcc version stops the regen
+even with explicit settings).
+
+**Round A verification status after r118:**
+
+| Step | r114-r117 | r118 |
+|---|---|---|
+| host-side lockfile regen | ✗ fallback fires | ✓ (G-48 truncate keeps file for COPY) |
+| dnf install cppcheck | ✓ (G-45 EPEL) | ✓ |
+| dnf install libabigail | ✓ (G-46 source) | ✓ |
+| dnf install elfutils-devel | ✗ "no match" | ✓ (G-47 elfutils from source) |
+| libabigail-builder completes | not reached | next to verify |
+| analyzer/tests/asan/abi run | not reached | after libabigail-builder |
+
+**Tarball-shipping confirmation again**: r118 contains all changes from
+r109 through r118 cumulatively. User only needs to extract r118.
+
+**Build-time pedagogy note**: the libabigail-builder stage now takes
+6-10 min on first build. This is a real cost of "UBI everywhere + no
+third-party RPMs" — would be relevant for §4 image-strategy discussion
+if we wanted to be honest about the tradeoff. The §4 prose doesn't
+currently mention this, but a future round could add a note.
+
+**Next likely issues (carrying over):**
+
+1. `run-clang-tidy` script path on UBI 9 (may live in `/usr/share/clang/`
+   rather than `$PATH`).
+2. Conan sanitizer-flag propagation to gtest in asan stage.
+3. cppcheck noise against demo source.
+4. `git clone` from sourceware.org reliability — now happens TWICE
+   (elfutils + libabigail). If sourceware is unreachable, both fail.
+5. `elfutils-0.190` and `libabigail-2.6` tag naming assumptions.
+6. Toolchain stage's `elfutils-libs` runtime dep — we still have it
+   listed but might not need it now that the COPY brings in our own
+   libdw.so / libelf.so / libasm.so. Probably harmless to keep;
+   would be cleanup work.
+
+**Files changed in r118 (2):**
+
+- `examples/demo-07-quality-pipeline/Containerfile`: libabigail-builder
+  stage now builds BOTH elfutils 0.190 AND libabigail 2.6 from source.
+  Extra build deps (m4, flex, bison, gettext, bzip2-devel, xz-devel,
+  zlib-devel) added for elfutils. `-Wl,-rpath` flag bakes /usr/local/lib
+  into the binaries.
+- `examples/demo-07-quality-pipeline/demo.sh`: G-48 — replaced `rm -f
+  conan.lock` with `> conan.lock` (truncate). Also extracted the
+  success/failure tracking into a `regen_succeeded` flag for clarity,
+  and added a helpful warning explaining why host-side conan regen
+  often fails despite explicit `-s` overrides.
+
+---
+
+## Gotchas (running catalog) — continued
+
+### G-47 · `elfutils-devel` not in UBI 9's CRB subset (r118)
+
+**Symptom.** Inside a UBI 9 build:
+
+```
+No match for argument: elfutils-devel
+Error: Unable to find a match: elfutils-devel
+```
+
+Even though BaseOS, AppStream, and CodeReady Builder are all enabled.
+
+**Cause.** Same shape as G-46 (libabigail). UBI 9 ships
+`elfutils-libelf-devel` (just libelf headers — `libelf.h`, `gelf.h`)
+in BaseOS, but the broader `elfutils-devel` package (which provides
+`libdw.h`, `libdwfl.h`, `libasm.h`, `libebl.h`) lives in RHEL 9's
+full CRB and is trimmed from UBI 9's CRB subset.
+
+If you only need libelf — for example, you're writing a basic ELF
+inspector — `elfutils-libelf-devel` is enough. But anything that
+needs DWARF parsing (libdw) — kernel modules, debugging tools,
+ABI compatibility checkers like libabigail, perf tooling — needs
+the broader package.
+
+**Fix.** Build elfutils from source in a dedicated multi-stage
+builder. Same template as G-46.
+
+```dockerfile
+RUN cd /tmp \
+ && git clone https://sourceware.org/git/elfutils.git \
+ && cd elfutils \
+ && git checkout elfutils-0.190 \
+ && autoreconf -i \
+ && ./configure --prefix=/usr/local --disable-static \
+        --disable-debuginfod --disable-libdebuginfod \
+ && make -j"$(nproc)" \
+ && make install
+```
+
+Build deps (on UBI 9): `gcc gcc-c++ make autoconf automake libtool
+pkgconfig m4 flex bison gettext bzip2-devel xz-devel zlib-devel`.
+
+`--disable-debuginfod` and `--disable-libdebuginfod` skip the libcurl
++ libmicrohttpd build dependencies. The debuginfod tooling is useful
+for *interactive* debugging but unnecessary for ABI analysis.
+
+Build time: ~3-5 minutes.
+
+Tag pinning: `elfutils-0.190` matches the version RHEL 9 ships in
+full CRB. Other tags follow the `elfutils-X.YYY` convention.
+
+**Where else this applies.** Any UBI 9 build that wants:
+- libdw / DWARF parsing (kernel tools, profilers, debuggers)
+- libabigail (G-46)
+- bcc/bpftrace (some configurations need libdw)
+- perf tooling building from source
+- systemtap
+
+If your container uses any of these and you're seeing "missing
+header `libdw.h`" or "elfutils-devel not found", this is the
+template.
+
+### G-48 · `rm -f conan.lock` breaks Containerfile's unconditional `COPY conan.lock` (r118)
+
+**Symptom.** Would have surfaced as:
+
+```
+Error: error building at STEP "COPY conan.lock ./conan.lock":
+checking on sources under "/path": copier: stat: lstat conan.lock:
+no such file or directory
+```
+
+…on a build attempt right after the host-side lockfile-regen fallback
+deleted the placeholder lockfile. We didn't actually hit this in
+verification — earlier failures (G-44, G-45, G-46, G-47) stopped the
+build before the COPY step. But the user spotted the impending bug
+during code review and was correct.
+
+**Cause.** The Containerfile has an unconditional `COPY conan.lock
+./conan.lock`. Inside the container, we test `if [ -s conan.lock ];
+then ... use --lockfile=conan.lock ... else ... resolve fresh ... fi`
+— the `[ -s ]` test handles empty/missing lockfiles gracefully INSIDE
+the container. But for `COPY` to work, the file must exist on the HOST.
+
+When demo.sh's fallback ran `rm -f conan.lock`, the file was gone, so
+the next `podman build` would have failed at `COPY conan.lock` with
+"no such file or directory" — before any of our graceful handling
+inside the container could fire.
+
+**Fix.** Truncate to zero bytes instead of deleting:
+
+```bash
+> conan.lock   # 0-byte file: exists for COPY, fails [ -s ] inside
+```
+
+Two invariants satisfied:
+- The file exists on the host → `COPY conan.lock ./conan.lock` succeeds
+- The file is empty inside the container → `[ -s conan.lock ]` returns
+  false → the else-branch (resolve fresh) fires
+
+This is a pattern worth knowing in general: when you have a Containerfile
+that needs to handle "either an explicit input or no input," `COPY` is
+unconditional. The least-friction fix is to ensure the file ALWAYS
+exists (possibly empty) and let downstream `[ -s ]` / `[ -f ]` /
+`[ "$content" ]` tests inside the container do the actual routing.
+
+**Where else this applies.** Demo-04 has a similar conan.lock pattern;
+audit on next pass. Other places: any "optional input file" Containerfile
+COPY (license files, config overlays, debug-flag files). The "ensure
+the file exists, route based on content" pattern is more robust than
+"delete missing files."
+
 ---
 
 ## Known divergences from the PRD

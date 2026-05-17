@@ -1,13 +1,19 @@
 ARG UBI_VERSION=9.4
 
-# ---- libabigail builder stage ----
+# ---- elfutils + libabigail builder stage ----
 # libabigail (provider of abidiff/abidw used by the abi stage) is not
 # packaged in EPEL 9, and UBI 9's CRB subset doesn't include it either.
 # Red Hat ships it in RHEL 9's full CodeReady Builder repo but that's
 # subscription-gated and not available in UBI. Building from source in a
 # dedicated builder stage keeps the "UBI everywhere" tutorial preference
-# (see G-46 in the reconciliation plan). This stage is ~3-5 min on first
-# build, cached as one layer thereafter.
+# (see G-46 in the reconciliation plan).
+#
+# G-47: libabigail needs libdw + libasm headers from elfutils-devel, but
+# UBI 9's CRB subset only ships elfutils-libelf-devel (libelf headers).
+# So we build elfutils from source FIRST, then build libabigail against
+# our local elfutils. Both upstreams are at sourceware.org — same
+# Fedora/RHEL ecosystem this whole demo lives in.
+# Build time: ~6-10 min on first build, cached as layers thereafter.
 FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS libabigail-builder
 RUN rm -f /etc/yum.repos.d/redhat.repo && \
     sed -i 's/^enabled=1/enabled=0/' \
@@ -21,17 +27,42 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         automake \
         libtool \
         pkgconfig \
+        m4 \
+        flex \
+        bison \
+        gettext \
         libxml2-devel \
-        elfutils-devel \
+        bzip2-devel \
+        xz-devel \
+        zlib-devel \
     && dnf clean all
-# Clone libabigail and check out a known-stable release tag. Full clone
-# (not --depth=1) because we need git history to resolve the tag.
+
+# Build elfutils 0.190 from source. Same version RHEL 9 ships in its full
+# CRB (the one UBI doesn't include). --disable-debuginfod skips the
+# libcurl + libmicrohttpd build deps we don't need for ABI analysis.
+RUN cd /tmp \
+ && git clone https://sourceware.org/git/elfutils.git \
+ && cd elfutils \
+ && git checkout elfutils-0.190 \
+ && autoreconf -i \
+ && ./configure --prefix=/usr/local \
+        --disable-static \
+        --disable-debuginfod \
+        --disable-libdebuginfod \
+ && make -j"$(nproc)" \
+ && make install \
+ && cd / && rm -rf /tmp/elfutils
+
+# Build libabigail 2.6 against our just-built elfutils.
 RUN cd /tmp \
  && git clone https://sourceware.org/git/libabigail.git \
  && cd libabigail \
  && git checkout libabigail-2.6 \
  && ./autogen.sh \
- && ./configure --prefix=/usr/local --disable-static \
+ && PKG_CONFIG_PATH=/usr/local/lib/pkgconfig \
+    CPPFLAGS=-I/usr/local/include \
+    LDFLAGS="-L/usr/local/lib -Wl,-rpath,/usr/local/lib" \
+    ./configure --prefix=/usr/local --disable-static \
  && make -j"$(nproc)" \
  && make install \
  && cd / && rm -rf /tmp/libabigail
