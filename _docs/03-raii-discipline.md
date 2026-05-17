@@ -3,7 +3,7 @@ layout: tutorial
 order: 3
 title: "RAII & Container Resource Discipline"
 description: "Deterministic cleanup is a vibe on a fat host and a survival skill in a 256MB cgroup."
-duration: "~12 min"
+duration: "10 minutes"
 kind: Concepts
 ---
 
@@ -20,7 +20,7 @@ in the function. Constructor acquires; destructor releases;
 the language runs both for you on every exit path, including
 the exit paths you forgot existed.
 
-{% include excalidraw.html name="03-raii-discipline" caption="RAII vs manual cleanup: parallel function flows showing how RAII destructors fire on every exit path while manual close() loses the resource on early returns and exceptions" %}
+{% include excalidraw.html name="03-raii-discipline" caption="RAII vs manual cleanup: destructors fire on every exit path." %}
 
 On a development workstation with 64 cores, 64 GB of RAM, and
 nothing else competing, leaking a few hundred file descriptors

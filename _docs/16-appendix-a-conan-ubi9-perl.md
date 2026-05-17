@@ -2,7 +2,7 @@
 title: "Appendix A — Conan, autotools, and UBI 9's minimal perl"
 order: 16
 description: "A survival guide for building autotools-based C++ deps (libcurl, c-ares, openssl, etc.) on UBI 9 via Conan, learned the hard way during demo-04."
-duration: 8 minutes
+duration: "10 minutes"
 ---
 
 ## Why this exists

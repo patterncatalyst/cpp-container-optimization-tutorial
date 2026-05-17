@@ -2,7 +2,7 @@
 title: "Prerequisites"
 order: 1
 description: Fedora 44, Podman 5.x rootless, the C++ toolchain (GCC 14 / Clang 18, Conan 2, CMake, Ninja), supporting tools (hey, jq, libabigail, bpftrace), and the host-check script that confirms everything is wired correctly before you touch the demos.
-duration: "30–45 minute read; 15–25 minutes to install"
+duration: "15 minutes (+ install)"
 ---
 
 This section is the gate. None of the demos will run cleanly if your
@@ -19,7 +19,7 @@ before you commit to running a demo.
 ## Diagram
 
 {% include excalidraw.html name="01-prerequisites-toolchain"
-   caption="What gets installed where: Fedora packages, gcc-toolset-14, Conan caches, Podman storage, and what reaches across each boundary." %}
+   caption="What gets installed where: Fedora packages, toolchain, Conan, Podman storage." %}
 
 ## Why Fedora 44
 

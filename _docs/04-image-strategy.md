@@ -2,7 +2,7 @@
 title: "Container Strategy: UBI, ubi-micro, multi-stage"
 order: 4
 description: How a multi-stage Containerfile drops the same C++ service from 689 MB to 26.4 MB without sacrificing the toolchain you needed at compile time, and how to pick between UBI's runtime tiers (ubi, ubi-minimal, ubi-micro).
-duration: 12 minutes
+duration: "10 minutes"
 ---
 
 ## Learning objectives
@@ -27,7 +27,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="04-image-strategy-multistage" caption="Single-stage vs multi-stage Containerfile, with what's actually inside each image" %}
+{% include excalidraw.html name="04-image-strategy-multistage" caption="Single-stage vs multi-stage Containerfile." %}
 
 ## The 689 MB problem
 

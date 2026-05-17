@@ -2,7 +2,7 @@
 title: "STL, Layout, and C++20/23 Containers"
 order: 6
 description: Why `boost::container::flat_map` is 2.5× faster than `std::unordered_map` and 35× faster than `std::map` on a real iterate workload, where the gap comes from, and the silent-overhead choices that betray "obvious" container picks.
-duration: 15 minutes
+duration: "15 minutes"
 ---
 
 ## Learning objectives
@@ -26,7 +26,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="06-stl-layout-flat-vs-node" caption="Memory layout: contiguous `vector` vs scattered node-based `list`/`map`, with cache-line costs labeled" %}
+{% include excalidraw.html name="06-stl-layout-flat-vs-node" caption="Memory layout: contiguous vector vs node-based containers." %}
 
 ## The 2.5× hidden in your container choice
 

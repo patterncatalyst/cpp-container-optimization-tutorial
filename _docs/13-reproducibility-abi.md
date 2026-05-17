@@ -2,7 +2,7 @@
 title: "Reproducibility & ABI: Conan, CMake Presets, Hermetic Builds, Coverage"
 order: 13
 description: Conan lockfiles + CMake presets + ABI labels + abidiff give you binary-identical builds across time and machines; Konflux and Cachi2 give you those builds without network access at build time; gcov/lcov and clang source-based coverage give you the test-quality signal that hermetic builds preserve across regenerations.
-duration: 15 minutes
+duration: "20 minutes"
 ---
 
 ## Learning objectives
@@ -30,7 +30,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="13-reproducibility-conan-flow" caption="Hermetic build flow: Conan inputs → conan install → conan_toolchain.cmake + conan.lock → cmake/ninja → reproducible binary" %}
+{% include excalidraw.html name="13-reproducibility-conan-flow" caption="Hermetic build: Conan → CMake/Ninja → reproducible binary." %}
 
 ## What reproducibility actually means
 

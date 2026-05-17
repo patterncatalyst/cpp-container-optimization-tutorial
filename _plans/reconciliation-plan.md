@@ -19997,12 +19997,132 @@ diagrams/ correctly separated from assets/, presentation/ listed.
 | Round | Items | What lands |
 |---|---|---|
 | r130 | 3, 4, 7, 9 | shipped + cleanup pushed |
-| **r131** | **6 (cross-refs) + README rewrite** | **THIS ROUND** |
-| r132 | 8, 10 | reading-time audit + diagram caption simplification |
+| **r131** | **6 (cross-refs) + README rewrite** | shipped + verified |
+| **r132** | **8, 10 + diagrams.html gallery bug** | **THIS ROUND** |
 | r133 | 1 | 11 excalidraw+svg pairs for Statelessness sections 01-11 |
 | r134 | 2 | per-demo Jekyll wrapper pages + README augmentation |
 | r135 | 5, 12 | PRD.md update + bibliography link |
 | r136 | 11 (note only) | PPTX is 3-hour-only confirmed |
+
+### 2026-05-17 — r132: reading-time audit + diagram caption cleanup + gallery filename bug
+
+**Three fixes, two planned + one bonus.**
+
+#### Item 8 — reading-time audit (planned)
+
+The site renders `⏱ {{ doc.duration }}` from each section's frontmatter
+`duration:` field. Audited 17 sections by stripping frontmatter and
+running `wc -w` on the body, then dividing by 200 wpm to get a
+baseline estimate. Found three issues:
+
+1. **Inconsistent format.** Five different formats in use:
+   `"5–10 minute read"`, `"30–45 minute read; 15–25 minutes to
+   install"`, `"~12 min"`, `18 minutes` (unquoted), `15 minutes`
+   (unquoted).
+
+2. **Underestimates on two long sections:**
+   - `12-analysis-debugging.md`: claimed 15 min, body is 4506 words
+     (~22.5 min @200wpm). Fixed to 25 minutes.
+   - `13-reproducibility-abi.md`: claimed 15 min, body is 4025 words
+     (~20.1 min @200wpm). Fixed to 20 minutes.
+
+3. **Small drift on several others** (off by 2-5 min from actual).
+   Rounded each to nearest 5 minutes for consistency.
+
+Standardized format: `duration: "NN minutes"` (always quoted, plural).
+Exception: `01-prerequisites.md` keeps the install-time note as
+`"15 minutes (+ install)"` since install time is a meaningfully
+separate budget the reader cares about.
+
+Final values (in section order):
+
+| Section | Duration |
+|---|---|
+| 00-outline | 10 minutes |
+| 01-prerequisites | 15 minutes (+ install) |
+| 02-introduction | 15 minutes |
+| 03-raii-discipline | 10 minutes |
+| 04-image-strategy | 10 minutes |
+| 05-compile-time-wins | 10 minutes |
+| 06-stl-layout | 15 minutes |
+| 07-memory-management | 10 minutes |
+| 08-io-latency | 15 minutes |
+| 09-networking-kernel | 15 minutes |
+| 10-observability-profiling | 15 minutes |
+| 11-noisy-neighbors | 10 minutes |
+| 12-analysis-debugging | 25 minutes |
+| 13-reproducibility-abi | 20 minutes |
+| 14-pitfalls | 15 minutes |
+| 15-where-to-go-next | 5 minutes |
+| 16-appendix-a-conan-ubi9-perl | 10 minutes |
+
+Total: 225 minutes ≈ 3h 45m. Matches the 1.5-3h PPTX talk-time
+range well (PPTX is faster than reading because the deck condenses
+prose to one or two bullets per slide and the demos are timed).
+
+#### Item 10 — diagram caption cleanup (planned)
+
+User said: "Each of the diagrams currently has some large descriptor
+below them, just a simple description is fine". The captions live in
+the `caption=` parameter on the `{% include excalidraw.html %}`
+invocations inside `_docs/*.md`. Audited all 15 in-page embeds —
+most were 14-27 words long. Cut to 4-14 words each. Examples:
+
+- "Threading models laid out across the stackful/stackless axis
+  and the kernel-visible/invisible axis, with where each fits the
+  I/O-bound vs CPU-bound continuum" (25 words) →
+  "Threading models by stack model, kernel visibility, and I/O-
+  vs CPU-bound fit." (12 words)
+- "RAII vs manual cleanup: parallel function flows showing how
+  RAII destructors fire on every exit path while manual close()
+  loses the resource on early returns and exceptions" (27 words) →
+  "RAII vs manual cleanup: destructors fire on every exit path."
+  (10 words)
+- "The allocator stack: app → PMR resource → glibc malloc /
+  jemalloc / mimalloc → page cache → cgroup memory.high → cgroup
+  memory.max → host" (22 words) →
+  "Allocator stack: app → PMR → malloc → page cache → cgroups →
+  host." (11 words)
+
+Total caption word count: **262 → 127** across the 15 embeds
+(135 fewer words, roughly halved).
+
+#### BONUS — diagrams.html gallery filename bug (discovered, fixed)
+
+While auditing captions I noticed `diagrams.html` referenced
+filenames that don't exist on disk. Investigation: **11 of 14
+gallery entries were 404ing**, and one diagram (`03-raii-discipline`)
+was missing from the gallery entirely.
+
+The gallery was written with section-based numbering that diverged
+from the actual diagram filenames by one position starting at the
+4th entry. Disk has `04-image-strategy-multistage.svg`; gallery
+asked for `03-image-strategy-multistage.svg`. And so on down the
+list, all the way to `13-pitfalls-avx512-mismatch` (gallery) vs
+`14-pitfalls-avx512-mismatch.svg` (disk).
+
+Almost certainly the gallery was authored before the diagrams were
+renumbered to match section numbers — `03-raii-discipline` slotted
+in as the new §3 and pushed all the §3-13 entries up by one, but
+diagrams.html wasn't updated.
+
+The in-page embeds in `_docs/*.md` are correct (verified by checking
+each `name=` against disk; all 15 match). Only the gallery was
+broken.
+
+Fixed by rewriting the gallery block in `diagrams.html` with:
+- Correct filenames matching disk (all 14 distinct + the duplicate-§2)
+- `03-raii-discipline` entry added (now 15 entries vs the prior 14)
+- Section labels (§N) renumbered to match the actual section the
+  diagram belongs to
+- Captions updated to match the (now shorter) in-page caption set
+  for consistency
+
+**Files changed (count):**
+- 16 `_docs/*.md` files (15 caption changes, 17 duration changes;
+  three files had caption-only edits, the rest had both)
+- `diagrams.html` (entire gallery rewritten)
+- `_plans/reconciliation-plan.md` (this entry)
 
 ---
 

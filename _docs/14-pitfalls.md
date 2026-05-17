@@ -2,7 +2,7 @@
 title: "Pitfalls"
 order: 14
 description: AVX-512 mismatches that SIGILL on production, abstraction overhead invisible in the type system, container builds that take seven minutes for thirty seconds of compile, and the EPERM/EACCES rubric that tells you which security layer is denying you.
-duration: 12 minutes
+duration: "15 minutes"
 ---
 
 ## Learning objectives
@@ -28,7 +28,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="14-pitfalls-avx512-mismatch" caption="The AVX-512 mismatch trap: build host has it, runtime host doesn't, kernel sends SIGILL" %}
+{% include excalidraw.html name="14-pitfalls-avx512-mismatch" caption="AVX-512 mismatch: build host has it, runtime doesn't → SIGILL." %}
 
 ## The shape of a pitfall
 

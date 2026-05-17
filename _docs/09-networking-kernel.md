@@ -2,7 +2,7 @@
 title: "Networking & Kernel Parameters"
 order: 9
 description: What a veth pair actually costs, when `--network=host` is the right escape hatch, the small set of sysctls that move tail latency for C++ services, and the eBPF tooling for diagnosing network plumbing itself — bcc-tools, bpftrace, and bpftool.
-duration: 12 minutes
+duration: "15 minutes"
 ---
 
 ## Learning objectives
@@ -28,7 +28,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="09-networking-veth-vs-host" caption="Packet path under default veth+bridge vs slirp4netns vs `--network=host`" %}
+{% include excalidraw.html name="09-networking-veth-vs-host" caption="Packet path: veth+bridge vs slirp4netns vs --network=host." %}
 
 ## Where container networking latency actually comes from
 

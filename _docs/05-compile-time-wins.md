@@ -2,7 +2,7 @@
 title: "Compile-Time Wins: LTO, PGO, constexpr"
 order: 5
 description: Three compiler-side levers that move runtime performance — link-time optimization, profile-guided optimization, and constexpr — what each costs in build time, and a worked PGO pipeline that doesn't skip the workload step.
-duration: 12 minutes
+duration: "10 minutes"
 ---
 
 ## Learning objectives
@@ -24,7 +24,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="05-compile-time-pgo-flow" caption="Three-pass PGO build flow: instrument → profile → optimize, with the profile feedback loop in red" %}
+{% include excalidraw.html name="05-compile-time-pgo-flow" caption="Three-pass PGO: instrument → profile → optimize." %}
 
 ## What -O3 leaves on the table
 

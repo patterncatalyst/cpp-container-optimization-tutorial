@@ -2,7 +2,7 @@
 title: "Memory Management: Allocators, Huge Pages, cgroups v2, OOM"
 order: 7
 description: Where allocation cost actually lives, what PMR buys you, when transparent huge pages help, why standard allocators don't return memory to the OS, and how cgroups v2 + the OOM killer change everything above them.
-duration: 15 minutes
+duration: "10 minutes"
 ---
 
 ## Learning objectives
@@ -26,7 +26,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="07-allocator-stack" caption="The allocator stack: app → PMR resource → glibc malloc / jemalloc / mimalloc → page cache → cgroup memory.high → cgroup memory.max → host" %}
+{% include excalidraw.html name="07-allocator-stack" caption="Allocator stack: app → PMR → malloc → page cache → cgroups → host." %}
 
 ## Where the cost lives
 

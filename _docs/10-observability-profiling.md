@@ -2,7 +2,7 @@
 title: "Observability & Profiling: OTel, Grafana Stack, perf, eBPF"
 order: 10
 description: The single biggest performance knob in OpenTelemetry-cpp is the choice between SimpleSpanProcessor and BatchSpanProcessor — verified 8.5× throughput collapse with the wrong one. Plus the LGTM stack, perf and eBPF against containerized processes.
-duration: 18 minutes
+duration: "15 minutes"
 ---
 
 ## Learning objectives
@@ -29,7 +29,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="10-observability-otel-stack" caption="The Grafana observability stack: Prometheus + Tempo + Loki + Mimir + Grafana, with C++ application → OTel SDK → OTLP/gRPC exporter as the data path" %}
+{% include excalidraw.html name="10-observability-otel-stack" caption="OTel pipeline: C++ → OTel SDK → OTLP → Grafana stack." %}
 
 ## The single biggest knob
 

@@ -2,7 +2,7 @@
 title: "Static Analysis & Debugging in Containers"
 order: 12
 description: A static-analysis pipeline that catches bugs at build time, runtime sanitizers (ASan, UBSan, MSan, TSan) in containers, Valgrind for what sanitizers can't catch, Meta's Object Introspection for memory mysteries, and the ephemeral gdb sidecar pattern for the bugs that escape anyway.
-duration: 15 minutes
+duration: "25 minutes"
 ---
 
 ## Learning objectives
@@ -33,7 +33,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="12-debug-sidecar-pattern" caption="Ephemeral gdb sidecar attaching to a running container's PID namespace; the ASan-instrumented variant runs alongside as a separate container" %}
+{% include excalidraw.html name="12-debug-sidecar-pattern" caption="Ephemeral gdb sidecar sharing the service's PID namespace." %}
 
 ## Why analysis-and-debugging is one section
 

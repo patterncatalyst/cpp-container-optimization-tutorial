@@ -2,7 +2,7 @@
 title: "I/O Latency: io_uring, Async gRPC, SO_REUSEPORT"
 order: 8
 description: Why direct liburing achieves 274K req/s at 181µs p99 while the same workload through sync gRPC manages 4.85K RPS at 30.92ms p99 — a 60× throughput gap from where syscalls happen. Plus the container-security gates that block io_uring by default.
-duration: 15 minutes
+duration: "15 minutes"
 ---
 
 ## Learning objectives
@@ -29,7 +29,7 @@ By the end of this section you can:
 
 ## Diagram
 
-{% include excalidraw.html name="08-io-uring-rings" caption="`io_uring` Submission Queue and Completion Queue in shared memory between user-space and kernel" %}
+{% include excalidraw.html name="08-io-uring-rings" caption="io_uring SQ/CQ rings in shared memory." %}
 
 ## The 60× throughput gap
 

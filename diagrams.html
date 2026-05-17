@@ -10,9 +10,9 @@ permalink: /diagrams/
         <span class="hero__eyebrow">Reference</span>
         <h1>Excalidraw diagrams.</h1>
         <p class="hero__lead">
-            Fourteen diagrams covering the tutorial's architectures and
-            flows. Click any diagram to open it fullscreen. Each is also
-            available as <code>.excalidraw</code> source — open it on
+            Architecture and flow diagrams for the tutorial. Click any
+            diagram to open it fullscreen. Each is also available as
+            <code>.excalidraw</code> source — open it on
             <a href="https://excalidraw.com" rel="noopener">excalidraw.com</a>
             to edit.
         </p>
@@ -26,85 +26,91 @@ permalink: /diagrams/
                 file="01-prerequisites-toolchain"
                 section="§1"
                 title="Toolchain layout"
-                caption="What gets installed where: Fedora packages, gcc-toolset-14, Conan caches, Podman storage." %}
+                caption="What gets installed where: Fedora packages, toolchain, Conan, Podman storage." %}
 
             {% include diagram-card.html
                 file="02-introduction-four-layers"
                 section="§2"
                 title="The four-layer mental model"
-                caption="Compile time → image layout → kernel boundary → runtime isolation. Where each performance lever lives." %}
+                caption="The four-layer model: toolchain, image, kernel, runtime." %}
 
             {% include diagram-card.html
                 file="02-threading-models"
                 section="§2"
                 title="Threading models in C++"
-                caption="std::thread / jthread, library pools, Boost.Fibers, Boost.Context, C++20 coroutines — laid out by stack model and kernel visibility, with I/O-bound vs CPU-bound fit." %}
+                caption="Threading models by stack model, kernel visibility, and I/O- vs CPU-bound fit." %}
 
             {% include diagram-card.html
-                file="03-image-strategy-multistage"
+                file="03-raii-discipline"
                 section="§3"
-                title="Multi-stage image strategy"
-                caption="UBI builder → UBI-minimal runtime vs UBI-micro runtime; what gets discarded between stages." %}
+                title="RAII vs manual cleanup"
+                caption="RAII vs manual cleanup: destructors fire on every exit path." %}
 
             {% include diagram-card.html
-                file="04-compile-time-pgo-flow"
+                file="04-image-strategy-multistage"
                 section="§4"
-                title="LTO and PGO build flow"
-                caption="Two-pass PGO: instrumented build, training workload, llvm-profdata merge, optimized build." %}
+                title="Multi-stage image strategy"
+                caption="Single-stage vs multi-stage Containerfile." %}
 
             {% include diagram-card.html
-                file="05-stl-layout-flat-vs-node"
+                file="05-compile-time-pgo-flow"
                 section="§5"
-                title="Flat vs node containers"
-                caption="std::set node-pointer chase vs std::flat_set contiguous walk; cache-line implications." %}
+                title="LTO and PGO build flow"
+                caption="Three-pass PGO: instrument → profile → optimize." %}
 
             {% include diagram-card.html
-                file="06-allocator-stack"
+                file="06-stl-layout-flat-vs-node"
                 section="§6"
-                title="Allocator stack"
-                caption="App → PMR resource → glibc/jemalloc/mimalloc → page cache → cgroup memory.high → memory.max → host." %}
+                title="Flat vs node containers"
+                caption="Memory layout: contiguous vector vs node-based containers." %}
 
             {% include diagram-card.html
-                file="07-io-uring-rings"
+                file="07-allocator-stack"
                 section="§7"
-                title="io_uring submission/completion"
-                caption="SQ and CQ rings, multishot accept, provided buffer ring, single-syscall amortization pattern." %}
+                title="Allocator stack"
+                caption="Allocator stack: app → PMR → malloc → page cache → cgroups → host." %}
 
             {% include diagram-card.html
-                file="08-networking-veth-vs-host"
+                file="08-io-uring-rings"
                 section="§8"
-                title="Container networking modes"
-                caption="Default rootless slirp/pasta vs --network=host; where the latency cost lives in each." %}
+                title="io_uring submission/completion"
+                caption="io_uring SQ/CQ rings in shared memory." %}
 
             {% include diagram-card.html
-                file="09-observability-otel-stack"
+                file="09-networking-veth-vs-host"
                 section="§9"
-                title="Observability stack"
-                caption="OTel-instrumented service → OTel Collector → Prometheus / Mimir / Tempo / Loki → Grafana." %}
+                title="Container networking modes"
+                caption="Packet path: veth+bridge vs slirp4netns vs --network=host." %}
 
             {% include diagram-card.html
-                file="10-isolation-cgroup-tree"
+                file="10-observability-otel-stack"
                 section="§10"
-                title="cgroup v2 weight & cpuset"
-                caption="Two-tenant cgroup tree: cpu.weight, cpuset.cpus, NUMA placement, what each knob actually controls." %}
+                title="Observability stack"
+                caption="OTel pipeline: C++ → OTel SDK → OTLP → Grafana stack." %}
 
             {% include diagram-card.html
-                file="11-debug-sidecar-pattern"
+                file="11-isolation-cgroup-tree"
                 section="§11"
-                title="Ephemeral gdb sidecar"
-                caption="Sidecar container shares PID namespace with the running service. gdb on, no gdb in the runtime image." %}
+                title="cgroup v2 weight & cpuset"
+                caption="Two-tenant cgroup hierarchy with delegated controllers." %}
 
             {% include diagram-card.html
-                file="12-reproducibility-conan-flow"
+                file="12-debug-sidecar-pattern"
                 section="§12"
-                title="Hermetic build pipeline"
-                caption="Conan lockfile → CMake preset → ninja → abidiff against reference; deterministic from first commit." %}
+                title="Ephemeral gdb sidecar"
+                caption="Ephemeral gdb sidecar sharing the service's PID namespace." %}
 
             {% include diagram-card.html
-                file="13-pitfalls-avx512-mismatch"
+                file="13-reproducibility-conan-flow"
                 section="§13"
+                title="Hermetic build pipeline"
+                caption="Hermetic build: Conan → CMake/Ninja → reproducible binary." %}
+
+            {% include diagram-card.html
+                file="14-pitfalls-avx512-mismatch"
+                section="§14"
                 title="The AVX-512 mismatch trap"
-                caption="Builder host has AVX-512, runtime host doesn't; SIGILL at first hot-path call. How to detect, how to avoid." %}
+                caption="AVX-512 mismatch: build host has it, runtime doesn't → SIGILL." %}
         </div>
     </div>
 </section>

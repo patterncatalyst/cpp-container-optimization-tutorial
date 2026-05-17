@@ -2,7 +2,7 @@
 title: Introduction & Mental Model
 order: 2
 description: Why container constraints change C++ performance reasoning, the four-layer model the rest of the tutorial hangs off, and the cross-cutting concepts (LTO, PGO, PIE/ASLR, threading models) every later section references.
-duration: 18 minutes
+duration: "15 minutes"
 ---
 
 ## Why this isn't just C++ tuning
@@ -35,7 +35,7 @@ story straight.
 This tutorial is structured around four layers, in the order the
 photons hit them:
 
-{% include excalidraw.html name="02-introduction-four-layers" caption="The four-layer model: toolchain, image, kernel, runtime — and which sections live in each" %}
+{% include excalidraw.html name="02-introduction-four-layers" caption="The four-layer model: toolchain, image, kernel, runtime." %}
 
 1. **Toolchain.** Compiler, linker, optimization passes, profile
    data. LTO and PGO live here. So does PIE (the compiler-side
@@ -222,7 +222,7 @@ synthetic threads), and it's *measured* at the Runtime layer
 costs more inside a container than it does on bare metal because
 the cgroup is a smaller, harder ceiling than the host.
 
-{% include excalidraw.html name="02-threading-models" caption="Threading models laid out across the stackful/stackless axis and the kernel-visible/invisible axis, with where each fits the I/O-bound vs CPU-bound continuum" %}
+{% include excalidraw.html name="02-threading-models" caption="Threading models by stack model, kernel visibility, and I/O- vs CPU-bound fit." %}
 
 ### The lineup
 

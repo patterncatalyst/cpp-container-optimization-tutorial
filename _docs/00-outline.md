@@ -2,7 +2,7 @@
 title: "Outline & reading order"
 order: 0
 description: How this tutorial is organised, what each section covers, the 1.5h vs 3h presentation cuts, and what's deliberately out of scope.
-duration: "5–10 minute read"
+duration: "10 minutes"
 ---
 
 This page is the map. Read it once before you start, and come back
