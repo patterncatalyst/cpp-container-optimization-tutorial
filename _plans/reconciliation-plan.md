@@ -15267,6 +15267,202 @@ consolidates everything: the three §-anchor mini-essays, the seven
 verified demos (01-06 verified; 07 to be verified through Round
 A/B), and the 15 diagrams as visual anchors for the slide deck.
 
+### 2026-05-16 — r109: Path D — §4 + §5 prose, batch 1 of 4
+
+User flagged that the section-prose work was incomplete: only the
+three §-anchors (§7, §10, §11) had been built out to publishable
+quality; sections §4, §5, §6, §8, §9 were still ~60-line stubs
+with "## Planned content" headings, and §12, §13, §14 were
+partially-developed. The diagram path (E) shipped without the
+prose to match.
+
+**Plan accepted: 5 prose rounds in batches of 2, then a polish round.**
+
+- **r109: §4 + §5** — build-time pair (this round)
+- r110: §6 + §8 — demo-backed performance pair
+- r111: §9 + §14 — system-tuning pair
+- r112: §12 + §13 — quality/process pair
+- r113 polish: §3 cross-refs, §7 stale "Planned content" heading,
+  final audit
+
+**Forward-looking content additions captured for later rounds:**
+
+- §9 (r111) — add coverage of `bcctools` (BPF Compiler Collection
+  tools — `opensnoop`, `runqlat`, `tcptracer`, `tcpconnect`,
+  `tcpretrans`, `tcptop`), `bpftrace`, and `bpftool`. The angle is
+  *diagnosing network plumbing* (complementary to §10's existing
+  bpftrace coverage which is *profiling your service*). §10 already
+  cites runqlat / opensnoop / tcpconnlat for service profiling;
+  §9 will cover them for network kernel parameter tuning and
+  diagnosis.
+- §13 (r112) — add coverage of:
+  - **Konflux** (Red Hat's hermetic CI build system)
+  - **Cachi2** (Red Hat's prefetch tool for hermetic builds)
+  - **GoogleTest** for unit testing
+  - **gcov / lcov** for GCC-based coverage
+  - **clang source-based coverage** (`llvm-profdata` + `llvm-cov`)
+    — user linked
+    [the LLVM docs](https://clang.llvm.org/docs/SourceBasedCodeCoverage.html)
+    as the canonical reference
+- Optional **demo-08-ebpf-analysis** at the very end (post-r112) —
+  bcc-tools / bpftrace against a containerized service to capture
+  syscall histograms, network statistics, etc. Decision deferred
+  until r112 completes.
+
+**§4 image-strategy — full prose buildout (r109, this entry):**
+
+Stub at 57 lines → prose at 353 lines (~2150 words, 13 sections,
+9 cross-references). Structure matches the §10/§11 template:
+
+1. Frontmatter (refined description — names the 689 MB → 26.4 MB
+   collapse instead of generic "trade-offs")
+2. Learning objectives (5 bullets, consequence-focused)
+3. Diagram include
+4. **The 689 MB problem** — hook with verified demo-01 numbers;
+   table breaking down where the 685 MB of bloat lives (toolchain
+   ~400 MB, Conan cache ~200 MB, intermediates ~80 MB, source ~5 MB)
+5. **Multi-stage builds — the mechanism** — Containerfile example,
+   `COPY --from=build` explained as the entire trick
+6. **Choosing your runtime base** — `ubi9` vs `ubi9-minimal` vs
+   `ubi9-micro` decision table; the framing as "this is about your
+   incident-response posture, not the binary"
+7. **Layer caching — order COPY and RUN deliberately** — bad vs
+   good Containerfile orderings with explicit comments
+8. **ABI labels — tell future-you what's inside** — OpenContainers
+   standard labels + custom `ai.cpp-tutorial.*` labels for libc,
+   libstdc++, march, PGO, LTO state
+9. **The glibc-mismatch story** — foreshadows §14; cites demo-01's
+   `ubi-micro-glibc-mismatch` variant
+10. **Production diagnostic** — 5-step recipe (inspect labels,
+    history, file enumeration, ldd, sidecar ldd)
+11. **Why this is a C++ concern** — JVMs/Go carry runtime in
+    binary; C++ has implicit dynamic-lib + micro-arch dependencies
+    that ship invisibly
+12. Demo pointer with verified-number size table
+13. References (book chapters, UBI docs, OCI image-spec)
+14. What's next → §5 (with the prior misleading "§4 turns the
+    toolchain knob" sentence FIXED to "§5 turns the next knob")
+
+**§5 compile-time-wins — full prose buildout (r109):**
+
+Stub at 64 lines → prose at 359 lines (~2323 words, 13 sections,
+9 cross-references). Same template:
+
+1. Frontmatter (refined description names LTO + PGO + constexpr
+   as the three levers, calls out the workload-collection trap)
+2. Learning objectives (5 bullets)
+3. Diagram include (the 3-pass PGO flow)
+4. **What -O3 leaves on the table** — hook explaining the
+   cross-TU inlining gap and the layout-decision-on-guess gap
+5. **LTO — the link-time inliner** — mechanism (IR-emit at
+   compile, optimize-again at link), thin vs full decision table,
+   CMake one-liner to enable
+6. **PGO — three passes, one feedback loop** — explicit bash
+   pipeline (Pass 1 instrumented build, Pass 2 workload, Pass 3
+   profdata + final build), cites demo-01's 124 MB instrumented vs
+   114 MB pgo variants, walks through the four specific decisions
+   PGO drives (function layout, inlining heuristics, branch
+   reordering, register allocation)
+7. **The representative-workload trap** — three patterns to avoid
+   (microbenchmark profiles, single-tenant profiles, staging-
+   hardware profiles), with explicit guidance toward realistic
+   load mix or canary-captured profiles
+8. **`constexpr`, `consteval`, `constinit`** — decision table for
+   the four keywords (incl. C++23 `if consteval`); explicit
+   "where it moves runtime cost" vs "where it produces no measurable
+   change" lists
+9. **Decision frame — which lever to pull when** — cost/benefit
+   table for `-O3` baseline, thin LTO, full LTO, PGO instrumented,
+   PGO workload, PGO optimized, `constexpr`, `consteval`
+10. **Production diagnostic — did the optimizations actually
+    fire?** — `readelf -S`, `objdump -d`, ABI-label inspection
+11. **Why this is a C++ concern** — the unique gap between AOT-
+    compiled and JIT/interpreted languages; the C++ build-time
+    decisions feed forward into §6 (data structures), §10 (load
+    gen for PGO workload), §14 (-march pitfall)
+12. Demo pointer (`./demo-pgo.sh` workflow)
+13. References (book chapters, LLVM source-based-coverage docs
+    as related pipeline, GCC optimize-options canonical reference)
+14. What's next → §6 (with the prior misleading "§5 turns the
+    next knob" sentence FIXED to "§6 turns to the data structures")
+
+**Stub-text fixes captured during the rewrite:**
+
+Both old stubs had misleading "What's next" lines that referenced
+the wrong section number:
+- §4's old "What's next" said "§4 turns the toolchain knob: you've
+  decided where the binary will run; now decide what it gets
+  compiled into" — but §4 IS the image-strategy section, so the
+  next pointer should reference §5. Fixed.
+- §5's old "What's next" said "§5 turns the next knob" — but §5 IS
+  the compile-time section, so the next pointer should reference §6.
+  Fixed.
+
+These were copy-paste artifacts from the stub template. Worth a
+note in the r113 polish audit to check all "What's next" lines
+for similar mis-pointers across the rest of the sections.
+
+**Verified data anchor for §4:**
+
+Sizes from demo-01 (verified r20) used throughout §4 prose:
+- single-stage-naive: 689 MB
+- ubi-multistage: 114 MB
+- ubi-micro: 26.4 MB
+- ubi-micro-glibc-mismatch: 25.2 MB (broken variant)
+- pgo: 114 MB (used in §5)
+- pgo-instrumented: 124 MB (used in §5)
+
+These numbers appear in three places now: the §4 hook, the §4 demo
+pointer table, and the §5 PGO mechanism section. Consistent across
+all three.
+
+**Cross-reference graph (forward + backward, just from r109):**
+
+- §4 references: §5 (next), §6 (data structures), §12
+  (debug-sidecar), §13 (lockfile reproducibility), §14 (AVX-512
+  pitfall sibling), §10 (observability stack for load gen)
+- §5 references: §4 (labels recipe), §6 (constexpr → cache layout),
+  §10 (workload generation), §12 (sanitizers), §13 (lockfile),
+  §14 (-march pitfall)
+
+The graph is denser than the three §-anchors were on their own.
+Future rounds should preserve this — every section should reference
+both backward to the chain that set it up and forward to where its
+consequences land.
+
+**Files changed in r109 (3):**
+
+- `_docs/04-image-strategy.md`: 57 → 353 lines (full rewrite)
+- `_docs/05-compile-time-wins.md`: 64 → 359 lines (full rewrite)
+- `_plans/reconciliation-plan.md`: this r109 entry
+
+**No code changes. No image rebuild. Pure prose work.**
+
+**Section state after r109:**
+
+| Section | Lines | "Planned" heading | xrefs | State |
+|---|---|---|---|---|
+| §1 prerequisites | 533 | no | 4 | ✓ developed |
+| §2 introduction | 467 | no | 3 | ✓ developed |
+| §3 raii-discipline | 259 | no | 0 | ✓ but missing xrefs (r113) |
+| **§4 image-strategy** | **353** | **no** | **9** | **✓ developed (r109)** |
+| **§5 compile-time-wins** | **359** | **no** | **9** | **✓ developed (r109)** |
+| §6 stl-layout | 63 | yes | 1 | stub — r110 |
+| §7 memory-management | 302 | yes (residual!) | 5 | ✓ developed but stale heading (r113) |
+| §8 io-latency | 66 | yes | 2 | stub — r110 |
+| §9 networking-kernel | 67 | yes | 2 | stub — r111 |
+| §10 observability-profiling | 437 | no | 4 | ✓ developed (r104) |
+| §11 noisy-neighbors | 334 | no | 5 | ✓ developed (r103) |
+| §12 analysis-debugging | 170 | yes | 3 | partial — r112 |
+| §13 reproducibility-abi | 191 | yes | 2 | partial — r112 |
+| §14 pitfalls | 124 | yes | 1 | partial — r111 |
+| §15 where-to-go-next | 60 | no | 2 | closing |
+| §16 appendix | 339 | no | 1 | reference |
+
+Progress: 5 of the 8 sections needing prose work now publishable
+quality (was 3 of 8 before r109). 3 stubs + 3 partials remaining
+across r110-r112, then r113 polish.
+
 ---
 
 ## Known divergences from the PRD
