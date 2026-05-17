@@ -383,7 +383,7 @@ benchmarks all four containers at four sizes (`64`, `1024`,
   on scattered storage).
 
 The verified numbers above (2.5× at N=262K, 35× vs std::map)
-are from this demo's r58/r59 run.
+are from this demo's instrumented run.
 
 ## For deeper coverage
 

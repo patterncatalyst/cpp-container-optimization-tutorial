@@ -121,12 +121,12 @@ quiet: `cppcheck.xml` is 129 bytes (just the XML header), and
 clean code, no findings — but it doesn't teach readers what
 findings actually look like.
 
-The `--demo-findings` flag (introduced in demo-07's r128) fixes
-this by temporarily appending a deliberately bad function to
-`src/lib/channel.cpp`, building through a `analyzer-soft` stage
-that captures findings WITHOUT gating, then restoring
-`channel.cpp` on exit. The bad code is engineered to trigger
-several distinct checks across both tools:
+The `--demo-findings` flag in demo-07 fixes this by temporarily
+appending a deliberately bad function to `src/lib/channel.cpp`,
+building through an `analyzer-soft` stage that captures findings
+WITHOUT gating, then restoring `channel.cpp` on exit. The bad
+code is engineered to trigger several distinct checks across both
+tools:
 
 ```cpp
 [[maybe_unused]] int demo07_findings_example(int input) {

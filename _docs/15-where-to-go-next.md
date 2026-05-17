@@ -2,7 +2,7 @@
 title: Where to Go Next
 order: 15
 description: What to read next, and the broader ecosystem this tutorial only scratched.
-duration: "5 minutes"
+duration: "3 minutes"
 ---
 
 ## You've finished

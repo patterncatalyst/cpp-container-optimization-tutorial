@@ -426,7 +426,7 @@ brings up three servers in one binary in `podman compose`:
 - Asio io_uring echo at `:9001`, driven by `tcp-loadgen`
 
 Run `./demo.sh` to bring everything up + drive load + print a
-side-by-side summary. The verified r67 numbers at the top of
+side-by-side summary. The verified numbers at the top of
 this section are from that run. Open
 `http://127.0.0.1:3000` to inspect the gRPC histograms and
 counters in Grafana ([§10's observability stack](../10-observability-profiling/)).

@@ -21532,6 +21532,129 @@ unnecessary off-site jumps mid-tutorial.
   10 _docs/*.md           14 cross-references internalized
   _plans/reconciliation-plan.md   this entry
 
+### 2026-05-17 — r141: pre-PPTX editorial polish on _docs/
+
+**The trigger.**
+
+Before starting Path F (PPTX generation), one final editorial pass
+over `_docs/` to catch authoring artifacts that survived r135, drift
+between declared reading times and current word counts, and stale
+references that don't reflect the current 7-demo / 16-section state.
+
+**Findings + fixes.**
+
+**1. Eight round annotations stripped (r135 missed these, all inside
+sentences rather than at section boundaries).**
+
+  _docs/02-introduction.md:123  `demo-01 r18` → `demo-01`
+  _docs/06-stl-layout.md:386    `demo's r58/r59 run` → `demo's instrumented run`
+  _docs/07-memory-management.md:71  `iterations, from r96):` → `iterations):`
+  _docs/07-memory-management.md:84  `between requests, from r89):` → `between requests):`
+  _docs/08-io-latency.md:429   `verified r67 numbers` → `verified numbers`
+  _docs/10-observability-profiling.md:407  `verified r88 numbers...post-fix run` → `verified numbers...instrumented run`
+  _docs/12-analysis-debugging.md:124  `introduced in demo-07's r128` → (rewritten without round ref)
+
+After: `grep -rnE '\br[0-9]+\b' _docs/` returns zero hits (filtered
+against curl/RFC/RAII false positives).
+
+**2. Reading-time durations re-calibrated against current word counts.**
+
+Walked every `_docs/*.md`, computed `words / 150 wpm`, compared
+against declared duration. Updated five with drift >5 minutes:
+
+  §2  (Introduction)         15m → 20m  (was 15m, est 21m)
+  §5  (Compile-time wins)    10m → 15m  (was 10m, est 15m)
+  §11 (Noisy neighbors)      10m → 15m  (was 10m, est 15m)
+  §13 (Reproducibility+ABI)  20m → 25m  (was 20m, est 27m)
+  §15 (Where to go next)     5m → 3m   (was 5m, est 2m — overstated)
+
+Remaining drift is ≤5 minutes across the board, within reading-time
+estimation noise. Total reading-time across all sections ≈ 3h 50m
+(unchanged in headline; the per-section numbers now reconcile).
+
+**3. The outline (§0) had drifted significantly. Comprehensive
+rewrite.**
+
+  - **"fifteen numbered sections"** → "sixteen numbered sections
+    plus an appendix"
+  - **"Six runnable demos"** → "Seven runnable demos" + new sentence
+    pointing readers at the per-demo Jekyll pages at `/examples/`
+  - **"Two delivery targets" table + "1.5-hour PPTX cut" section** —
+    both removed. Replaced with a single "Three delivery targets"
+    table that lists site / 3-hour PPTX / demos with the 3-hour
+    timing (~2h 36m talk + Q&A buffer) per r136's decision
+  - **"The fifteen sections" heading** → "The sections" (and §16 now
+    listed as its own entry at the bottom of the list)
+  - **Three demo mappings corrected for the §7/§12/§13 renumbering:**
+      §7  "Still Demo 2"     → "Demo 6 territory"     (memory & allocators)
+      §12 "Demo 6 territory" → "Demo 7 territory"     (quality pipeline)
+      §13 "Still Demo 6"     → "Still Demo 7"
+  - **§7's allocator description updated** — dropped "mimalloc and
+    jemalloc as LD_PRELOAD swaps" (jemalloc is no longer a variant
+    per r136 decision; mimalloc is static-linked not LD_PRELOAD)
+  - **§10's stack description updated** — "via podman compose" →
+    "via the grafana/otel-lgtm all-in-one image" (matches what
+    demo-04 actually uses)
+  - **§14's awkward sentence about hummingbird-tutorial removed** —
+    the closing reference to "in the runbook style §12's
+    'distroless gotchas' page in the hummingbird-tutorial
+    popularised" was grammatically tangled and depended on
+    knowing an external project
+  - **§16 (appendix) added to section list** with its own entry,
+    matching format of other section entries
+  - **§15 description updated** — now mentions the bibliography
+    page that consolidates the four reference books
+  - **Placeholder `[Andrist & Sehr's *C++ High Performance*](#)`
+    link** — was a literal `#` placeholder. Now properly links to
+    `{{ '/bibliography/' | relative_url }}`
+  - **All 19 §N section references** now use the
+    `{{ '/docs/NN-name/' | relative_url }}` filter pattern. Every
+    section reference on the outline is a working internal link
+  - **"Estimated time, end-to-end"** reworked from 5 bullets covering
+    the old 6-demo grouping to 8 bullets covering the current
+    7-demo structure. Total estimate increased from "7–10 hours" to
+    "10–14 hours" — closer to the actual content volume
+  - **Redundant "Appendices" H2 at the bottom removed** — §16 is now
+    in the section list above, no need for a duplicate entry
+
+**4. One stale comment in §1 prerequisites.**
+
+  Was:  `├── examples/                  # six runnable demos`
+  Now:  `├── examples/                  # seven runnable demos`
+
+**5. Placeholder `(#)` links — full site sweep.**
+
+  grep -rnE '\]\(#\)' _docs/ _reference/ examples/
+  → returns nothing. All resolved.
+
+**Verification.**
+
+  - `./scripts/check-liquid.py` — clean
+  - Final word counts vs declared durations — all within 5m drift
+  - Final §N pattern search — zero round annotations remaining
+  - Final stale-numbers search — no "fifteen sections" / "six demos" /
+    "1.5h cut" / "2h 46m" remaining
+  - Outline page now has 19 internal `relative_url` filter calls
+    (every section reference is a working link)
+
+**Files changed.**
+
+  _docs/00-outline.md           comprehensive rewrite (~50% of body)
+  _docs/01-prerequisites.md     one-line comment fix
+  _docs/02-introduction.md      r18 annotation stripped
+  _docs/05-compile-time-wins.md duration 10m → 15m
+  _docs/06-stl-layout.md        r58/r59 annotation stripped
+  _docs/07-memory-management.md r96/r89 annotations stripped
+  _docs/08-io-latency.md        r67 annotation stripped
+  _docs/10-observability-profiling.md r88 annotation stripped
+  _docs/11-noisy-neighbors.md   duration 10m → 15m
+  _docs/12-analysis-debugging.md r128 annotation stripped
+  _docs/13-reproducibility-abi.md duration 20m → 25m
+  _docs/15-where-to-go-next.md  duration 5m → 3m
+  _plans/reconciliation-plan.md this entry
+
+11 _docs files touched. Site is ready for Path F (PPTX generation).
+
 ---
 
 ## Known divergences from the PRD

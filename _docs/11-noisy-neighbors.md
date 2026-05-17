@@ -2,7 +2,7 @@
 title: "Noisy Neighbor Isolation: cgroups, CPU pinning, NUMA"
 order: 11
 description: A noisy neighbor turns a 2 ms p99 into a 25 ms p99 with no malice and no bug. cgroup v2 `cpu.weight` recovers most of that; `cpuset.cpus` recovers all of it, then beats baseline. Real numbers from demo-05, plus the mechanism for each result.
-duration: "10 minutes"
+duration: "15 minutes"
 ---
 
 ## Learning objectives

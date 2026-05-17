@@ -2,7 +2,7 @@
 title: Introduction & Mental Model
 order: 2
 description: Why container constraints change C++ performance reasoning, the four-layer model the rest of the tutorial hangs off, and the cross-cutting concepts (LTO, PGO, PIE/ASLR, threading models) every later section references.
-duration: "15 minutes"
+duration: "20 minutes"
 ---
 
 ## Why this isn't just C++ tuning
@@ -120,7 +120,7 @@ Two flavors:
 
 LTO costs are real. Build time goes up; debug-info quality
 can degrade; LTO + `-static` has historically been fragile
-(and we hit a flavor of that in demo-01 r18 with
+(and we hit a flavor of that in demo-01 with
 `-static-pie` segfaulting at startup). For most services the
 trade is worth it. For a tiny CLI tool, often not.
 

@@ -68,7 +68,7 @@ frames.
 The verified numbers tell two completely different stories.
 
 **Batch mode** (200 iterations per invocation, hot arena across
-iterations, from r96):
+iterations):
 
 | Variant | p50 µs | p99 µs | Throughput |
 |---|---|---|---|
@@ -81,7 +81,7 @@ tighter at p99**. Throughput nearly doubles. This is the result
 that gets quoted in the PMR talks.
 
 **Serve mode** (1 iteration per `/run` request, arena resets
-between requests, from r89):
+between requests):
 
 | Variant | p50 ms | p99 ms | Throughput |
 |---|---|---|---|

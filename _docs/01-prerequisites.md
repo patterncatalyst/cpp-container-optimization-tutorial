@@ -377,7 +377,7 @@ The repo lays out as:
 {{ site.github_repo }}/
 ├── _docs/                     # this tutorial's prose
 ├── _plans/                    # reconciliation plan
-├── examples/                  # six runnable demos
+├── examples/                  # seven runnable demos
 │   ├── demo-01-image-strategy/
 │   ├── demo-02-stl-layout/
 │   └── ...

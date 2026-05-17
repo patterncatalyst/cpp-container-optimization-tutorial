@@ -404,8 +404,8 @@ for cross-correlation against the application traces.
 
 [`examples/demo-06-memory-and-allocators/`]({{ '/examples/demo-06-memory-and-allocators/' | relative_url }})
 in serve mode shows the same lesson with a different workload —
-the verified r88 numbers cited above are from that demo's
-post-fix run. Both demos are independent demonstrations of the
+the verified numbers cited above are from that demo's
+instrumented run. Both demos are independent demonstrations of the
 same OTel processor decision; pick either, the conclusion is
 the same.
 
