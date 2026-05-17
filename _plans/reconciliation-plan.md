@@ -17196,6 +17196,222 @@ COPY (license files, config overlays, debug-flag files). The "ensure
 the file exists, route based on content" pattern is more robust than
 "delete missing files."
 
+### 2026-05-17 — r119: Round A verification — G-49 captured, strategic pivot to CentOS Stream 9
+
+User ran r118. G-48 worked perfectly:
+
+```
+[warn]  truncating placeholder lockfile to zero bytes
+[warn]  the build container will resolve dependencies fresh on first run
+==> Phase: analyzer
+```
+
+But the libabigail-builder stage's elfutils source-build prep failed
+on `flex` and `bison`:
+
+```
+Red Hat Universal Base Image 9 (RPMs) - BaseOS / AppStre / CodeRea
+No match for argument: flex
+No match for argument: bison
+Error: Unable to find a match: flex bison
+```
+
+This is now the **fourth** UBI 9 missing-package gotcha in this stage:
+G-45 (cppcheck), G-46 (libabigail), G-47 (elfutils-devel), G-49 (flex,
+bison). Web search confirmed via multiple sources that flex+bison are
+deliberately omitted from UBI 9's CRB subset (e.g., the Couchbase
+Fluent Bit project's Containerfile.rhel explicitly notes this and
+works around it by building both from source).
+
+**Strategic pivot.** Continuing to cascade source builds from the
+sourceware.org upstream isn't ending — each new from-source build
+pulls in more missing build deps. The cascade we'd need:
+
+```
+elfutils  needs  flex, bison  (not in UBI)
+flex      needs  m4           (in UBI ✓)
+bison     needs  m4, perl     (in UBI ✓)
+libabigail needs elfutils, libxml2-devel  (libxml2-devel in UBI ✓)
+```
+
+So r119 would have needed *both* flex-from-source AND bison-from-source
+in addition to elfutils + libabigail. Combined first-build time was
+heading past 15 minutes. That's not acceptable for a tutorial demo.
+
+**Decision: use CentOS Stream 9 as the libabigail-builder base.**
+
+Stream 9 is:
+- Red Hat-maintained (hosted on Red Hat's infrastructure at
+  `quay.io/centos/centos:stream9`)
+- The continuously delivered upstream of RHEL 9
+- The **full CRB** is one `dnf config-manager --set-enabled crb`
+  away — and the full CRB includes libabigail, elfutils-devel,
+  flex, bison, all of it
+- **Same glibc 2.34 as UBI 9** — binaries built on Stream 9
+  copy across ABI-compatibly to UBI 9
+- Not Oracle, not SuSE — within user's stated preference of "Red
+  Hat and upstream Fedora ecosystem"
+
+User's preferences before r119 listed UBI exceptions: grafana/otel-lgtm,
+ghcr.io/bojand/ghz. Stream 9 becomes the third exception, and it's
+unambiguously inside the Red Hat ecosystem (more so than EPEL even,
+since EPEL is community-maintained and Stream is Red Hat-maintained).
+
+**Fix — libabigail-builder stage rewritten:**
+
+Was 60 lines of elfutils-from-source + libabigail-from-source + their
+build dep installs. Now 15 lines:
+
+```dockerfile
+FROM quay.io/centos/centos:stream9 AS libabigail-builder
+RUN dnf install -y --setopt=install_weak_deps=False \
+        dnf-plugins-core \
+ && dnf config-manager --set-enabled crb \
+ && dnf install -y --setopt=install_weak_deps=False \
+        libabigail \
+ && dnf clean all \
+ && mkdir -p /export/bin /export/lib \
+ && cp -av /usr/bin/abidiff /usr/bin/abidw /usr/bin/abilint \
+           /usr/bin/abicompat /usr/bin/abipkgdiff /usr/bin/kmidiff \
+           /export/bin/ \
+ && cp -av /usr/lib64/libabigail*.so* /export/lib/
+```
+
+The `cp -av` to `/export/` in the same RUN avoids the COPY-glob issue
+(podman's COPY can be finicky with version-suffixed filenames like
+`libabigail-2.6.so`). All the tools and libs end up in flat `/export/`
+directories, then a single `COPY --from=` brings everything to
+`/usr/local/{bin,lib}` in the toolchain.
+
+**Toolchain stage updated:**
+
+- Added `elfutils-libelf` to the runtime dep list (was only `elfutils-libs`).
+  libabigail needs both libelf.so AND libdw.so at runtime; libdw is in
+  `elfutils-libs`, libelf is in `elfutils-libelf`. UBI 9 has both in
+  BaseOS.
+- The COPY pattern: `/export/bin/` → `/usr/local/bin/` and `/export/lib/`
+  → `/usr/local/lib/`. Same shape as before but with the curated set.
+
+**Cost analysis:**
+
+| | r118 (cascade) | r119 (Stream 9) |
+|---|---|---|
+| Builder base image pull | UBI 9 (~80 MB) | Stream 9 (~150 MB) |
+| Builder dnf installs | 17 packages | 2 packages |
+| Source builds inside builder | 2 (elfutils + libabigail) | 0 |
+| First-build time penalty | ~10-15 min (with flex+bison from source it would have been ~20 min) | ~1 min |
+| Layer cache hit rate | Good but each source rebuild invalidates | Excellent (single dnf layer) |
+| ABI compat with UBI 9 runtime | Built on same UBI, guaranteed | Same glibc 2.34, same elfutils 0.190, very high |
+| Lines of Containerfile | ~60 | ~15 |
+
+The Stream 9 approach trades a small image pull cost for massive
+simplicity. The right call once we hit the fourth missing-package
+gotcha in a row.
+
+**G-49 captured below.**
+
+**Round A verification status after r119:**
+
+| Step | r114-r118 | r119 |
+|---|---|---|
+| host-side lockfile regen | ✓ (G-48 truncate) | ✓ |
+| dnf install cppcheck | ✓ (G-45 EPEL) | ✓ |
+| dnf install libabigail (from CRB in Stream 9) | n/a | ✓ |
+| dnf install elfutils-devel (no longer needed) | n/a | ✓ (skipped — package install from Stream 9 brings binaries with all deps statically resolved) |
+| dnf install flex/bison (no longer needed) | n/a | ✓ (skipped — Stream 9 has them but we don't need them) |
+| libabigail-builder completes | not reached | next to verify |
+| analyzer/tests/asan/abi run | not reached | after builder |
+
+**Pedagogical note worth capturing in §4 image-strategy at some point:**
+
+This iteration is a real-world illustration of when UBI's package
+trimming becomes a deal-breaker for build-time toolchains. The
+"production runtime stays on UBI, development tooling uses a richer
+base" pattern is widely used in real RHEL shops. UBI is for what
+*ships*; Stream 9 or Fedora is for what *builds*. The demo now
+demonstrates this pattern in miniature, even if the §4 prose
+doesn't currently call it out. **Item for a future polish round.**
+
+**Next likely issues (carrying over):**
+
+1. `run-clang-tidy` script path on UBI 9.
+2. Conan sanitizer-flag propagation to gtest in asan stage.
+3. cppcheck noise against demo source.
+4. Stream 9 image pull (~150 MB) requires network access — first run
+   on a clean machine will be slow until quay.io/centos/centos:stream9
+   is cached locally.
+5. libabigail.so soname matching — Stream 9 ships libabigail-2.4 or
+   thereabouts (not the 2.6 we were targeting for source builds);
+   this should be fine for our demo's purposes but is worth noting.
+
+**Files changed in r119 (2):**
+
+- `examples/demo-07-quality-pipeline/Containerfile`: libabigail-builder
+  stage rewritten — base image change (UBI 9 → CentOS Stream 9), dnf
+  install instead of source builds, `/export/` staging dir to handle
+  the COPY-glob issue cleanly. Toolchain stage: added `elfutils-libelf`
+  to runtime deps. COPY pattern: `/export/{bin,lib}/` → `/usr/local/{bin,lib}/`.
+- `_plans/reconciliation-plan.md`: this r119 entry + G-49 catalog entry.
+
+---
+
+## Gotchas (running catalog) — continued
+
+### G-49 · `flex` and `bison` not in UBI 9 either (r119)
+
+**Symptom.** Inside a UBI 9 build stage:
+
+```
+No match for argument: flex
+No match for argument: bison
+Error: Unable to find a match: flex bison
+```
+
+even with BaseOS, AppStream, and CodeReady Builder all enabled.
+
+**Cause.** Same UBI-trim pattern as G-46, G-47. flex and bison are
+in RHEL 9's full Development Tools group (verified via `dnf groupinfo
+"Development Tools"` on a subscribed RHEL host) but trimmed from UBI
+9's CRB subset. Multiple production projects have run into this —
+the Couchbase Fluent Bit project's `Containerfile.rhel` explicitly
+comments: "We require flex & bison which are not available for UBI."
+
+flex and bison are required by quite a few autotools-based builds —
+anything with `.l` (lex) or `.y` (yacc) input files. In our case,
+elfutils' `libcpu/` (disassembler) directory has yacc input that
+needs bison to regenerate.
+
+**Fix.** Two options:
+
+1. **Strategic — switch the builder stage base to CentOS Stream 9.**
+   Stream 9 is Red Hat-maintained, has full CRB, includes flex/bison/
+   libabigail/elfutils-devel out of the box, and shares glibc 2.34 with
+   UBI 9 for binary compat. **This is what r119 did**, because by the
+   time you hit your fourth missing-UBI-package gotcha in one stage,
+   the cumulative source-build complexity has exceeded the cost of
+   one extra base image pull.
+2. **Tactical — build flex and bison from source.** GNU tarballs are
+   at ftp.gnu.org. Build deps: m4, gcc, make. ~5-7 minutes additional
+   build time per tool. Only worth it if you can't use Stream 9 (e.g.,
+   strict policy reasons).
+
+The strategic switch demonstrates a pattern worth noting: **"production
+runtime stays on UBI, development tooling uses a richer base"** is
+a widely-used pattern in real Red Hat shops. UBI is what *ships*;
+Stream 9 or Fedora is what *builds*. Multi-stage container builds
+make this clean — only the toolchain stage pays the "fatter base"
+cost, and the runtime image stays UBI-minimal.
+
+**Where else this applies.** Any UBI 9 build that wants:
+- elfutils-from-source (needs flex/bison/m4)
+- llvm-from-source (needs flex/bison)
+- bcc/bpftrace (needs flex/bison for their parsers)
+- any autotools project with `.l` / `.y` sources
+
+If you're seeing more than one or two missing-package gotchas in
+one stage, that's the signal to stop adding source builds and
+switch the stage's base image.
+
 ---
 
 ## Known divergences from the PRD

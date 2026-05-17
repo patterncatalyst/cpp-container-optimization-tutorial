@@ -1,71 +1,32 @@
 ARG UBI_VERSION=9.4
 
-# ---- elfutils + libabigail builder stage ----
-# libabigail (provider of abidiff/abidw used by the abi stage) is not
-# packaged in EPEL 9, and UBI 9's CRB subset doesn't include it either.
-# Red Hat ships it in RHEL 9's full CodeReady Builder repo but that's
-# subscription-gated and not available in UBI. Building from source in a
-# dedicated builder stage keeps the "UBI everywhere" tutorial preference
-# (see G-46 in the reconciliation plan).
+# ---- libabigail builder stage ----
+# We use CentOS Stream 9 for this stage. Reasons:
+#   1. libabigail isn't in UBI 9's CRB subset (G-46)
+#   2. elfutils-devel isn't in UBI 9's CRB subset (G-47)
+#   3. flex + bison aren't in UBI 9's CRB subset either (G-49)
+# Cascading source builds for all four became unreasonable. CentOS
+# Stream 9 is the Red Hat-maintained development stream that becomes
+# RHEL 9 — it has the full CRB enabled (after one `dnf config-manager
+# --set-enabled crb`), with libabigail packaged. Same glibc 2.34 as
+# UBI 9, so the binaries copy across ABI-compatibly.
 #
-# G-47: libabigail needs libdw + libasm headers from elfutils-devel, but
-# UBI 9's CRB subset only ships elfutils-libelf-devel (libelf headers).
-# So we build elfutils from source FIRST, then build libabigail against
-# our local elfutils. Both upstreams are at sourceware.org — same
-# Fedora/RHEL ecosystem this whole demo lives in.
-# Build time: ~6-10 min on first build, cached as layers thereafter.
-FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS libabigail-builder
-RUN rm -f /etc/yum.repos.d/redhat.repo && \
-    sed -i 's/^enabled=1/enabled=0/' \
-        /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
+# This is a deliberate exception to the "UBI everywhere" project
+# preference — and a justified one, since CentOS Stream is Red Hat's
+# own upstream development stream, not a third-party distribution.
+# The runtime image (`svc`, ubi-minimal) is untouched.
+FROM quay.io/centos/centos:stream9 AS libabigail-builder
 RUN dnf install -y --setopt=install_weak_deps=False \
-        gcc \
-        gcc-c++ \
-        make \
-        git \
-        autoconf \
-        automake \
-        libtool \
-        pkgconfig \
-        m4 \
-        flex \
-        bison \
-        gettext \
-        libxml2-devel \
-        bzip2-devel \
-        xz-devel \
-        zlib-devel \
-    && dnf clean all
-
-# Build elfutils 0.190 from source. Same version RHEL 9 ships in its full
-# CRB (the one UBI doesn't include). --disable-debuginfod skips the
-# libcurl + libmicrohttpd build deps we don't need for ABI analysis.
-RUN cd /tmp \
- && git clone https://sourceware.org/git/elfutils.git \
- && cd elfutils \
- && git checkout elfutils-0.190 \
- && autoreconf -i \
- && ./configure --prefix=/usr/local \
-        --disable-static \
-        --disable-debuginfod \
-        --disable-libdebuginfod \
- && make -j"$(nproc)" \
- && make install \
- && cd / && rm -rf /tmp/elfutils
-
-# Build libabigail 2.6 against our just-built elfutils.
-RUN cd /tmp \
- && git clone https://sourceware.org/git/libabigail.git \
- && cd libabigail \
- && git checkout libabigail-2.6 \
- && ./autogen.sh \
- && PKG_CONFIG_PATH=/usr/local/lib/pkgconfig \
-    CPPFLAGS=-I/usr/local/include \
-    LDFLAGS="-L/usr/local/lib -Wl,-rpath,/usr/local/lib" \
-    ./configure --prefix=/usr/local --disable-static \
- && make -j"$(nproc)" \
- && make install \
- && cd / && rm -rf /tmp/libabigail
+        dnf-plugins-core \
+ && dnf config-manager --set-enabled crb \
+ && dnf install -y --setopt=install_weak_deps=False \
+        libabigail \
+ && dnf clean all \
+ && mkdir -p /export/bin /export/lib \
+ && cp -av /usr/bin/abidiff /usr/bin/abidw /usr/bin/abilint \
+           /usr/bin/abicompat /usr/bin/abipkgdiff /usr/bin/kmidiff \
+           /export/bin/ \
+ && cp -av /usr/lib64/libabigail*.so* /export/lib/
 
 # ---- toolchain base ----
 FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS toolchain
@@ -77,10 +38,9 @@ RUN rm -f /etc/yum.repos.d/redhat.repo && \
         /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
 
 # Enable EPEL 9 — UBI 9 doesn't ship cppcheck in its core repos.
-# (libabigail is built from source in the libabigail-builder stage above
-# because it's not in EPEL 9 either; see G-46.)
-# CRB (CodeReady Builder) is already enabled in UBI 9 by default, which
-# is the prerequisite for installing many EPEL packages.
+# (libabigail is provided by the libabigail-builder stage above; we
+# don't need EPEL for it.) CRB (CodeReady Builder) is already enabled
+# in UBI 9 by default, which is the prerequisite for EPEL packages.
 RUN dnf install -y \
         https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
 
@@ -94,14 +54,16 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         python3-pip \
         git \
         libxml2 \
+        elfutils-libelf \
         elfutils-libs \
     && pip install --no-cache-dir 'conan>=2.0,<3.0' \
     && dnf clean all
 
-# Copy libabigail tools (abidiff, abidw, abilint, etc.) + shared libs
-# from the builder stage. The runtime deps (libxml2, elfutils-libs) are
-# already installed above.
-COPY --from=libabigail-builder /usr/local /usr/local
+# Copy libabigail tools + shared libs from the Stream 9 builder stage.
+# Runtime deps (libxml2, elfutils-libelf, elfutils-libs) come from UBI's
+# BaseOS repo — same elfutils 0.190 as Stream 9 ships, so ABI-compatible.
+COPY --from=libabigail-builder /export/bin/  /usr/local/bin/
+COPY --from=libabigail-builder /export/lib/  /usr/local/lib/
 
 ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:/usr/local/bin:$PATH
 ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64:/usr/local/lib
