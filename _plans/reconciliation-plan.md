@@ -21858,6 +21858,123 @@ pipeline, and the visual-QA workflow.
 Path F is complete. The deck plus the site plus the seven demos plus
 the bibliography plus the appendix are now all coherent deliverables.
 
+### 2026-05-17 — r143: PRD reconciled with shipped reality
+
+**The trigger.**
+
+PRD is the "what we intended" document; the reconciliation plan
+captures "what we did". Letting the gap drift is fine in flight, but
+post-Path-F is the right moment to close it. Six areas needed
+updating:
+
+**1. §1 Summary — table heading.**
+
+The "delivery targets" table was titled **"Two delivery targets"**
+but had three rows (PPTX deck, Jekyll site, demos). The outline page
+already says "Three delivery targets" since r141. Synced PRD to
+match.
+
+**2. §7 Diagrams — list reflected pre-build anticipation.**
+
+The PRD's "Anticipated diagrams (one per section minimum)" listed
+12 diagrams using earlier naming conventions
+(`02-mental-model-four-layers.svg`, `08-veth-vs-host-networking.svg`,
+etc.) — the names settled differently. Replaced with a "Shipped
+diagrams (15 main + companions)" list matching what's actually
+under `diagrams/` today:
+
+  01-prerequisites-toolchain.svg      02-introduction-four-layers.svg
+  02-threading-models.svg             03-raii-discipline.svg
+  04-image-strategy-multistage.svg    05-compile-time-pgo-flow.svg
+  06-stl-layout-flat-vs-node.svg      07-allocator-stack.svg
+  08-io-uring-rings.svg               09-networking-veth-vs-host.svg
+  10-observability-otel-stack.svg     11-isolation-cgroup-tree.svg
+  12-debug-sidecar-pattern.svg        13-reproducibility-conan-flow.svg
+  14-pitfalls-avx512-mismatch.svg
+
+Also replaced the "diagrams reach the PPTX via the pptx skill flow"
+note with the actual pipeline: `tools/build-deck.sh` calls
+soffice → pdftoppm → python-pptx with caching in `/tmp/diagrams-png/`.
+Pointer at `presentation/README.md` for full detail.
+
+**3. §10 Risks — split into anticipated (kept) + encountered (new).**
+
+The original §10 listed 10 anticipated risks. Most aged fine. But
+the risks that actually bit during development were different from
+the anticipated set. Kept the anticipated table for historical
+honesty; added a second table for what actually happened:
+
+  - OTel SDK 30-60min first-build → expected, prebuilt layer
+  - Conan from-source on UBI 9 missing perl modules → Appendix A
+  - jemalloc 5.3.1 + GCC 14 build failure → dropped, §7 retains design discussion
+  - configure-pages@v5 empty base_path → workflow guard added (G-64)
+  - Jekyll absolute /path/ links bypassing baseurl → r138 internalization
+  - Jekyll Liquid parsing prose literals → scripts/check-liquid.py
+  - Round annotations leaking into reader-facing content → three cleanup passes
+  - Section renumbering created stale demo refs → r141 outline rewrite
+  - PPTX template editing at 80+ slide scale unwieldy → programmatic generation
+  - No rsvg-convert/cairosvg/inkscape in build env → soffice + pdftoppm pipeline
+  - Code blocks + diagrams overflowing slide bounds → aspect-ratio sizing + auto-shrink
+
+**4. §11 Timeline — milestones.**
+
+Previously most boxes were unchecked (`[ ]`) because the doc had
+captured a moment near project start. Walked the list against the
+current state of the repo and ticked completed items. Removed two
+demo numbers that weren't yet ticked at last writing; added new
+rows for milestones that emerged during the build (bibliography
+page, PRD reconciliation, LESSONS-LEARNED.md).
+
+Two items remain unchecked: cross-distro verification on Fedora 43
+(low priority) and LESSONS-LEARNED.md (the next planned round). One
+notational change: "13 Excalidraw diagrams" was the original
+estimate; the shipped count is 15.
+
+**5. §13 Decision log — appended 7 new entries.**
+
+The decision log stopped at r136 (annotated bibliography + the
+Liquid analyzer + the editorial-pass decision). Added entries
+for everything since then:
+
+  - r140 (2026-05-17): Internalize demo cross-refs (Tier 1 / Tier 2)
+  - r142 (2026-05-17): Programmatic PPTX generation, not template editing
+  - r142 (2026-05-17): Borrow design tokens from quarkus-optimization
+  - r142 (2026-05-17): SVG → PDF → JPG pipeline for embedding
+  - r142 (2026-05-17): Speaker notes as full talking scripts
+  - r142.2 (2026-05-17): Pinned tools/requirements.txt + install paths
+
+**6. §14 Stakeholders — added audience subsection.**
+
+Previously: just "author" and "reviewer". Now that the deck is real
+and the site is live, there's a real audience worth naming:
+
+  - Talk attendees → PPTX deck
+  - Self-paced site readers → Jekyll site
+  - Demo runners → examples/ directories
+  - Tutorial extenders → tools/, diagrams/, presentation/README.md
+  - Operators copying patterns → Appendix A, §14 pitfalls, helper scripts
+
+With a brief paragraph below the table explaining how the five
+deliverables fit together (deck and site share content; demos are
+the empirical anchor; appendix and pitfalls are the rescue section).
+
+**Verification.**
+
+  - `scripts/check-liquid.py` — clean
+  - Word count: 536 → 612 lines (+76 from added content; nothing
+    removed except stale anticipated diagrams)
+  - Section count: 15 H2 sections (unchanged)
+  - Decision log: now 22 entries spanning 2026-05-09 through 2026-05-17
+
+**Files changed.**
+
+  PRD.md                            6 sections updated (~250 lines changed)
+  _plans/reconciliation-plan.md     this entry
+
+The PRD now reflects shipped reality. Remaining items per §11:
+cross-distro verification (Fedora 43), LESSONS-LEARNED.md (r144),
+and public announce.
+
 ---
 
 ## Known divergences from the PRD

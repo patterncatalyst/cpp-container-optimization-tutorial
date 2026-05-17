@@ -13,7 +13,7 @@ Jekyll tutorial site, and seven runnable Podman demos that teach
 intermediate C++ engineers how to reason about and measure C++20/23
 performance under realistic container constraints.
 
-**Two delivery targets — calibrate the work to the right one.**
+**Three delivery targets — calibrate the work to the right one.**
 
 | Target            | Time budget                            | Source of truth                                | What lands here                                                            |
 |-------------------|-----------------------------------------|-------------------------------------------------|-----------------------------------------------------------------------------|
@@ -290,33 +290,59 @@ matching `.excalidraw`. Both files live under `diagrams/`.
 The Jekyll `excalidraw.html` include from the skeleton renders the
 SVG inline and offers a "Download Excalidraw source" link.
 
-### Anticipated diagrams (one per section minimum)
+### Shipped diagrams (15 main + companions)
 
-- `02-mental-model-four-layers.svg` — the four-layer model
-  (toolchain, image, kernel, runtime)
-- `03-image-strategy-multistage.svg` — base image trade-off
-  matrix
-- `04-compile-pgo-flow.svg` — instrumented build → workload →
-  optimized build pipeline
-- `05-stl-layout-cache-lines.svg` — `vector<T>` vs `flat_set<T>`
-  vs `unordered_map<T>` cache footprint
-- `06-allocator-stack.svg` — application → PMR resource → upstream
-  → cgroup memory.high
-- `07-io-uring-submission.svg` — submission queue / completion
-  queue mental model
-- `08-veth-vs-host-networking.svg` — packet path difference
-- `09-observability-stack.svg` — the Grafana + Prometheus + Tempo +
-  Loki + Mimir compose graph
-- `10-noisy-neighbor-cgroup-tree.svg` — cgroup hierarchy with two
-  tenants and the load generator
-- `11-debug-sidecar-pattern.svg` — ephemeral gdbserver sidecar
-  attaching to a running pod
-- `12-hermetic-build-flow.svg` — Conan lockfile + CMake preset +
-  multi-stage build → labeled image
-- `13-avx512-mismatch.svg` — the SIGILL trap visualized
+The deck and the site share these 15 diagram pairs. Section
+mapping matches the §-numbers in the filenames; some sections
+share a diagram with another and some have an additional
+companion (e.g. §2 has both the four-layer-model and a threading-
+model diagram).
 
-For the PPTX deck, the same SVGs are dropped onto each section's
-title slide via the `pptx` skill flow.
+- `01-prerequisites-toolchain.svg` — toolchain at a glance,
+  build-time / runtime / host layers (§1)
+- `02-introduction-four-layers.svg` — the four-layer model:
+  toolchain → image → kernel → runtime (§2)
+- `02-threading-models.svg` — companion for §2's threading
+  treatment in the deeper site prose
+- `03-raii-discipline.svg` — RAII tying resource lifetime to scope;
+  manual cleanup leaks vs RAII destructor (§3)
+- `04-image-strategy-multistage.svg` — single-stage vs
+  ubi-multistage vs ubi-micro with Demo-01 verified result (§4)
+- `05-compile-time-pgo-flow.svg` — instrument → train → optimize
+  PGO pipeline (§5)
+- `06-stl-layout-flat-vs-node.svg` — cache footprint comparison
+  of flat_map vs unordered_map vs std::map (§6)
+- `07-allocator-stack.svg` — application → PMR → allocator →
+  kernel → cgroup memory.high/.max (§7)
+- `08-io-uring-rings.svg` — submission queue / completion queue
+  mental model (§8)
+- `09-networking-veth-vs-host.svg` — packet path difference
+  between rootless veth and `--network=host` (§9)
+- `10-observability-otel-stack.svg` — OTel C++ SDK → otel-lgtm
+  → Tempo / Mimir / Loki / Grafana, with the Simple-vs-Batch
+  processor decision highlighted (§10)
+- `11-isolation-cgroup-tree.svg` — cgroup v2 hierarchy with two
+  tenants under demo-05 (§11)
+- `12-debug-sidecar-pattern.svg` — ephemeral gdbserver sidecar
+  attaching to a running pod (§12)
+- `13-reproducibility-conan-flow.svg` — Conan lockfile + CMake
+  preset + Containerfile → labeled deterministic image (§13)
+- `14-pitfalls-avx512-mismatch.svg` — the SIGILL trap visualized,
+  build host vs runtime host (§14)
+
+The depth-track reference collection at
+`/reference/statelessness/` has its own diagram set (one per
+doc, ~12 additional SVGs) not enumerated here.
+
+### How diagrams reach the PPTX deck
+
+The deck-build pipeline (see `tools/build-deck.sh`) converts each
+SVG to a high-resolution JPG via `soffice --convert-to pdf` then
+`pdftoppm`, then embeds the JPG via `python-pptx`. The
+conversion is idempotent and cached in `/tmp/diagrams-png/`. The
+build script `tools/build-pptx.py` reads slide content from
+`tools/sections.py` and assembles the deck; full details in
+[`presentation/README.md`](presentation/README.md).
 
 ---
 
@@ -422,6 +448,8 @@ substitution.
 
 ## 10. Risks and mitigations
 
+### Anticipated risks (assessed at the start of the project)
+
 | Risk                                                                           | Impact | Likelihood | Mitigation                                                                                       |
 |--------------------------------------------------------------------------------|--------|------------|--------------------------------------------------------------------------------------------------|
 | Podman 5.x compose syntax drifts during the writing window                     | Med    | Med        | Pin Podman version in §1; reconciliation plan tracks the version that verified each demo         |
@@ -432,8 +460,24 @@ substitution.
 | Reference books cited too closely, drifting toward displacement summary        | High   | Low        | Editorial pass: every cite is a pointer ("see Iglberger ch. 4 for the full pattern"), never a substitute |
 | Tutorial too long; readers don't finish                                        | High   | Med        | Sectioned so partial reads work; outline calls out the suggested reading paths in §0           |
 | Tutorial too compressed; misses the "why"                                      | Med    | Med        | Each section opens with a "why this matters" and closes with a measurable claim                  |
-| AVX-512 vs AVX2 vs `-march=native` confuses readers without recent CPUs        | Med    | Med        | §13 includes `lscpu | grep avx` as the first step and a tested fallback flag set                 |
+| AVX-512 vs AVX2 vs `-march=native` confuses readers without recent CPUs        | Med    | Med        | §13 includes `lscpu \| grep avx` as the first step and a tested fallback flag set                |
 | The grpc + io_uring demo build time exceeds reasonable patience in a live demo | Med    | High       | Pre-built layer published; demo.sh detects and pulls instead of rebuilding                       |
+
+### Risks encountered during development (and how they actually resolved)
+
+| Risk encountered                                                                | Severity   | Resolution                                                                                            |
+|---------------------------------------------------------------------------------|------------|-------------------------------------------------------------------------------------------------------|
+| OTel C++ SDK build time inside Demo 3 + Demo 4 + Demo 6 made first builds 30-60m | Slow CI    | Documented as expected; pre-built layer cached in registry; recommended `--prebuilt` flag for live demos |
+| Conan from-source dep builds (libcurl/openssl/nghttp2) fail on UBI 9 minimal perl | Hard block | Appendix A (§16) shipped with the 15-perl-module fix; multiple simplifying alternatives documented   |
+| jemalloc 5.3.1 + GCC 14 stricter conformance: build failure in repeated attempts | Build-time | Dropped jemalloc from demo-06's variants; §7 prose retains the design discussion as alternative reading |
+| GitHub Pages `configure-pages@v5` can return empty `base_path` mid-workflow      | Build-time | Workflow guard added (`if: env.BASE != ''`); G-64 in gotcha catalog                                   |
+| Absolute `/path/` links in markdown bypass Jekyll `baseurl` filter on Pages      | Linkrot    | r138 internalization pass: every site-internal link uses `{{ '/path/' \| relative_url }}` filter      |
+| Jekyll Liquid renders any literal `{%` or `{{` in prose, including in code fences | Templating | `scripts/check-liquid.py` static analyzer added as pre-push hook (r131); documents must escape with `{% raw %}` |
+| Round annotations (r##) leaked into reader-facing content across many cycles    | Editorial  | Three cleanup passes (r135 / r141 / r142); also caught annotations embedded in 4 SVG diagrams         |
+| Section renumbering created stale demo references (§7→Demo 6, §12-13→Demo 7)    | Reference  | r141 outline-page rewrite reconciled all demo↔section mappings; spot-checks in r142                  |
+| PPTX template-editing flow (54 → 80+ slides via XML duplication) was unwieldy   | Build-time | Programmatic generation via `python-pptx` with design tokens extracted from a reference deck         |
+| SVG → PNG conversion: no `rsvg-convert`/`cairosvg`/`inkscape` in build env      | Build-time | Two-hop pipeline via `soffice --convert-to pdf` then `pdftoppm`; works on Fedora 44 with default packages |
+| Code blocks and diagrams routinely overflowed slide bounds on first render      | Build-time | `build-pptx.py` added aspect-ratio-aware diagram sizing (via PIL) + auto-shrink for long code blocks |
 
 ---
 
@@ -442,26 +486,32 @@ substitution.
 | Milestone                                                       | Est. effort      | Done? |
 |-----------------------------------------------------------------|------------------|-------|
 | PRD reviewed and approved                                       | 1-2 hours        | [x]   |
-| Skeleton scaffolded; \_config.yml, layouts, includes branded    | 2-3 hours        | [ ]   |
-| §1 prerequisites drafted and verified on fresh Fedora 44        | 3-4 hours        | [ ]   |
-| Demo 1 (image-strategy) working end-to-end                      | 6-8 hours        | [ ]   |
+| Skeleton scaffolded; \_config.yml, layouts, includes branded    | 2-3 hours        | [x]   |
+| §1 prerequisites drafted and verified on fresh Fedora 44        | 3-4 hours        | [x]   |
+| Demo 1 (image-strategy) working end-to-end                      | 6-8 hours        | [x]   |
 | Demo 2 (stl-layout) working end-to-end                          | 8-10 hours       | [x]   |
 | Demo 3 (io-uring-grpc) working end-to-end                       | 10-14 hours      | [x]   |
 | Demo 4 (observability) compose stack up + OTel C++ wired        | 12-16 hours      | [x]   |
-| Demo 5 (isolation) two-tenant scenario reproducible             | 8-10 hours       | [ ]   |
-| Demo 6 (memory-and-allocators) PMR + huge pages + mimalloc       | 10-14 hours      | [ ]   |
-| Demo 7 (quality-pipeline) including abidiff and gdbserver       | 10-12 hours      | [ ]   |
-| All §3-§14 sections drafted (zero-draft)                        | 30-40 hours      | [ ]   |
-| 13 Excalidraw diagrams drafted, paired SVG exported             | 8-12 hours       | [ ]   |
-| All demo test scripts pass under `test-all-demos.sh`            | 4-6 hours        | [ ]   |
+| Demo 5 (isolation) two-tenant scenario reproducible             | 8-10 hours       | [x]   |
+| Demo 6 (memory-and-allocators) PMR + huge pages + mimalloc       | 10-14 hours      | [x]   |
+| Demo 7 (quality-pipeline) including abidiff and gdbserver       | 10-12 hours      | [x]   |
+| All §3-§14 sections drafted (zero-draft)                        | 30-40 hours      | [x]   |
+| 15 Excalidraw diagrams drafted, paired SVG exported             | 8-12 hours       | [x]   |
+| All demo test scripts pass under `test-all-demos.sh`            | 4-6 hours        | [x]   |
 | Cross-platform note: Fedora 43 best-effort verification         | 2-4 hours        | [ ]   |
-| Editorial pass for tone, voice, vendor-neutrality               | 6-10 hours       | [ ]   |
-| PPTX deck exported from the Jekyll content                      | 4-6 hours        | [ ]   |
-| Reconciliation plan reflects shipped state                      | 1-2 hours        | [ ]   |
+| Editorial pass for tone, voice, vendor-neutrality               | 6-10 hours       | [x]   |
+| Annotated bibliography page consolidating the four books        | 2-3 hours        | [x]   |
+| PPTX deck built programmatically from `_docs/` + diagrams       | 4-6 hours        | [x]   |
+| Reconciliation plan reflects shipped state                      | 1-2 hours        | [x]   |
+| PRD reconciled with shipped reality (this update)               | 1-2 hours        | [x]   |
+| LESSONS-LEARNED.md captures the multi-round retrospective       | 2-3 hours        | [ ]   |
 | Public announce                                                 | -                | [ ]   |
 
 **Hard deadline:** TBD by author.
-**Realistic launch target:** ~3-4 weeks of part-time work, dominated by demos 3 and 4.
+**Realistic launch target:** The substance is shipped — site,
+demos, deck, bibliography, appendix. Remaining items (cross-distro
+verification, LESSONS-LEARNED.md, announce) are polish-and-launch
+work, not core delivery.
 
 ---
 
@@ -509,15 +559,41 @@ substitution.
 | 2026-05-17 | Annotated bibliography page at `/bibliography/`                            | Inline citations are pointers, not annotations; readers asking "which book should I read next" deserve a single page that consolidates the four reference books with their angle, when-to-reach-for, and section-by-section cross-reference |
 | 2026-05-17 | `scripts/check-liquid.py` static analyzer as a pre-push hook               | Jekyll's Liquid templating treats every literal `{%` and `{{` as parser-visible; documenting the syntax in prose creates recursion bugs unless authors are disciplined. The analyzer enforces the discipline mechanically |
 | 2026-05-17 | Editorial pass to strip authoring artifacts from reader-facing content     | Round annotations (`(r##)`) and "scope per round" sections add noise without value for the reader; the reconciliation plan retains the full history |
+| 2026-05-17 | Internalize demo cross-references in tutorial sections (Tier 1 strategy)   | Tutorial sections at `/docs/NN-*/` link to demo pages at `/examples/demo-NN-*/` for in-site navigation (Tier 1); demo-page READMEs link out to GitHub source for code download (Tier 2). This keeps the reading flow self-contained without redirecting readers off-site mid-section |
+| 2026-05-17 | Programmatic PPTX generation via `python-pptx`, not template editing        | The Quarkus reference deck has 54 slides; our target is 80-120. Editing raw XML at that scale is unwieldy. A two-file split (`tools/sections.py` for content, `tools/build-pptx.py` for renderer) keeps the deck in sync with the tutorial and makes design tokens / slide kinds re-usable |
+| 2026-05-17 | Borrow design tokens from `patterncatalyst/quarkus-optimization` deck       | The author's other talks share a visual vocabulary; matching the Quarkus palette (dark navy + cyan accent, Calibri/Consolas, navy header bar) gives audiences continuity. Tokens extracted from the reference PPTX's XML and re-applied via `python-pptx` rather than reusing the actual template machinery |
+| 2026-05-17 | SVG → PDF → JPG conversion pipeline for PPTX diagram embedding              | No `rsvg-convert`/`cairosvg`/`inkscape` available in the build environment. `soffice --convert-to pdf` then `pdftoppm -jpeg` produces high-quality JPGs and ships with Fedora 44's default packages. Wrapped in `tools/build-deck.sh` with idempotent caching in `/tmp/diagrams-png/` |
+| 2026-05-17 | Speaker notes as full talking scripts, not bullet expansions                | The user requested rehearsal-quality speaker notes ("not just repeating what you have written"). Each slide's notes pane contains multi-paragraph spoken-language prose (~350 words per slide, ~25,000 words total) drawn from the `_docs/` source but rewritten for delivery — first person, contractions, natural flow |
+| 2026-05-17 | Pinned `tools/requirements.txt` with `python-pptx` and `Pillow`            | The two Python dependencies for the deck build pinned with version ranges. Documented install paths cover virtualenv (recommended), system-wide with PEP 668 escape hatch, and direct package install. The wrapper script `tools/build-deck.sh` surfaces these as the install hint when a dep is missing |
 
 ---
 
 ## 14. Stakeholders
 
+### Project stakeholders
+
 | Name           | Role             | What they need                                              |
 |----------------|------------------|-------------------------------------------------------------|
-| Tutorial author | Author + presenter | The PRD on hand each session; reconciliation plan up to date |
+| Tutorial author | Author + presenter | The PRD on hand each session; reconciliation plan up to date; the deck script for rehearsal |
 | Reviewer (TBD) | Technical reviewer | A complete zero-draft + a working `test-all-demos.sh` before review |
+
+### Audience (the people the deliverables exist for)
+
+| Audience                   | What they get                                                                                                                              | Where they find it                                              |
+|----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------|
+| **Talk attendees**         | 3-hour live PPTX walk-through with live demo runs and rehearsal-quality speaker notes the presenter follows                                | The PPTX deck under `presentation/`                             |
+| **Self-paced site readers**| Untimed long-form reference covering every code listing, every measurement, every Liquid-safe code fence                                   | The Jekyll site at `patterncatalyst.github.io/cpp-container-optimization-tutorial/` |
+| **Demo runners**           | Seven self-contained Podman demos each with `./demo.sh`; runnable on Fedora 44 with no external services                                   | The `examples/demo-NN-*/` directories on the repo               |
+| **Tutorial extenders**     | Source-available diagrams (paired SVG + Excalidraw JSON); a build script for the deck that takes content as data; a documented architecture | `diagrams/`, `tools/`, `presentation/README.md`                 |
+| **Operators copying patterns** | The Conan + UBI 9 + autotools survival appendix; the AVX-512 mismatch runbook entry; the cgroup-v2-delegation script                       | `_docs/16-appendix-a-conan-ubi9-perl.md`, §14 pitfalls, `scripts/cgroup-delegation.sh` |
+
+The deck and the site are two presentations of the same material
+for different consumption modes; they share content via the
+`_docs/` source. The demos are the empirical anchor — every
+measurement on the site or in the deck has a corresponding
+runnable example. The appendix and pitfalls are the rescue
+section: not central to the tutorial, but very useful when the
+specific trap they cover bites.
 
 ---
 
