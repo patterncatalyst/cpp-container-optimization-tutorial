@@ -15857,6 +15857,248 @@ content" heading removal, sweep all sections for the stub
 self-reference bug, audit cross-reference density in §8 which
 came in low at 4).
 
+### 2026-05-16 — r112: Path D — §12 + §13 prose, batch 4 of 4 (FINAL)
+
+The quality/process pair. §12 analysis-debugging and §13
+reproducibility-abi. The user-requested additions for §13
+(Konflux, Cachi2, GoogleTest in hermetic builds, gcov/lcov,
+clang source-based coverage) all delivered.
+
+**§12 analysis-debugging — 170 → 570 lines (~2876 words, 16 sections, 12 xrefs)**
+
+The partial had substantial existing content: cppcheck +
+clang-tidy intro, sanitizer table, valgrind framing, Object
+Introspection, debug-sidecar / gdbserver / core-dumps. The
+buildout preserved every concept and expanded each into proper
+prose with code samples and decision frames.
+
+Structure:
+
+1. Frontmatter (refined description names the full toolkit)
+2. Learning objectives (8 bullets — preserved + minor refinement)
+3. Diagram include (12-debug-sidecar-pattern)
+4. **Why analysis-and-debugging is one section** — new framing:
+   3 responses to "C++ does anything at runtime" — static
+   analysis (prevention at build time), sanitizers + tests
+   (prevention at CI), debugger + introspection (diagnosis at 3am)
+5. **Static analysis** — cppcheck + clang-tidy with full
+   .clang-tidy file sample showing the "enable broad
+   categories, disable specific noise" pattern
+6. **Tests: GoogleTest + gmock** — build-target shape that
+   keeps test binary out of runtime image; ctest gate;
+   forward pointer to §13 for coverage workflow
+7. **Runtime sanitizers** — preserved 4-row table; full prose
+   on ASan + UBSan together (free pairing); TSan mutual
+   exclusion with ASan; MSan setup pain; the ASan shadow-
+   memory mapping gotcha and 3 fixes (sysctl vm.mmap_min_addr,
+   ASAN_OPTIONS, seccomp=unconfined)
+8. **Valgrind** — preserved; expanded with leak-hunting and
+   cachegrind invocation examples
+9. **Object Introspection** — preserved; small expansion on
+   when-to-invest
+10. **The debug sidecar pattern** — full prose with the
+    --pid=container:<service> + --cap-add=SYS_PTRACE +
+    volume-mount-symbols recipe; gdb `set sysroot /proc/1/root`
+    incantation; cross-refs to §4 and §14
+11. **gdbserver alternative** — when sidecar isn't enough; the
+    trade-off table (sidecar vs gdbserver)
+12. **Core dumps from containers** — full prose; the host
+    /proc/sys/kernel/core_pattern + bind-mount /var/cores
+    recipe; compose-file integration; debug sidecar on the
+    core file
+13. **Production diagnostic — when to reach for which tool**
+    — diagnostic ladder by symptom (code looks wrong → static;
+    tests pass but bug hides → ASan/MSan/TSan; memory unexpected
+    → OI/Valgrind massif; service stuck → debug sidecar; service
+    crashed → core dump + sidecar; fine but slow → §10's perf)
+14. **Why this is a C++ concern** — Go/Rust/Java built-in
+    defaults; C++ has none; this section is the compensating
+    discipline
+15. Demo pointer (demo-07 — the §12-companion demo runs the
+    full pipeline; deliberately ships findings each tool catches)
+16. References (Iglberger ch.3, Ghosh ch.11, clang-tidy upstream,
+    Meta OI talk, Valgrind manual)
+17. What's next → §13
+
+§12 had the self-reference bug ("§12 stays in the build
+pipeline but turns to the longer-lived question..."). Fixed to
+"§13 turns to the longer-lived question..." 5-for-5 now on the
+stub copy-paste bug across rewritten stubs (§4, §5, §6, §8, §12).
+
+**§13 reproducibility-abi — 191 → 740 lines (~3621 words, 18 sections, 13 xrefs)**
+
+The longest section in the tutorial, fitting given the
+breadth of additions (Konflux + Cachi2 + GoogleTest hermetic
++ gcov/lcov + clang source-based coverage). All preserved
+content from the partial + all user-requested additions.
+
+Structure:
+
+1. Frontmatter (refined description; calls out Konflux,
+   Cachi2, gcov/lcov, clang source-based coverage)
+2. Learning objectives (6 bullets covering lockfiles +
+   presets + hermetic builds + coverage + abidiff)
+3. Diagram include (13-reproducibility-conan-flow)
+4. **What reproducibility actually means** — new framing
+   section: same inputs (5-bullet list) → same binary; each
+   leak point is one of the techniques below
+5. **When Conan from-source meets a minimal distro** —
+   PRESERVED; pointer to Appendix A
+6. **What a version pin doesn't pin** — PRESERVED; recipe
+   revision story with the grpc/1.62.0 yanking example
+7. **The lockfile guarantees what versions can't** —
+   PRESERVED; --lockfile pattern + Containerfile picks it up
+8. **What the lockfile still can't fix** — PRESERVED;
+   self-hosted mirroring pattern with conan remote add example
+9. **When to regenerate** — PRESERVED
+10. **CMake presets — the four useful configurations** —
+    NEW; full CMakePresets.json showing conan-debug,
+    conan-release (with thin LTO), conan-pgo-generate,
+    conan-pgo-use; cross-ref to §14 for the march=x86-64-v3 choice
+11. **Hermetic CI — Konflux and Cachi2** — NEW; what each is
+    (Konflux = CI/CD platform with Tekton hermetic pipelines;
+    Cachi2 = prefetch tool); the two-phase pattern (prefetch
+    with network → build with --network=none + cache mounted);
+    when-to-invest / when-overkill decision frame; URLs for
+    both projects
+12. **Tests as a build-stage quality gate — GoogleTest in
+    hermetic CI** — NEW; the hermetic-build-stage gate pattern;
+    integration tests with external services must either
+    provision sidecar or run post-hermetic; GoogleBenchmark
+    for regression testing
+13. **Coverage — gcov/lcov for GCC builds** — NEW; the
+    --coverage flag + .gcno/.gcda pattern; lcov for HTML
+    reports; CI-friendly Cobertura output; CMake preset;
+    pros (universal, ecosystem, simple) + cons (inaccurate
+    under optimization, slow at scale)
+14. **Coverage — Clang source-based coverage (llvm-profdata +
+    llvm-cov)** — NEW; the AST-level instrumentation pattern;
+    -fprofile-instr-generate + -fcoverage-mapping; full pipeline
+    (compile → run with LLVM_PROFILE_FILE → llvm-profdata merge
+    → llvm-cov show/report/export); CMake preset; pros
+    (accurate, reliable branch coverage, lcov export, region
+    coverage) + cons (clang-only); explicit cite of
+    https://clang.llvm.org/docs/SourceBasedCodeCoverage.html
+15. **ABI labels in image metadata** — preserved concept,
+    expanded; the LABEL set with org.opencontainers.image.* +
+    ai.cpp-tutorial.* (libc, libstdcxx, compiler, march, lto,
+    pgo, sanitizers, conan-lockfile-hash); cross-ref to §4
+16. **abidiff in CI — catching ABI breaks before merge** —
+    NEW; libabigail invocation with sample output; CI step
+    integration; the 4 finding categories that matter
+    (removed funcs/vars, signature changes, member insertions,
+    vtable changes)
+17. **Production diagnostic — when a build isn't reproducible**
+    — NEW; 5-step ladder (time-dependent metadata, parallel
+    race, path-dependent debug info, random GUIDs, LTO settings)
+    with diagnostic commands for each
+18. **Why this is a C++ concern** — template instantiation
+    order, ABI choices baked into headers, allocator/runtime
+    settings affecting link, toolchain version drift longer
+    tail than other languages
+19. Demo pointer (demo-07 hermetic build + abidiff; demo-04
+    for Conan lockfile at scale)
+20. References (Iglberger ch.1+5, libabigail manual, Clang
+    SourceBasedCodeCoverage docs URL, GCC gcov docs, Konflux
+    docs URL, Cachi2 GitHub URL, Conan 2.x lockfile docs)
+21. What's next → §14 (preserved correct pointer)
+
+User-requested content additions to §13 all delivered:
+- Konflux: dedicated subsection with project description, the
+  Tekton hermetic pipeline framing, attestation metadata
+  output for SBOM/provenance
+- Cachi2: dedicated subsection with the lockfile-driven
+  prefetch pattern; 2-phase example with prefetch + hermetic
+  build commands
+- GoogleTest in hermetic CI: dedicated subsection on the
+  build-stage gate pattern; ctest with --network=none;
+  integration-test sidecar caveat; GoogleBenchmark for
+  regression testing
+- gcov/lcov for GCC: dedicated subsection with full workflow;
+  CMake preset; pros/cons frame
+- Clang source-based coverage: dedicated subsection with full
+  workflow matching the LLVM docs reference URL; explicit
+  citation of the URL the user provided; CMake preset;
+  pros/cons frame
+- All 5 additions are at appropriate depth to be useful
+  guidance, not just name-drops
+
+**Section state after r112 — PROSE WORK COMPLETE:**
+
+| Section | Lines | "Planned" heading | xrefs | State |
+|---|---|---|---|---|
+| §1 prerequisites | 533 | no | 4 | ✓ developed |
+| §2 introduction | 467 | no | 3 | ✓ developed |
+| §3 raii-discipline | 259 | no | 0 | ✓ but missing xrefs (r113) |
+| §4 image-strategy | 353 | no | 9 | ✓ developed (r109) |
+| §5 compile-time-wins | 359 | no | 9 | ✓ developed (r109) |
+| §6 stl-layout | 408 | no | 12 | ✓ developed (r110) |
+| §7 memory-management | 302 | yes (residual!) | 5 | ✓ but stale heading (r113) |
+| §8 io-latency | 448 | no | 4 | ✓ developed (r110, xrefs sparse, r113 polish) |
+| §9 networking-kernel | 502 | no | 8 | ✓ developed (r111) |
+| §10 observability-profiling | 437 | no | 4 | ✓ developed (r104) |
+| §11 noisy-neighbors | 334 | no | 5 | ✓ developed (r103) |
+| **§12 analysis-debugging** | **570** | **no** | **12** | **✓ developed (r112)** |
+| **§13 reproducibility-abi** | **740** | **no** | **13** | **✓ developed (r112)** |
+| §14 pitfalls | 493 | no | 17 | ✓ developed (r111) |
+| §15 where-to-go-next | 60 | no | 2 | closing (no diagram needed) |
+| §16 appendix | 339 | no | 1 | reference doc |
+
+**ALL prose work complete after r112. Path D done.**
+
+Stub self-reference bug tracker — final count: §4, §5, §6, §8,
+§12 had it (5 sections, fixed in r109-r112). §1, §2, §3, §9,
+§10, §11, §13, §14 did not. r113 will sweep §15 + appendix to
+confirm and address §3's missing cross-references + §7's stale
+"## Planned content" heading.
+
+**Files changed in r112 (3):**
+
+- `_docs/12-analysis-debugging.md`: 170 → 570 lines (full rewrite,
+  preserving partial content)
+- `_docs/13-reproducibility-abi.md`: 191 → 740 lines (full
+  rewrite preserving partial content + user-requested additions:
+  Konflux, Cachi2, GoogleTest hermetic, gcov/lcov, clang
+  source-based coverage)
+- `_plans/reconciliation-plan.md`: this r112 entry
+
+**No code changes. No image rebuild. Pure prose work.**
+
+**Updated option-1 plan status:**
+
+| Path | State |
+|---|---|
+| A. demo-06 | ✓ complete |
+| B. demo-05 | ✓ complete |
+| D. Section prose | ✓ **complete (r103-r112)** |
+| E. Excalidraw diagrams (15) | ✓ complete (r106-r108) |
+| C. demo-07 quality-pipeline | next active work |
+| F. PPTX | last |
+| Polish | r113 — §3 xrefs, §7 heading, §8 xref density |
+
+The natural next moves:
+
+1. **r113 polish** — small fix-up round before C/F: §3 add
+   cross-references, §7 remove residual "## Planned content"
+   heading, sweep §15 + appendix for the stub self-reference
+   bug, audit §8's cross-reference density.
+
+2. **r114+: demo-07 quality-pipeline buildout** — Round A
+   minimum viable demo + Round B expansion. The §12 prose
+   describes demo-07 as if it exists; the demo itself is still
+   a stub. Likely new gotchas around ASan in containers
+   (shadow memory + seccomp interaction; touched in §12 prose),
+   clang-tidy in CI, ABI break detection wired into the build.
+
+3. **Optional demo-08-ebpf-analysis** — explicitly captured
+   in §9 prose as "future addition"; decision can wait until
+   demo-07 is verified.
+
+4. **Path F: PPTX** — once demos and prose are stable, the
+   slide deck consolidates the verified work, the three
+   §-anchor mini-essays, the 15 diagrams, and the 7 verified
+   demos into a presentation deck.
+
 ---
 
 ## Known divergences from the PRD
