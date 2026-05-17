@@ -21301,6 +21301,135 @@ cell in the bibliography's cross-reference matrix.
   bibliography.html                        45 href values fixed
   _plans/reconciliation-plan.md            this entry
 
+### 2026-05-17 — r139: workflow baseurl hardening (the actual reason r138's links still 404'd)
+
+**The trigger.**
+
+After shipping r138, user reported the bibliography page's section
+links STILL 404 with URLs like
+`https://patterncatalyst.github.io/docs/05-compile-time-wins/` —
+missing the `/cpp-container-optimization-tutorial/` repo-name path
+that the rest of the site (header nav, etc.) DOES correctly include.
+
+**The deeper bug.**
+
+The r138 commit's bibliography.html and `_examples/` files use the
+correct `{{ '/path/' | relative_url }}` filter — identical to the
+pattern in `_includes/header.html` that DOES work for the nav. So
+why didn't the bibliography links work after pushing r138?
+
+Looking at `.github/workflows/pages.yml`:
+
+    - name: Setup Pages
+      id: pages
+      uses: actions/configure-pages@v5
+
+    - name: Build site
+      run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
+
+`actions/configure-pages@v5` is *supposed* to output `base_path`
+(set to `/cpp-container-optimization-tutorial` for our project-pages
+deployment). When it does, the build sets baseurl correctly and
+every `relative_url` filter call produces the expected URL.
+
+**But there's a known failure mode**: `configure-pages@v5` can
+return an *empty* `base_path` under certain conditions (timing of
+the Pages enablement, certain repo settings, race with the deploy
+action). When that happens, the workflow line becomes:
+
+    bundle exec jekyll build --baseurl ""
+
+…which **OVERRIDES** `_config.yml`'s baseurl (`/cpp-container-optimization-tutorial`)
+with the empty string. Every `relative_url` filter then produces
+just `/path/` instead of `/cpp-container-optimization-tutorial/path/`.
+
+This is why:
+
+  - The header nav links (built by Liquid in the layout) DID work
+    in past builds — the path was set then
+  - The bibliography's links (added in r137, fixed in r138) still
+    404 — somewhere along the way the `base_path` came back empty
+    and the build emitted unprefixed URLs
+
+The user's observation about `/docs/` was the smoking gun: those
+URLs are exactly what `relative_url` produces when baseurl is empty.
+
+**The fix — workflow hardening.**
+
+`.github/workflows/pages.yml`:
+
+    - name: Build site
+      env:
+        JEKYLL_ENV: production
+        PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+      run: |
+        if [ -n "$PAGES_BASE_PATH" ]; then
+            echo "Pages base_path=$PAGES_BASE_PATH (using it)"
+            bundle exec jekyll build --baseurl "$PAGES_BASE_PATH"
+        else
+            echo "::warning::configure-pages returned empty base_path; deferring to _config.yml baseurl"
+            bundle exec jekyll build
+        fi
+
+Two cases:
+
+  - **`base_path` is set correctly** → use it (original behavior).
+    The `echo` prints what was used so debugging is easier next
+    time something looks off.
+  - **`base_path` is empty** → DON'T pass `--baseurl` at all. Jekyll
+    falls back to `_config.yml`'s `baseurl: "/cpp-container-optimization-tutorial"`
+    which is hardcoded correctly. The warning surfaces in the
+    Actions log so the failure mode is visible.
+
+Either path produces correct URLs. The empty-`base_path` case no
+longer silently breaks every `relative_url` call.
+
+**Why this matters more broadly.**
+
+The pattern `bundle exec jekyll build --baseurl "${{ ... }}"` is
+common in GitHub-Pages-via-Actions workflows. Every one of them has
+this same latent bug. Worth documenting in the gotcha catalog as
+**G-64**:
+
+> *Passing `--baseurl ""` on Jekyll's command line OVERRIDES
+> `_config.yml`'s baseurl with the empty string. Workflows that
+> pass `${{ steps.pages.outputs.base_path }}` must guard against
+> that output being empty — either with an `if`-guard around the
+> `--baseurl` arg, or by not passing the arg and letting
+> `_config.yml` drive the value.*
+
+**What r138's bibliography.html does NOT need.**
+
+bibliography.html's `{{ '/path/' | relative_url }}` syntax is
+correct and matches the working header nav pattern. Once the
+build sets baseurl correctly (either via `--baseurl` with the
+right value, or via the `_config.yml` fallback), the rendered
+hrefs become `/cpp-container-optimization-tutorial/docs/05-compile-time-wins/`
+and the links work.
+
+No source-content changes in this round. r138's content fix +
+r139's workflow fix together resolve the issue.
+
+**Verification.**
+
+After this lands and pushes, the next Pages build will print one
+of:
+
+    Pages base_path=/cpp-container-optimization-tutorial (using it)
+
+or:
+
+    ::warning::configure-pages returned empty base_path; deferring to _config.yml baseurl
+
+Either way, the rendered bibliography.html will have working
+links: hovering any §N link shows `/cpp-container-optimization-tutorial/docs/NN-name/`
+and clicking lands on the corresponding section.
+
+**Files changed.**
+
+  .github/workflows/pages.yml             baseurl-empty guard added
+  _plans/reconciliation-plan.md           this entry
+
 ---
 
 ## Known divergences from the PRD

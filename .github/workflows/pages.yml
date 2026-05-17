@@ -31,9 +31,24 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Build site
-        run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
         env:
           JEKYLL_ENV: production
+          # configure-pages@v5 sometimes returns an empty base_path
+          # despite this being a project-pages deployment. When that
+          # happens, an empty --baseurl="" on the command line OVERRIDES
+          # _config.yml's baseurl, producing URLs without the repo-name
+          # prefix and breaking every relative_url filter in the site.
+          # Fall back to the _config.yml value when configure-pages
+          # gives us nothing.
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+        run: |
+          if [ -n "$PAGES_BASE_PATH" ]; then
+              echo "Pages base_path=$PAGES_BASE_PATH (using it)"
+              bundle exec jekyll build --baseurl "$PAGES_BASE_PATH"
+          else
+              echo "::warning::configure-pages returned empty base_path; deferring to _config.yml baseurl"
+              bundle exec jekyll build
+          fi
 
       - uses: actions/upload-pages-artifact@v3
         with:
