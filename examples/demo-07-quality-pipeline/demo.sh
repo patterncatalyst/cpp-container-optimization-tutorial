@@ -8,6 +8,10 @@
 #   ./demo.sh --abi-only
 #   ./demo.sh --abi-bless    # promote reports/current.abi to abi-reference/
 #                            #   (run --abi-only first to produce it)
+#   ./demo.sh --abi-break-demo
+#                            # temporarily patch channel.hpp to break ABI;
+#                            # rebuild + run abidiff; show the report; restore.
+#                            # Requires a committed abi-reference/ baseline.
 #   ./demo.sh --debug        # spin up gdbserver sidecar
 #   ./demo.sh --clean
 
@@ -23,15 +27,17 @@ PHASES=(analyzer tests asan abi)
 DO_DEBUG=0
 DO_CLEAN=0
 DO_ABI_BLESS=0
+DO_ABI_BREAK_DEMO=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --analyze-only) PHASES=(analyzer);    shift;;
-    --test-only)    PHASES=(tests);       shift;;
-    --asan-only)    PHASES=(asan);        shift;;
-    --abi-only)     PHASES=(abi);         shift;;
-    --abi-bless)    DO_ABI_BLESS=1;       shift;;
-    --debug)        DO_DEBUG=1;           shift;;
-    --clean)        DO_CLEAN=1;           shift;;
+    --analyze-only)    PHASES=(analyzer);    shift;;
+    --test-only)       PHASES=(tests);       shift;;
+    --asan-only)       PHASES=(asan);        shift;;
+    --abi-only)        PHASES=(abi);         shift;;
+    --abi-bless)       DO_ABI_BLESS=1;       shift;;
+    --abi-break-demo)  DO_ABI_BREAK_DEMO=1;  shift;;
+    --debug)           DO_DEBUG=1;           shift;;
+    --clean)           DO_CLEAN=1;           shift;;
     *) log_err "unknown arg: $1"; exit 2;;
   esac
 done
@@ -78,6 +84,82 @@ if [[ $DO_ABI_BLESS -eq 1 ]]; then
   log_info "  git diff abi-reference/      # review what you're freezing"
   log_info "  git add  abi-reference/"
   log_info "  git commit -m \"abi: bless v1.0 baseline\""
+  exit 0
+fi
+
+# --abi-break-demo: temporarily patches src/include/demo07/channel.hpp to add
+# a field to Greeting, rebuilds the library, runs abidiff against the
+# committed baseline, and shows the audience what abidiff catches. The
+# source is restored on exit via the trap.
+#
+# This deliberately uses the abi-diff target (not abi) so that even
+# though the diff is non-empty, the build completes and the reports
+# are extractable to the host. In production, the abi target would
+# fail with exit 2 here — which is the whole point of having the gate.
+if [[ $DO_ABI_BREAK_DEMO -eq 1 ]]; then
+  if [[ ! -f abi-reference/libdemo07_channel.so.1.abi ]]; then
+    log_err "No baseline at abi-reference/libdemo07_channel.so.1.abi."
+    log_info "Bootstrap one first:"
+    log_info "  ./demo.sh --abi-only"
+    log_info "  ./demo.sh --abi-bless"
+    log_info "  git add abi-reference/ && git commit -m 'abi: bless baseline'"
+    exit 1
+  fi
+
+  hpp="src/include/demo07/channel.hpp"
+  if [[ ! -f "$hpp" ]]; then
+    log_err "Cannot find $hpp"
+    exit 1
+  fi
+
+  backup="$(mktemp -t channel.hpp.XXXXXX)"
+  # shellcheck disable=SC2064
+  trap "mv -f '$backup' '$hpp' && log_info 'channel.hpp restored to original'" EXIT
+  cp "$hpp" "$backup"
+
+  log_step "ABI break demo: patching $hpp"
+  # Add a uint64_t timestamp field to Greeting AFTER the text member.
+  # This changes the struct size and adds a data member at a new offset —
+  # both are textbook ABI breaks for a type that crosses the .so boundary.
+  if ! sed -i '/std::array<char, 64> text/a\    std::uint64_t timestamp_ns{0};  // ABI BREAK DEMO: changes Greeting size+layout' "$hpp"; then
+    log_err "sed patch failed"
+    exit 1
+  fi
+  if ! grep -q 'timestamp_ns' "$hpp"; then
+    log_err "Patch verification failed (sed didn't insert the field)"
+    exit 1
+  fi
+
+  log_info "Diff of the change:"
+  diff -u "$backup" "$hpp" || true
+  echo
+
+  log_step "Rebuilding through abi-diff target (captures diff without gating)"
+  mkdir -p reports
+  podman build --target abi-diff -t cpp-tut/demo-07:abi-diff .
+
+  # Extract reports from the abi-diff image
+  cid="$(podman create cpp-tut/demo-07:abi-diff)"
+  podman cp "$cid:/src/reports/." reports/ 2>/dev/null || true
+  podman rm -f "$cid" >/dev/null
+
+  echo
+  if [[ -s reports/abidiff.txt ]]; then
+    log_ok "abidiff caught the ABI break:"
+    echo
+    echo "----- reports/abidiff.txt -----"
+    cat reports/abidiff.txt
+    echo "-------------------------------"
+    echo
+    log_info "In production, --abi-only would have exited 2 at this point,"
+    log_info "blocking the build. Without abidiff in the pipeline, this"
+    log_info "5-line change would ship silently and break every downstream"
+    log_info "binary that compiled against the OLD layout of Greeting."
+  else
+    log_warn "abidiff did NOT detect a break — investigate."
+    log_warn "(reports/abidiff.txt is missing or empty.)"
+  fi
+
   exit 0
 fi
 

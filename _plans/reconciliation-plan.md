@@ -18751,6 +18751,162 @@ git rm --cached \
 
 The new `.gitignore` then prevents this recurring.
 
+### 2026-05-17 — r126: Round B item #2 — `--abi-break-demo` flag
+
+User ran r125 and confirmed `--abi-bless` works:
+
+```
+'reports/current.abi' -> 'abi-reference/libdemo07_channel.so.1.abi'
+[ ok ]  ABI reference updated.
+```
+
+After they commit `abi-reference/libdemo07_channel.so.1.abi`, the next
+production `--abi-only` will do a real abidiff. r126 builds the
+pedagogical "watch abidiff catch a break" workflow on top.
+
+**Design challenge.**
+
+The existing abi stage exits 2 on ABI mismatch (correct production
+behavior — gate the build). But a failed `podman build` doesn't commit
+an image, so we can't `podman cp` the abidiff report to host for the
+demo to display. The classic "I need to surface failure evidence
+without actually failing the build" problem.
+
+**Resolution — split the abi stage into two.**
+
+```dockerfile
+FROM build AS abi-diff
+WORKDIR /src
+COPY abi-reference/ ./abi-reference/
+RUN mkdir -p /src/reports \
+ && abidw --out-file /src/reports/current.abi \
+          build/release-debuginfo/libdemo07_channel.so.1 \
+ && if [ -f abi-reference/libdemo07_channel.so.1.abi ]; then \
+        abidiff abi-reference/libdemo07_channel.so.1.abi \
+                /src/reports/current.abi \
+            > /src/reports/abidiff.txt 2>&1 || true; \
+    else \
+        : > /src/reports/abidiff.txt; \
+        echo "No reference yet; current ABI saved at reports/current.abi"; \
+    fi
+
+FROM abi-diff AS abi
+RUN if [ -s /src/reports/abidiff.txt ]; then \
+        echo "ABI changed:"; \
+        cat /src/reports/abidiff.txt; \
+        exit 2; \
+    fi
+```
+
+Now:
+- `abi-diff` (new) ALWAYS captures the diff. The `|| true` after
+  abidiff ensures the stage succeeds even when the diff is non-empty.
+- `abi` (gates on the captured diff) fails the build only if
+  `reports/abidiff.txt` is non-empty.
+
+Both stages produce committed images, so reports are extractable from
+either one. Production `--abi-only` builds through `abi` and gets
+gated. The demo builds through `abi-diff` and gets the report.
+
+**Demo mechanics — `--abi-break-demo`.**
+
+The flag in demo.sh does:
+
+1. **Preflight**: refuse to run if `abi-reference/libdemo07_channel.so.1.abi`
+   doesn't exist. Tells the user to bootstrap first.
+2. **Backup**: `cp` channel.hpp to a `mktemp` file.
+3. **Trap**: `trap "mv -f $backup $hpp && log_info 'channel.hpp restored'" EXIT`
+   to guarantee restoration on any exit (clean exit, error, SIGINT,
+   SIGTERM — but NOT SIGKILL, which is unrecoverable by definition).
+4. **Patch**: `sed -i '/std::array<char, 64> text/a\    std::uint64_t timestamp_ns{0}; …' $hpp`
+   followed by `grep -q 'timestamp_ns' $hpp || exit 1` to verify the
+   patch landed.
+5. **Show the source change**: `diff -u $backup $hpp` so the audience
+   sees what was patched.
+6. **Build**: `podman build --target abi-diff -t cpp-tut/demo-07:abi-diff .`
+7. **Extract reports**: `podman create + cp + rm` (same pattern as
+   `run_phase`).
+8. **Show the abidiff output**: `cat reports/abidiff.txt` if non-empty.
+9. **Exit 0**: the demo always succeeds — it's pedagogical. The
+   trap restores the source as the script exits.
+
+**Why this specific patch.**
+
+```cpp
+// Before:
+struct Greeting {
+    std::uint32_t version;
+    std::array<char, 64> text;
+};
+
+// After --abi-break-demo's sed:
+struct Greeting {
+    std::uint32_t version;
+    std::array<char, 64> text;
+    std::uint64_t timestamp_ns{0};  // ABI BREAK DEMO: changes Greeting size+layout
+};
+```
+
+This is a textbook ABI break:
+- Struct size changes (was 72 bytes with trailing padding; now 80
+  bytes due to the new uint64_t plus 4 bytes alignment padding before it)
+- A new data member appears at a new offset
+- `greet(const Greeting&)` takes Greeting by reference, so the struct
+  crosses the .so boundary — abidiff will catch this in the function
+  signature's parameter type analysis
+
+abidiff's expected output mentions "type size changed" and "data member
+insertion". The exact byte counts depend on platform alignment but the
+break is unambiguous on x86_64.
+
+**Pedagogical framing in the script's epilogue.**
+
+After showing the diff, the script prints:
+
+> In production, --abi-only would have exited 2 at this point,
+> blocking the build. Without abidiff in the pipeline, this 5-line
+> change would ship silently and break every downstream binary that
+> compiled against the OLD layout of Greeting.
+
+That sentence is the takeaway. The mechanics (sed + abidiff + podman)
+are scaffolding; the lesson is "a tiny header change has runtime
+consequences far away that compile-time checks won't catch."
+
+**Files changed in r126 (3):**
+
+- `examples/demo-07-quality-pipeline/Containerfile`: split `abi` →
+  `abi-diff` (captures diff, never gates) + `abi` (gates on captured
+  diff). Production behavior unchanged for `--abi-only`.
+- `examples/demo-07-quality-pipeline/demo.sh`: added `--abi-break-demo`
+  flag with backup/trap/patch/build/show logic.
+- `examples/demo-07-quality-pipeline/abi-reference/README.md`: updated
+  the "tutorial uses a deliberate ABI break" sentence into a real
+  walkthrough of what `--abi-break-demo` does.
+
+**Limitations worth knowing:**
+
+1. The bash trap fires on EXIT (including via `set -e` and SIGINT) but
+   NOT on SIGKILL. If `kill -9` interrupts the script between the sed
+   patch and the trap firing, channel.hpp is left modified. `git checkout
+   src/include/demo07/channel.hpp` recovers it.
+2. The sed pattern matches `std::array<char, 64> text`. If channel.hpp's
+   member declaration is reformatted (e.g., `std::array<char,64> text`
+   without space, or split across lines), the pattern won't match. The
+   verification `grep -q 'timestamp_ns'` catches this immediately.
+3. The demo requires a committed baseline at
+   `abi-reference/libdemo07_channel.so.1.abi`. The preflight check
+   bails out cleanly if it's missing.
+
+**Round B sequencing — r126 of 4 shipped:**
+
+| Round | Item | Status |
+|---|---|---|
+| r125 | Housekeeping + `--abi-bless` | shipped |
+| **r126** | **`--abi-break-demo` flag** | **this round** |
+| r127 | Coverage stage (gcov + lcov) | next |
+| r128 | `--demo-findings` flag | after r127 |
+| r129 | Hermetic build comparison | after r128 |
+
 ---
 
 ## Known divergences from the PRD

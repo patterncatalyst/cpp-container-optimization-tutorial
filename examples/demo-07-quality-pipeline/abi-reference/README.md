@@ -40,8 +40,26 @@ This catches the classic ABI hazards:
 If any of these happen, `abidiff` exits non-zero, the build fails, and
 the `reports/abidiff.txt` report shows exactly what changed.
 
-The tutorial uses a deliberate ABI break (adding a field to `Greeting`)
-to demonstrate this — see `./demo.sh --abi-break-demo` (Round B).
+The tutorial uses a deliberate ABI break (adding a `timestamp_ns` field
+to `Greeting`) to demonstrate this. After you've committed the baseline
+(via the bootstrap workflow above), try:
+
+```bash
+./demo.sh --abi-break-demo
+```
+
+The script will:
+
+1. Save `src/include/demo07/channel.hpp` to a temp file
+2. Patch it to add a `std::uint64_t timestamp_ns{0}` field to `Greeting`
+3. Rebuild through the `abi-diff` stage (which captures the diff but
+   doesn't gate on it — see `Containerfile`)
+4. Print the abidiff report to your terminal
+5. Restore `channel.hpp` from the backup on exit (via a bash trap)
+
+The end-to-end demo takes ~30s and leaves your working tree exactly as
+it was. What you see in the abidiff output is what a production
+`--abi-only` build would have exited 2 on.
 
 ## Updating the baseline intentionally
 

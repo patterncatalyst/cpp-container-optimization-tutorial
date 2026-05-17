@@ -181,23 +181,39 @@ RUN mkdir -p /src/reports \
         | tee /src/reports/asan.txt \
   || (echo "ASan stage failed; see reports/asan.txt"; exit 1)
 
-# ---- abi stage ----
-FROM build AS abi
+# ---- abi-diff stage ----
+# Runs abidw + abidiff and ALWAYS captures the diff to reports/abidiff.txt.
+# This stage never fails on ABI mismatch — its job is to record the
+# evidence. The gating decision lives in the `abi` stage below.
+#
+# This split makes two things possible:
+#   1. ./demo.sh --abi-only (production)        → builds through `abi`,
+#      which fails loudly if abidiff finds a break.
+#   2. ./demo.sh --abi-break-demo (pedagogical) → builds through
+#      `abi-diff`, captures the diff to host, exits cleanly so the
+#      audience can SEE what production would have failed on.
+FROM build AS abi-diff
 WORKDIR /src
 COPY abi-reference/ ./abi-reference/
-# If reference exists, compare; otherwise just record current ABI as a baseline
-# the developer can commit.
 RUN mkdir -p /src/reports \
+ && abidw --out-file /src/reports/current.abi \
+          build/release-debuginfo/libdemo07_channel.so.1 \
  && if [ -f abi-reference/libdemo07_channel.so.1.abi ]; then \
-        abidw --out-file /src/reports/current.abi \
-              build/release-debuginfo/libdemo07_channel.so.1 \
-     && abidiff abi-reference/libdemo07_channel.so.1.abi /src/reports/current.abi \
-            > /src/reports/abidiff.txt 2>&1 \
-        || (echo "ABI changed:"; cat /src/reports/abidiff.txt; exit 2); \
+        abidiff abi-reference/libdemo07_channel.so.1.abi /src/reports/current.abi \
+            > /src/reports/abidiff.txt 2>&1 || true; \
     else \
-        abidw --out-file /src/reports/current.abi \
-              build/release-debuginfo/libdemo07_channel.so.1 \
-     && echo "No reference yet; current ABI saved at reports/current.abi"; \
+        : > /src/reports/abidiff.txt; \
+        echo "No reference yet; current ABI saved at reports/current.abi"; \
+    fi
+
+# ---- abi stage ----
+# Production gate: fails the build if abidiff captured ANY non-empty
+# diff. This is what --abi-only runs in CI.
+FROM abi-diff AS abi
+RUN if [ -s /src/reports/abidiff.txt ]; then \
+        echo "ABI changed:"; \
+        cat /src/reports/abidiff.txt; \
+        exit 2; \
     fi
 
 # ---- release runtime ----
