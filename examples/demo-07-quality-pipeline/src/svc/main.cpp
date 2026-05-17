@@ -3,6 +3,7 @@
 
 #include "demo07/channel.hpp"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -52,12 +53,13 @@ int run() {
     demo07::StaticMemoryChannel sc(kBufferBytes);
 
     std::array<std::byte, kPayloadBytes> payload{};
-    {
-        std::size_t i = 0;
-        for (auto& b : payload) {
-            b = static_cast<std::byte>(i++ & 0xFFU);
-        }
-    }
+    // std::ranges::generate fills the array with the supplied generator's
+    // output. The lambda's capture-init `n = std::uint8_t{0}` is the seed;
+    // n wraps at 256 naturally because uint8_t is 8-bit, so the result
+    // is a 0..255 sawtooth — same pattern as the prior raw loop.
+    std::ranges::generate(payload, [n = std::uint8_t{0}]() mutable {
+        return static_cast<std::byte>(n++);
+    });
 
     while (!g_stop.load(std::memory_order_relaxed)) {
         // A perfectly normal pair of calls. Set a breakpoint on `send`

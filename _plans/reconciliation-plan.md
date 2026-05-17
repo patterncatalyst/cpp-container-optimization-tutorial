@@ -18230,6 +18230,105 @@ project. Audit each check you've enabled; understand why you want it;
 write team-level guidance for the harder ones (CRTP, rule of five,
 signal-handler globals).
 
+### 2026-05-17 — r123: Round A verification — cppcheck useStlAlgorithm finding
+
+User ran r122. All clang-tidy findings cleared:
+
+```
+[3/4] STEP 7/7: RUN conan profile detect --force ...
+...
+[1/7] Building CXX object CMakeFiles/demo07_channel.dir/src/lib/channel.cpp.o
+...
+[7/7] Linking CXX executable demo07_tests
+[4/4] STEP 4/5: RUN cppcheck --enable=warning,style,performance,portability ...
+Checking src/lib/channel.cpp ...
+1/2 files checked 40% done
+Checking src/svc/main.cpp ...
+2/2 files checked 100% done
+```
+
+cppcheck ran cleanly through both source files. Then surfaced one new
+finding:
+
+```xml
+<error id="useStlAlgorithm" severity="style"
+       msg="Consider using std::fill or std::generate algorithm instead of a raw loop."
+       file0="src/svc/main.cpp">
+    <location file="src/svc/main.cpp" line="58" column="15"/>
+</error>
+```
+
+The line: the range-based-for I added in r122 to satisfy clang-tidy's
+`cppcoreguidelines-pro-bounds-constant-array-index`:
+
+```cpp
+{
+    std::size_t i = 0;
+    for (auto& b : payload) {
+        b = static_cast<std::byte>(i++ & 0xFFU);
+    }
+}
+```
+
+Each element gets a different value (a 0..255 sawtooth), so `std::fill`
+won't do. `std::generate` (or `std::ranges::generate`) is the idiomatic
+expression.
+
+**Fix.**
+
+```cpp
+std::ranges::generate(payload, [n = std::uint8_t{0}]() mutable {
+    return static_cast<std::byte>(n++);
+});
+```
+
+The lambda's capture-init `n = std::uint8_t{0}` is the seed. `n++`
+naturally wraps at 256 because `std::uint8_t` is 8-bit, producing the
+same 0..255 sawtooth pattern as the prior loop — but expressed as a
+function-call to an algorithm, which is what cppcheck's
+`useStlAlgorithm` check wants to see.
+
+Note the tension between the two checkers here:
+- clang-tidy's `cppcoreguidelines-pro-bounds-constant-array-index`
+  says "don't use subscript-with-runtime-index on arrays"
+- cppcheck's `useStlAlgorithm` says "don't use raw loops for element-
+  wise transformations"
+
+A range-based-for satisfies the first but not the second. An STL
+algorithm satisfies both. Lesson: when in doubt, **reach for the
+algorithm first** — it's strictly the more idiomatic choice.
+
+Also added `#include <algorithm>` since `std::ranges::generate` lives
+there.
+
+**Round A verification status after r123:**
+
+| Step | r121 | r122 | r123 |
+|---|---|---|---|
+| host-side lockfile UX | ugly | ✓ clean | ✓ |
+| cmake build (7/7 targets) | ✓ | ✓ | ✓ |
+| **cppcheck on demo source** | ✓ clean | ✗ useStlAlgorithm | **next to verify** |
+| **clang-tidy on demo source** | ✗ 13 findings | ✓ clean (G-52 fixes) | ✓ |
+| analyzer phase complete | not reached | not reached | after cppcheck |
+| tests + asan + abi | not reached | not reached | after analyzer |
+
+**Files changed in r123 (2):**
+
+- `examples/demo-07-quality-pipeline/src/svc/main.cpp`: replaced
+  raw-loop-with-range-for with `std::ranges::generate`; added
+  `#include <algorithm>`
+- `_plans/reconciliation-plan.md`: this r123 entry
+
+No new G-XX needed — this is the same class of finding as G-52
+(strict static analysis catching idiomatic refactor opportunities).
+
+**Next likely issues:**
+
+1. Did I miss yet another finding? Possible — cppcheck has many
+   layered style checks that cascade as earlier ones get fixed.
+2. Once analyzer clears entirely, the next phases (tests + asan + abi)
+   each have their own potential setup work.
+
 ---
 
 ## Known divergences from the PRD
