@@ -19194,6 +19194,122 @@ When in doubt, install perl modules by explicit package name
 auto-resolution fails, name the package directly. dnf doesn't need
 to find the symbol if it has the explicit package."
 
+### 2026-05-17 — r127.2: G-55 follow-up — pivot to gcovr (perl-JSON was actually unfindable)
+
+User ran r127.1. Plan predicted "if perl-JSON is also unfindable, the
+next dnf error will be `No match for package` and we pivot." That's
+exactly what happened:
+
+```
+No match for argument: perl-JSON
+Error: Unable to find a match: perl-JSON
+```
+
+So G-55 is more severe than initially diagnosed — it's not just
+abstract-symbol resolution failing; the `perl-JSON` package itself is
+genuinely not in UBI 9 + EPEL 9's reachable repos. This is a real
+mirror gap, not a dnf config issue.
+
+**The pivot decision.**
+
+Plan listed three options:
+1. Multi-stage `lcov-builder` from Stream 9 (G-49 pattern) — ~2 hours
+2. Swap to `gcovr` (Python-based, in PyPI) — ~1 hour
+3. Build lcov from upstream tarball + cpan — ~3 hours
+
+**Picked option 2 (gcovr).** Strongest justification:
+
+- **One-line install via pip** — we already pip-install conan, so
+  adding `gcovr>=7.0` is trivial. Zero new dnf complications.
+- **Closes G-55 permanently** — no perl chain in the toolchain at
+  all. Future perl-module-related issues won't bite this demo.
+- **Better gcc 14 compatibility** — gcovr's codebase is actively
+  maintained; lcov 1.14 has known gcc 14 issues we'd have to suppress
+  with `--ignore-errors`.
+- **Multi-format output from one invocation**:
+  - `--html-details index.html` — browseable HTML (per-line colors)
+  - `--cobertura coverage.xml` — industry-standard XML for CI
+  - `--json coverage.json` — machine-readable for tools
+  - `--txt summary.txt` — terminal-friendly summary
+  - `--print-summary` — stdout one-liner
+- **What new C++ projects actually pick today** — lcov is the
+  boomer-standard but gcovr is the modern choice. Better
+  pedagogically too — readers will likely encounter gcovr in
+  newer codebases.
+
+**Changes in r127.2 (3 files):**
+
+1. **`Containerfile` toolchain stage** — removed `lcov` and `perl-JSON`
+   from the dnf list; added `'gcovr>=7.0'` to the pip install line:
+
+   ```dockerfile
+   && pip install --no-cache-dir \
+        'conan>=2.0,<3.0' \
+        'gcovr>=7.0' \
+   ```
+
+2. **`Containerfile` coverage-gcc stage** — replaced the lcov+genhtml
+   pipeline with a single gcovr invocation:
+
+   ```dockerfile
+   gcovr --root /src \
+         --gcov-executable /opt/rh/gcc-toolset-14/root/usr/bin/gcov \
+         --filter 'src/' \
+         --exclude '.*/tests/.*' \
+         --exclude '/usr/.*' \
+         --exclude '/opt/rh/.*' \
+         --exclude '.*/\.conan2/.*' \
+         --html-details /src/reports/coverage-gcc/index.html \
+         --html-title "demo07 coverage (gcov via gcc-toolset-14)" \
+         --json /src/reports/coverage.json \
+         --cobertura /src/reports/coverage-cobertura.xml \
+         --txt /src/reports/coverage-summary.txt \
+         --print-summary
+   ```
+
+   The `--gcov-executable` flag keeps the gcc-toolset-14 gcov in the
+   loop (same fix as the original lcov approach, different flag name).
+   The `--exclude` regex patterns replace lcov's glob patterns.
+
+3. **`_docs/12-analysis-debugging.md` reports table** — updated rows
+   for the coverage outputs:
+   - was: `coverage.info` (lcov tracefile) → now: `coverage.json` (gcovr JSON)
+   - was: `coverage-filtered.info` (system-stripped tracefile) → dropped (gcovr does filter in-line, no intermediate file)
+   - was: `coverage-summary.txt` from `lcov --summary` → still exists, but from `gcovr --txt` (richer format)
+   - new: `coverage-cobertura.xml` — Cobertura XML format for CI dashboards
+   - kept: `coverage-gcc/index.html` from `genhtml` → now from `gcovr --html-details`
+
+**Note on Cobertura XML.**
+
+Cobertura is JUnit's coverage cousin — same universal CI support
+story. Java-derived schema, but every major coverage dashboard
+(Jenkins coverage plugin, GitLab Pipelines, Azure DevOps) ingests it
+natively. Adding Cobertura output costs us nothing (one flag in
+gcovr) and gains the tutorial a "here's the file you give your CI"
+story without extra explanation.
+
+**Expected first-run behavior:**
+
+The toolchain layer rebuilds (we changed dnf+pip lists). After that:
+- gtest may or may not need rebuild (the cxxflags didn't change)
+- coverage-gcc compile + test runs
+- gcovr generates 5 output formats in one shot
+- demo.sh prints the lcov-style summary (gcovr's `--print-summary`
+  output) and points at the HTML report
+
+**Round B sequencing — r127.2 (pivot from r127.1):**
+
+| Round | Item | Status |
+|---|---|---|
+| r125 | Housekeeping + `--abi-bless` | shipped |
+| r126 | `--abi-break-demo` flag | shipped + verified |
+| r126-docs | §12 reports/ explainer | shipped |
+| r127 | Coverage stage (initially with lcov) | superseded |
+| r127.1 | G-55 fix attempt #1 (perl-JSON explicit) | superseded |
+| **r127.2** | **G-55 pivot — gcovr instead of lcov** | **this round** |
+| r128 | `--demo-findings` flag | next |
+| r129 | Hermetic build comparison | after r128 |
+
 ---
 
 ## Known divergences from the PRD

@@ -180,10 +180,10 @@ always tell you which schema they're in. Here's the legend:
 | `current.abi` | libabigail XML | `abidw` | Symbolic representation of every public ABI surface for `libdemo07_channel.so.1` |
 | `abidiff.txt` | plain text | `abidiff` | The semantic diff between `current.abi` and `abi-reference/`; empty file means no ABI changes |
 | `coverage-gcc.xml` | JUnit XML | `ctest --output-junit` (coverage-instrumented run) | Test results from the coverage build (different binary than `gtest.xml`'s — instrumented with `--coverage`) |
-| `coverage.info` | lcov tracefile | `lcov --capture` | Raw line/branch coverage data extracted from gcov's `.gcda` files |
-| `coverage-filtered.info` | lcov tracefile | `lcov --remove` | Same as above but with `/usr/*`, `/opt/rh/*`, `*/tests/*`, `*/.conan2/*` stripped out so only your code shows |
-| `coverage-summary.txt` | plain text | `lcov --summary` | Top-level "X% lines covered, Y% functions covered" — the number for dashboards |
-| `coverage-gcc/index.html` | HTML | `genhtml` | Source-browseable HTML report — opens in any browser, click into files, see per-line hit counts |
+| `coverage.json` | gcovr JSON | `gcovr --json` | Machine-readable coverage data; per-file line and branch hit counts |
+| `coverage-cobertura.xml` | Cobertura XML | `gcovr --cobertura` | Industry-standard coverage format (originally from Java's Cobertura); Jenkins/GitLab/Azure DevOps ingest this natively into coverage dashboards |
+| `coverage-summary.txt` | plain text | `gcovr --txt` | Per-file table with line and branch coverage percentages |
+| `coverage-gcc/index.html` | HTML | `gcovr --html-details` | Source-browseable HTML — click into files to see per-line hit counts colored green (hit) / red (miss) |
 
 The two files worth a longer note: `gtest.xml` and `asan.xml`.
 

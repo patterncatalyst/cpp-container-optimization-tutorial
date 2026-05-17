@@ -55,14 +55,14 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         clang-tools-extra \
         cppcheck \
         gdb-gdbserver \
-        lcov \
-        perl-JSON \
         python3-pip \
         git \
         libxml2 \
         elfutils-libelf \
         elfutils-libs \
-    && pip install --no-cache-dir 'conan>=2.0,<3.0' \
+    && pip install --no-cache-dir \
+        'conan>=2.0,<3.0' \
+        'gcovr>=7.0' \
     && dnf clean all
 
 # Copy libabigail tools + shared libs from the Stream 9 builder stage.
@@ -186,17 +186,23 @@ RUN mkdir -p /src/reports \
 # ---- coverage-gcc stage ----
 # Builds a parallel coverage-instrumented variant of the library and tests
 # (--coverage = -fprofile-arcs -ftest-coverage), runs ctest, then post-
-# processes with lcov + genhtml to produce reports/coverage-gcc/index.html.
+# processes with gcovr to produce reports/coverage-gcc/index.html plus
+# several machine-readable formats for CI.
 #
-# Two cross-version gotchas we handle explicitly:
-#   1. lcov needs to call the SAME gcov version as the gcc that built the
-#      code. UBI 9's stock /usr/bin/gcov is gcc 11. Our compile uses
-#      gcc-toolset-14's gcc 14.2.1. Pass --gcov-tool to point lcov at
-#      the SCL gcov so version numbers match.
-#   2. gcc 14 sometimes emits debuginfo with "mismatched end line" for
-#      heavily-inlined STL templates. lcov 1.x treats this as an error
-#      by default. --ignore-errors lets the demo proceed despite the
-#      warnings (the underlying coverage data is still accurate).
+# Why gcovr and not lcov?
+#   The straightforward choice would have been lcov + genhtml, but the
+#   UBI 9 EPEL mirror doesn't ship perl-JSON (lcov 1.14's dependency) —
+#   see G-55 in the plan. gcovr is a Python alternative that's
+#   pip-installable, doesn't depend on the perl chain, has cleaner
+#   gcc-14 compatibility, and produces multiple output formats from a
+#   single invocation (HTML for humans, Cobertura XML for CI, JSON for
+#   tools, plain text for terminals).
+#
+# The one cross-version gotcha that still applies:
+#   gcovr internally shells out to `gcov` to parse .gcda/.gcno files.
+#   That gcov must match the gcc that built the code. UBI 9's
+#   /usr/bin/gcov is gcc 11; our compile uses gcc-toolset-14's gcc
+#   14.2.1. Pass --gcov-executable to point gcovr at the SCL gcov.
 FROM build AS coverage-gcc
 WORKDIR /src
 RUN if [ -s conan.lock ]; then \
@@ -223,30 +229,19 @@ RUN if [ -s conan.lock ]; then \
 RUN mkdir -p /src/reports/coverage-gcc \
  && ctest --preset coverage-gcc --output-on-failure \
           --output-junit /src/reports/coverage-gcc.xml \
- && lcov --gcov-tool /opt/rh/gcc-toolset-14/root/usr/bin/gcov \
-         --directory build/coverage-gcc \
-         --capture \
-         --output-file /src/reports/coverage.info \
-         --rc geninfo_unexecuted_blocks=1 \
-         --ignore-errors mismatch,unused,gcov,negative,inconsistent,format \
- && lcov --gcov-tool /opt/rh/gcc-toolset-14/root/usr/bin/gcov \
-         --remove /src/reports/coverage.info \
-         '/usr/*' \
-         '/opt/rh/*' \
-         '*/tests/*' \
-         '*/.conan2/*' \
-         --output-file /src/reports/coverage-filtered.info \
-         --ignore-errors unused \
- && genhtml /src/reports/coverage-filtered.info \
-            --output-directory /src/reports/coverage-gcc \
-            --title "demo07 coverage (gcov via gcc-toolset-14)" \
-            --legend \
-            --demangle-cpp \
-            --branch-coverage \
-            --ignore-errors source \
- && lcov --gcov-tool /opt/rh/gcc-toolset-14/root/usr/bin/gcov \
-         --summary /src/reports/coverage-filtered.info \
-         | tee /src/reports/coverage-summary.txt \
+ && gcovr --root /src \
+          --gcov-executable /opt/rh/gcc-toolset-14/root/usr/bin/gcov \
+          --filter 'src/' \
+          --exclude '.*/tests/.*' \
+          --exclude '/usr/.*' \
+          --exclude '/opt/rh/.*' \
+          --exclude '.*/\.conan2/.*' \
+          --html-details /src/reports/coverage-gcc/index.html \
+          --html-title "demo07 coverage (gcov via gcc-toolset-14)" \
+          --json /src/reports/coverage.json \
+          --cobertura /src/reports/coverage-cobertura.xml \
+          --txt /src/reports/coverage-summary.txt \
+          --print-summary \
  && echo "Coverage HTML: reports/coverage-gcc/index.html"
 
 # ---- abi-diff stage ----
