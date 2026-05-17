@@ -797,7 +797,7 @@ container-specific.**
 
 ## Demo
 
-[`examples/demo-07-quality-pipeline/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-07-quality-pipeline)
+[`examples/demo-07-quality-pipeline/`]({{ '/examples/demo-07-quality-pipeline/' | relative_url }})
 runs the full pipeline:
 
 - cppcheck and clang-tidy as build stages (each ships one

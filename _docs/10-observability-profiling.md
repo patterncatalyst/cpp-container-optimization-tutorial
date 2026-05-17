@@ -391,7 +391,7 @@ notice it's there.
 
 ## Demo
 
-[`examples/demo-04-observability/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-04-observability)
+[`examples/demo-04-observability/`]({{ '/examples/demo-04-observability/' | relative_url }})
 brings up the full Grafana LGTM stack alongside an OTel-
 instrumented C++ service. Pre-provisioned Grafana dashboards
 show metrics, traces, and logs from the running service, all
@@ -402,7 +402,7 @@ The same demo also runs `bpftrace` probes against the service
 container and writes the syscall-latency histograms into Loki
 for cross-correlation against the application traces.
 
-[`examples/demo-06-memory-and-allocators/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-06-memory-and-allocators)
+[`examples/demo-06-memory-and-allocators/`]({{ '/examples/demo-06-memory-and-allocators/' | relative_url }})
 in serve mode shows the same lesson with a different workload —
 the verified r88 numbers cited above are from that demo's
 post-fix run. Both demos are independent demonstrations of the

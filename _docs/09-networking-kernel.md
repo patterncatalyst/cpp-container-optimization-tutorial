@@ -463,7 +463,7 @@ shape applied to network resources.
 ## Demo
 
 The networking comparison is folded into
-[`examples/demo-03-io-uring-grpc/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-03-io-uring-grpc):
+[`examples/demo-03-io-uring-grpc/`]({{ '/examples/demo-03-io-uring-grpc/' | relative_url }}):
 the same workload runs first under default networking and
 then with `--network=host`, and the demo prints the p50/p99
 delta. The `compose.production.yml` variant in that demo also

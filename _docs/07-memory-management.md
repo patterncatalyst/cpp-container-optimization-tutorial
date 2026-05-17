@@ -241,9 +241,10 @@ load (or calling `malloc_trim`) when they get close. They aim to keep
 usage roughly 10% below the cgroup limit, which gives the kernel breathing
 room and prevents reclaim storms from showing up as p99 spikes.
 
-This is what `examples/demo-02-stl-layout/` exercises in its
-`random_memhigh` workload: a tight `memory.high` and a workload that
-would otherwise grow past it, with and without an in-process check.
+This is what [`examples/demo-02-stl-layout/`]({{ '/examples/demo-02-stl-layout/' | relative_url }})
+exercises in its `random_memhigh` workload: a tight `memory.high` and
+a workload that would otherwise grow past it, with and without an
+in-process check.
 The point isn't to copy Presto's exact code (their repo has it for
 the curious); it's to see that the OOM killer becomes an
 application-level concern in a container, not a "things went wrong"
@@ -260,7 +261,7 @@ References worth following:
 Two demos exercise this section's material from different
 angles.
 
-[`examples/demo-06-memory-and-allocators/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-06-memory-and-allocators)
+[`examples/demo-06-memory-and-allocators/`]({{ '/examples/demo-06-memory-and-allocators/' | relative_url }})
 is the canonical PMR vs. `std::allocator` vs. `mimalloc`
 comparison cited above. Three Containerfile targets build the
 same workload against the three allocators; a single
@@ -270,7 +271,7 @@ servers under the LGTM observability stack from §10, and a
 `./bench-serve.sh` runs `hey` against each (the serve-mode
 indistinguishability). Both measurement frames in one demo.
 
-[`examples/demo-02-stl-layout/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-02-stl-layout)
+[`examples/demo-02-stl-layout/`]({{ '/examples/demo-02-stl-layout/' | relative_url }})
 runs a complementary workload focused on data-structure layout,
 with and without huge pages, under a tight `memory.high`. The
 output is a small Grafana dashboard showing RSS,

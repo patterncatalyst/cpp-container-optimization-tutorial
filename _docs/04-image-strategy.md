@@ -319,7 +319,7 @@ runtime host CPU".
 
 ## Demo
 
-[`examples/demo-01-image-strategy/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-01-image-strategy)
+[`examples/demo-01-image-strategy/`]({{ '/examples/demo-01-image-strategy/' | relative_url }})
 builds the same C++ service three ways and prints the
 verified sizes:
 

@@ -319,7 +319,7 @@ section forward:
 
 ## Demo
 
-[`examples/demo-01-image-strategy/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-01-image-strategy)
+[`examples/demo-01-image-strategy/`]({{ '/examples/demo-01-image-strategy/' | relative_url }})
 also exercises this section. The `./demo-pgo.sh` script:
 
 1. Builds an `ubi-multistage` baseline (no LTO, no PGO) — **114 MB**.

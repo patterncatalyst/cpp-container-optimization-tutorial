@@ -296,7 +296,7 @@ optimizations you already paid for. Pinning preserves them.
 ## Demo
 
 The four-row table above came from
-[`examples/demo-05-isolation/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-05-isolation),
+[`examples/demo-05-isolation/`]({{ '/examples/demo-05-isolation/' | relative_url }}),
 which builds `tenant-a` and `tenant-b` from a single multi-stage
 Containerfile, then runs all four scenarios end-to-end with one
 `./demo.sh`. The Grafana dashboards from §10 are the pretty

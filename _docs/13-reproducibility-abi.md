@@ -784,14 +784,14 @@ shipped last year still rebuildable today.**
 
 ## Demo
 
-[`examples/demo-07-quality-pipeline/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-07-quality-pipeline)
+[`examples/demo-07-quality-pipeline/`]({{ '/examples/demo-07-quality-pipeline/' | relative_url }})
 includes a hermetic build path: builds the library twice in
 identical builder containers and asserts the artifacts are
 byte-identical, deliberately introduces an ABI break and
 shows `abidiff` catching it, and runs both gcov/lcov and
 clang source-based coverage as separate build presets.
 
-[`examples/demo-04-observability/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-04-observability)
+[`examples/demo-04-observability/`]({{ '/examples/demo-04-observability/' | relative_url }})
 demonstrates the Conan lockfile pattern at scale (gRPC +
 OpenTelemetry's transitive graph is heavy enough that the
 recipe-revision drift is concretely visible).

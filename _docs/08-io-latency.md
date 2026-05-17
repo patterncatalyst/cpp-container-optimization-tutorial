@@ -418,7 +418,7 @@ walks through.
 
 ## Demo
 
-[`examples/demo-03-io-uring-grpc/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-03-io-uring-grpc)
+[`examples/demo-03-io-uring-grpc/`]({{ '/examples/demo-03-io-uring-grpc/' | relative_url }})
 brings up three servers in one binary in `podman compose`:
 
 - gRPC callback API at `:50051`, driven by `ghz`

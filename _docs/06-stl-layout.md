@@ -370,7 +370,7 @@ cache misses of pointer chasing.
 
 ## Demo
 
-[`examples/demo-02-stl-layout/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-02-stl-layout)
+[`examples/demo-02-stl-layout/`]({{ '/examples/demo-02-stl-layout/' | relative_url }})
 benchmarks all four containers at four sizes (`64`, `1024`,
 `16384`, `262144`), twice: unconstrained and under
 `--memory=128m`. Output is JSON consumable by `jq`; the
