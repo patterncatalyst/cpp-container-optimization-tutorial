@@ -8,6 +8,16 @@ FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS toolchain
 RUN rm -f /etc/yum.repos.d/redhat.repo && \
     sed -i 's/^enabled=1/enabled=0/' \
         /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
+
+# Enable EPEL 9 — UBI 9 doesn't ship cppcheck or libabigail in its
+# core repos; both live in EPEL (Extra Packages for Enterprise Linux).
+# CRB (CodeReady Builder) is already enabled in UBI 9 by default, which
+# is the prerequisite for installing many EPEL packages.
+# G-45: this is the canonical fix for "No match for argument: cppcheck"
+# (or libabigail) when building C++ analysis pipelines on a UBI base.
+RUN dnf install -y \
+        https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+
 RUN dnf install -y --setopt=install_weak_deps=False \
         gcc-toolset-14 \
         cmake \
@@ -131,7 +141,7 @@ RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ \
 COPY --from=build /src/build/release-debuginfo/demo07-svc /app/demo07-svc
 COPY --from=build /src/build/release-debuginfo/libdemo07_channel.so* /usr/local/lib/
 ENV LD_LIBRARY_PATH=/usr/local/lib
-LABEL tutorial.demo="06-quality-pipeline" tutorial.variant="svc"
+LABEL tutorial.demo="07-quality-pipeline" tutorial.variant="svc"
 USER 1001:1001
 ENTRYPOINT ["/app/demo07-svc"]
 
@@ -149,6 +159,6 @@ RUN dnf install -y --setopt=install_weak_deps=False \
 COPY --from=build /src/build/release-debuginfo/demo07-svc /app/demo07-svc
 COPY --from=build /src/build/release-debuginfo/libdemo07_channel.so* /usr/local/lib/
 ENV LD_LIBRARY_PATH=/usr/local/lib
-LABEL tutorial.demo="06-quality-pipeline" tutorial.variant="gdbserver"
+LABEL tutorial.demo="07-quality-pipeline" tutorial.variant="gdbserver"
 EXPOSE 1234
 ENTRYPOINT ["gdbserver", "0.0.0.0:1234", "/app/demo07-svc"]

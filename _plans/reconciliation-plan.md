@@ -16586,11 +16586,168 @@ pattern. Audit on next pass: demo-03 (which currently uses
 demo-04's conan.lock — same pattern needs to apply to its
 lockfile regeneration if it has one).
 
+### 2026-05-17 — r116: Round A verification — G-45 captured (UBI 9 missing cppcheck + libabigail)
+
+After r115 fixed G-44, demo.sh proceeded past the lockfile-regen
+step and started the actual `podman build`. The build then hit
+the next issue: **`cppcheck` and `libabigail` packages aren't in
+UBI 9's default repos**, even with BaseOS + AppStream + CodeReady
+Builder all enabled:
+
+```
+Red Hat Universal Base Image 9 (RPMs) - BaseOS
+Red Hat Universal Base Image 9 (RPMs) - AppStre
+Red Hat Universal Base Image 9 (RPMs) - CodeRea
+No match for argument: cppcheck
+No match for argument: libabigail
+Error: Unable to find a match: cppcheck libabigail
+```
+
+Both packages live in **EPEL** (Extra Packages for Enterprise
+Linux) — a community-maintained companion repo. Red Hat
+deliberately doesn't ship community-maintained tools like
+cppcheck or libabigail in UBI core. The fix is to install the
+`epel-release` package first, then the install resolves.
+
+**Fix in Containerfile:**
+
+Added a new RUN step in the toolchain stage *before* the main
+dnf install:
+
+```dockerfile
+# Enable EPEL 9 — UBI 9 doesn't ship cppcheck or libabigail in its
+# core repos; both live in EPEL (Extra Packages for Enterprise Linux).
+# CRB (CodeReady Builder) is already enabled in UBI 9 by default, which
+# is the prerequisite for installing many EPEL packages.
+# G-45: this is the canonical fix for "No match for argument: cppcheck"
+# (or libabigail) when building C++ analysis pipelines on a UBI base.
+RUN dnf install -y \
+        https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+```
+
+CRB (CodeReady Builder) is already enabled in UBI 9 by default —
+the dnf output above shows it as an enabled repo — so we don't
+need to enable it separately. EPEL packages depend on CRB for
+some build-related libraries; on a non-UBI RHEL host, you'd need
+`dnf config-manager --set-enabled crb` as well, but UBI ships
+with it active.
+
+Why not put EPEL into a non-cached RUN step? Two reasons:
+1. EPEL setup is stable — the URL hasn't changed in years.
+2. Separating EPEL install from the main package install means
+   the layer cache reuses EPEL-already-installed across rebuilds
+   that touch the package list. Slightly faster iteration on
+   the package set.
+
+**Other fix: stale `tutorial.demo="06-quality-pipeline"` labels.**
+
+The r114 mass-rename missed two LABEL lines in the Containerfile
+(in the `svc` and `gdbserver` stages). Both fixed to
+`tutorial.demo="07-quality-pipeline"`.
+
+**G-45 captured below in the gotcha catalog.**
+
+**Round A verification status after r116:**
+
+| Step | r114 | r115 | r116 |
+|---|---|---|---|
+| host-side lockfile regen | ✗ gcc 16 | ✓ fallback works | ✓ |
+| dnf install (cppcheck, libabigail) | n/a | ✗ "no match" | ✓ EPEL added |
+| ASan stage build | n/a | not reached | not yet verified |
+| analyzer stage runs | n/a | not reached | next to verify |
+
+**Next likely issues to watch for in r117+:**
+
+1. `run-clang-tidy` script path. The analyzer stage invokes
+   `run-clang-tidy -p build/release-debuginfo -j"$(nproc)" $(find
+   src -name '*.cpp')`. On some UBI 9 setups, `run-clang-tidy`
+   is in `/usr/share/clang/` rather than `$PATH`. If this fails,
+   the fix is one of: add `/usr/share/clang/` to PATH, invoke as
+   `python3 /usr/share/clang/run-clang-tidy.py`, or use a
+   parallel `find ... -exec clang-tidy ...` invocation.
+2. Conan rebuilding gtest with sanitizer flags for the asan
+   stage. The `tools.build:cxxflags=...` propagation through the
+   transitive dep graph isn't always clean; if gtest doesn't get
+   rebuilt with sanitizer instrumentation, the ASan tests fail
+   with shadow-memory misalignment errors.
+3. cppcheck noise. The current `--enable=warning,style,performance,
+   portability` may surface findings against the demo source that
+   weren't there at write-time but appear now. Suppression list
+   is empty; we may need to add suppressions or simplify the
+   check set.
+
+If r116 unblocks the analyzer stage and ANY of (1)-(3) bite,
+they become r117+ work.
+
+**Files changed in r116 (2):**
+
+- `examples/demo-07-quality-pipeline/Containerfile`:
+  - Added EPEL install step before main dnf install (G-45 fix)
+  - Fixed two stale `tutorial.demo="06-quality-pipeline"` LABEL
+    lines that r114's mass-rename missed
+- `_plans/reconciliation-plan.md`: this r116 entry + G-45 catalog
+
+---
+
+## Gotchas (running catalog) — continued
+
+### G-45 · UBI 9 doesn't ship cppcheck or libabigail (r116)
+
+**Symptom.** During `dnf install` inside a UBI 9 build stage,
+seeing:
+
+```
+No match for argument: cppcheck
+No match for argument: libabigail
+Error: Unable to find a match: cppcheck libabigail
+```
+
+even though BaseOS, AppStream, and CodeReady Builder are all
+enabled (as they are by default in UBI 9).
+
+**Cause.** Red Hat doesn't ship community-maintained
+analysis tools (cppcheck, valgrind, libabigail, perf-tools-unstable,
+many others) in UBI core. They live in **EPEL** (Extra Packages
+for Enterprise Linux), which is a separate community-maintained
+repo that UBI doesn't enable by default.
+
+**Fix.** Install the EPEL release package before any other dnf
+install that needs EPEL contents:
+
+```dockerfile
+RUN dnf install -y \
+        https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+```
+
+After this, subsequent `dnf install cppcheck libabigail …` works.
+
+The URL pattern `epel-release-latest-9.noarch.rpm` always points
+at the current EPEL 9 release package — it's a redirect
+maintained by Fedora; safe to depend on.
+
+**Adjacent: CRB (CodeReady Builder).** EPEL packages frequently
+depend on libraries shipped in RHEL's CRB repo. UBI 9 has CRB
+enabled by default — if you ever see EPEL packages fail with
+"missing dependency from crb-rhel-9", that's the next thing to
+enable, but it shouldn't happen on UBI bases.
+
+**Where else this applies.** Any UBI 9 build that wants:
+- cppcheck (static analysis)
+- libabigail / abidiff / abidw (ABI compat checking)
+- valgrind (already in UBI AppStream actually — verify per project)
+- python3-pyelftools (debugging helpers)
+- ccache (build cache — sometimes in EPEL, sometimes AppStream)
+
+Audit on next pass: demo-04 doesn't currently use cppcheck or
+libabigail; if Round B of demo-07 introduces coverage tooling
+that needs anything from EPEL, the EPEL install pattern needs
+to be in any stage that uses it (or the toolchain base needs
+to enable EPEL once for all downstream stages — which is the
+shape demo-07 uses).
+
 ---
 
 ## Known divergences from the PRD
-
-(historical content continues below)
 
 A running list of things the shipped tutorial does differently from
 what the PRD says. Update as you discover them; the gap between
