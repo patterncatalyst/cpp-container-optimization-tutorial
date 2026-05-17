@@ -18329,6 +18329,334 @@ No new G-XX needed — this is the same class of finding as G-52
 2. Once analyzer clears entirely, the next phases (tests + asan + abi)
    each have their own potential setup work.
 
+### 2026-05-17 — r124: Round A verification — G-53 (asan link libs), G-54 (libabigail runtime deps), report-path bugs
+
+User ran r123. Big news: **the analyzer phase passed end-to-end clean.**
+
+```
+[ ok ]  analyzer passed; reports under reports/
+==> Reports
+-rw-r--r--. 1 rsedor rsedor 10547 May 17 00:00 clang-tidy.txt
+-rw-r--r--. 1 rsedor rsedor   129 May 17 00:00 cppcheck.xml
+```
+
+cppcheck XML is 129 bytes = empty `<errors/>`. clang-tidy text is just
+the verbose check-listing header with no findings. The image committed
+to `cpp-tut/demo-07:analyzer`.
+
+User then ran each remaining phase separately:
+
+**Tests phase: ✅ PASSED**
+
+```
+[5/5] STEP 3/3: RUN ctest --preset release-debuginfo --output-on-failure ...
+    Start 1: MemoryChannelTest.SendThenRecvRoundTrips           Passed   0.00 sec
+    Start 2: MemoryChannelTest.RespectsCapacity                 Passed   0.00 sec
+    Start 3: StaticMemoryChannelTest.SendThenRecvRoundTrips     Passed   0.00 sec
+    Start 4: VirtualChannelTest.EchoCallsSendThenRecv           Passed   0.00 sec
+    Start 5: BenchmarkComparison.VirtualVsCrtp                  Passed   0.01 sec
+100% tests passed, 0 tests failed out of 5
+```
+
+The clang-tidy refactor (rule-of-five delete on VirtualChannel,
+private CRTP ctor, std::array<char,64> on Greeting) didn't break
+runtime behavior. The gmock MockChannel inherits cleanly. The CRTP
+StaticMemoryChannel constructs through its friend Derived. All five
+tests pass in 0.02s total.
+
+**ASan phase: ✗ G-53 — missing sanitizer link libraries**
+
+```
+/opt/rh/gcc-toolset-14/root/usr/libexec/gcc/x86_64-redhat-linux/14/ld:
+    cannot find libasan_preinit.o: No such file or directory
+/opt/rh/gcc-toolset-14/root/usr/libexec/gcc/x86_64-redhat-linux/14/ld:
+    cannot find -lasan: No such file or directory
+/opt/rh/gcc-toolset-14/root/usr/libexec/gcc/x86_64-redhat-linux/14/ld:
+    cannot find -lubsan: No such file or directory
+```
+
+Fails inside conan's "build gtest with sanitizers" step. The
+gcc-toolset-14 meta package doesn't pull in the sanitizer link libs
+— those live in separate packages because they're large.
+
+**Abi phase: ⚠️ passed-with-error — G-54 + script bug**
+
+```
+abidw: error while loading shared libraries: libxxhash.so.0:
+    cannot open shared object file: No such file or directory
+No reference yet; current ABI saved at reports/current.abi
+[ ok ]  abi passed; reports under reports/
+```
+
+abidw failed (libxxhash missing), but the script's else-branch chained
+the abidw command with `;` (not `&&`) to the success echo. So abidw
+failed, but echo still ran, the RUN succeeded, the image committed,
+and demo.sh declared the phase passed. **The reports directory only
+shows clang-tidy.txt + cppcheck.xml — `current.abi` was never actually
+created.**
+
+**Report path bug (separate from G-53/54)**
+
+Looking at the host's reports/ directory after running tests phase:
+
+```
+-rw-r--r-- ... 10547 May 17 00:00 clang-tidy.txt
+-rw-r--r-- ...   129 May 17 00:00 cppcheck.xml
+```
+
+`gtest.xml` is missing despite the ctest output saying it passed. Same
+for `current.abi` from the abi phase. The cause: `ctest --preset` runs
+from the binaryDir (`/src/build/release-debuginfo`), not `/src`, so
+`--output-junit reports/gtest.xml` resolves to
+`/src/build/release-debuginfo/reports/gtest.xml` — NOT `/src/reports/`
+where demo.sh's `podman cp /src/reports/.` looks.
+
+The abi stage's `abidw --out-file reports/current.abi` ran from /src
+correctly, but the file wasn't created because abidw failed before
+writing it.
+
+**Fixes in r124 (4):**
+
+**G-53 fix — add sanitizer-devel packages to toolchain stage:**
+
+```dockerfile
+RUN dnf install -y --setopt=install_weak_deps=False \
+        gcc-toolset-14 \
+        gcc-toolset-14-libasan-devel \
+        gcc-toolset-14-libubsan-devel \
+        ...
+```
+
+The `-devel` packages provide `libasan_preinit.o`, `libasan.so` (symlink
+for `-lasan`), `libubsan.so`. They pull in `libasan8` (the runtime .so.X
+package; AlmaLinux's gcc-toolset-15-gcc.spec confirms the pattern:
+`Requires: libasan8%{_isa} >= 12.1.1` on RHEL 9).
+
+Without these, `-fsanitize=address,undefined` fails at link time
+because the linker can't find the sanitizer object files and libs.
+
+**G-54 fix — also copy libxxhash + libbpf from Stream 9 builder:**
+
+When we installed libabigail-2.10 in Stream 9, dnf pulled in two
+runtime dependencies that aren't in UBI 9's default install:
+
+```
+Installing:
+  libabigail   x86_64   2.10-1.el9   crb        1.7 M
+Installing dependencies:
+  libbpf       x86_64   2:1.5.0-3.el9   baseos    184 k
+  xxhash-libs  x86_64   0.8.2-1.el9     appstream  37 k
+```
+
+Our previous COPY only grabbed `/usr/lib64/libabigail*.so*`. abidw
+links to libxxhash.so.0 (it's used internally for fast hashing) and
+loads it via the dynamic linker at runtime. Without it, abidw exits
+with "error while loading shared libraries: libxxhash.so.0".
+
+Fix: extend the builder-stage cp to also include `libxxhash*.so*` and
+`libbpf*.so*`:
+
+```dockerfile
+cp -av /usr/lib64/libabigail*.so* /export/lib/ \
+&& cp -av /usr/lib64/libxxhash*.so* /export/lib/ \
+&& cp -av /usr/lib64/libbpf*.so* /export/lib/
+```
+
+This is a generalizable pattern: **when copying binaries across
+stages, you have to copy ALL their non-system runtime deps too**.
+For a single tool, `ldd` is the way to enumerate; for a curated set
+we just hardcode the deps we know about.
+
+**Report path bug — use absolute paths for /src/reports/:**
+
+Both tests and asan stages had `--output-junit reports/X.xml`. Changed
+to `--output-junit /src/reports/X.xml` with a preceding `mkdir -p
+/src/reports`. Now demo.sh's `podman cp $cid:/src/reports/.` finds
+the actual report files.
+
+```dockerfile
+RUN mkdir -p /src/reports \
+ && ctest --preset release-debuginfo --output-on-failure \
+          --output-junit /src/reports/gtest.xml \
+  || (echo "test stage failed"; exit 1)
+```
+
+**abi stage script bug — use `&&` chain:**
+
+Changed:
+
+```dockerfile
+mkdir -p reports;
+abidw --out-file reports/current.abi build/release-debuginfo/libdemo07_channel.so.1;
+echo "No reference yet; current ABI saved at reports/current.abi";
+```
+
+to:
+
+```dockerfile
+mkdir -p /src/reports \
+ && if [ -f abi-reference/libdemo07_channel.so.1.abi ]; then \
+       abidw --out-file /src/reports/current.abi ... \
+    && abidiff ... ; \
+    else \
+       abidw --out-file /src/reports/current.abi ... \
+    && echo "No reference yet; ..." ; \
+    fi
+```
+
+With `&&`, the success message only runs if abidw actually succeeded.
+If abidw fails (e.g., G-54 libxxhash missing), the RUN command fails,
+the image doesn't commit, and demo.sh reports the failure honestly
+instead of misleadingly declaring success.
+
+**Round A verification status after r124:**
+
+| Step | r122 | r123 | r124 |
+|---|---|---|---|
+| host-side lockfile UX | clean | clean | clean |
+| cmake build | ✓ | ✓ | ✓ |
+| analyzer phase | ✗ G-52 | ✗ useStlAlgorithm | ✓ end-to-end |
+| **tests phase passes** | n/a | n/a | **✓ all 5 pass** |
+| tests phase gtest.xml on host | n/a | n/a | next to verify |
+| **asan phase configures + builds** | n/a | n/a | next to verify (G-53 fix) |
+| **abi phase actually creates current.abi** | n/a | n/a | next to verify (G-54 fix) |
+
+**Files changed in r124 (2):**
+
+- `examples/demo-07-quality-pipeline/Containerfile`: G-53 — added
+  gcc-toolset-14-libasan-devel + gcc-toolset-14-libubsan-devel to
+  toolchain dnf install; G-54 — extended libabigail-builder cp to
+  also stage libxxhash*.so* and libbpf*.so*; tests + asan stages use
+  /src/reports absolute path; abi stage chains abidw → echo with &&
+- `_plans/reconciliation-plan.md`: this r124 entry + G-53 + G-54
+
+---
+
+## Gotchas (running catalog) — continued
+
+### G-53 · gcc-toolset-N sanitizer link libs are not in the meta-package (r124)
+
+**Symptom.** Building anything with `-fsanitize=address` or
+`-fsanitize=undefined` under gcc-toolset-14:
+
+```
+/opt/rh/gcc-toolset-14/.../ld: cannot find libasan_preinit.o:
+    No such file or directory
+/opt/rh/gcc-toolset-14/.../ld: cannot find -lasan: No such file or directory
+/opt/rh/gcc-toolset-14/.../ld: cannot find -lubsan: No such file or directory
+```
+
+even though `gcc-toolset-14` (the meta package) was installed.
+
+**Cause.** The Software Collection's gcc-toolset-N meta package
+deliberately splits the sanitizer link libraries into separate
+sub-packages because they're large:
+
+| Package | What it provides |
+|---|---|
+| `gcc-toolset-14-libasan-devel` | libasan_preinit.o + libasan.so symlink |
+| `gcc-toolset-14-libubsan-devel` | libubsan.so symlink |
+| `gcc-toolset-14-liblsan-devel` | LeakSanitizer link libs |
+| `gcc-toolset-14-libtsan-devel` | ThreadSanitizer link libs |
+| `gcc-toolset-14-libhwasan-devel` | HWAddressSanitizer link libs |
+
+These `-devel` packages also `Require:` the corresponding runtime .so
+packages (`libasan8`, `libubsan1`, etc., per the AlmaLinux spec
+file showing `Requires: libasan8%{_isa} >= 12.1.1` on RHEL 9), so
+installing one pulls in the runtime too.
+
+**Fix.** Install the specific sanitizer-devel packages you need.
+
+For `-fsanitize=address,undefined`:
+
+```dockerfile
+RUN dnf install -y \
+        gcc-toolset-14 \
+        gcc-toolset-14-libasan-devel \
+        gcc-toolset-14-libubsan-devel \
+        ...
+```
+
+For other sanitizers, add the corresponding `-devel` package.
+
+**Where else this applies.** Any RHEL/UBI/CentOS-derived image with
+gcc-toolset that wants to use ANY sanitizer. The pattern holds for
+all sanitizer types and all gcc-toolset versions.
+
+The misleading part is that the "main" gcc package compiles
+sanitizer-instrumented code fine — it's only at link time that the
+missing libs show up. If your CI only checks "does it compile?"
+without linking, you'll miss this.
+
+### G-54 · Copying binaries across stages requires copying their non-system runtime deps too (r124)
+
+**Symptom.** A binary copied from one container stage to another
+fails at runtime with `error while loading shared libraries`:
+
+```
+abidw: error while loading shared libraries: libxxhash.so.0:
+    cannot open shared object file: No such file or directory
+```
+
+even though the same binary worked fine in the builder stage.
+
+**Cause.** A `.so` dependency that exists in the builder stage but not
+in the target stage. The builder stage installed libabigail via dnf,
+which transitively pulled in `xxhash-libs` and `libbpf`. We only
+copied libabigail's own `.so` to the target stage, not its non-system
+runtime deps.
+
+Glibc-level libs (libc, libpthread, libstdc++) are usually in the target
+stage because they come with the base image. Non-glibc libs — the
+"interesting" deps — need to be explicitly copied or installed.
+
+**Fix.** Three options:
+
+1. **Copy the deps too (idempotent, no runtime install):**
+
+   ```dockerfile
+   cp -av /usr/lib64/libabigail*.so* /export/lib/ \
+       /usr/lib64/libxxhash*.so* \
+       /usr/lib64/libbpf*.so*
+   ```
+
+   This works when both stages share glibc-compatible bases (in our case
+   Stream 9 and UBI 9 both ship glibc 2.34). Stable, reproducible.
+
+2. **Install the deps in the target stage** (if the deps are in the
+   target's repos):
+
+   ```dockerfile
+   RUN dnf install -y xxhash-libs libbpf
+   ```
+
+   Cleaner conceptually, but requires the deps to be packaged in the
+   target's repos. UBI 9 has xxhash-libs in AppStream and libbpf in
+   BaseOS, so this would work for us.
+
+3. **Use ldd to discover deps dynamically** (most robust):
+
+   ```bash
+   ldd /usr/bin/abidw | awk '/=> \/usr\/lib(64)?/ {print $3}' | \
+       while read dep; do cp -av "$dep" /export/lib/; done
+   ```
+
+   Captures future deps if libabigail adds them.
+
+Our demo uses option 1 because it's the simplest to follow for
+pedagogical purposes. For production, option 3 is more robust.
+
+**Where else this applies.** Any multi-stage container build that
+copies binaries between stages. ALL non-system runtime deps must
+travel with the binary. The `RUN dnf install` you ran in the builder
+stage is doing implicit work on your behalf — when you COPY just the
+binary, you have to do that work explicitly.
+
+A failure mode: the binary works during initial development (when
+both stages were built from the same base + same dnf installs), then
+breaks later when one stage's deps drift (or you slim down the target
+stage). Always test the runtime invocations after multi-stage COPY.
+
 ---
 
 ## Known divergences from the PRD

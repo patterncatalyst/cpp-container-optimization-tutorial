@@ -26,7 +26,9 @@ RUN dnf install -y --setopt=install_weak_deps=False \
  && cp -av /usr/bin/abidiff /usr/bin/abidw /usr/bin/abilint \
            /usr/bin/abicompat /usr/bin/abipkgdiff /usr/bin/kmidiff \
            /export/bin/ \
- && cp -av /usr/lib64/libabigail*.so* /export/lib/
+ && cp -av /usr/lib64/libabigail*.so* /export/lib/ \
+ && cp -av /usr/lib64/libxxhash*.so* /export/lib/ \
+ && cp -av /usr/lib64/libbpf*.so* /export/lib/
 
 # ---- toolchain base ----
 FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS toolchain
@@ -46,6 +48,8 @@ RUN dnf install -y \
 
 RUN dnf install -y --setopt=install_weak_deps=False \
         gcc-toolset-14 \
+        gcc-toolset-14-libasan-devel \
+        gcc-toolset-14-libubsan-devel \
         cmake \
         ninja-build \
         clang-tools-extra \
@@ -128,7 +132,13 @@ RUN run-clang-tidy -p build/release-debuginfo -j"$(nproc)" \
 # ---- test stage ----
 FROM build AS tests
 WORKDIR /src
-RUN ctest --preset release-debuginfo --output-on-failure --output-junit reports/gtest.xml \
+# Use absolute path for --output-junit; ctest --preset runs from the
+# binaryDir (/src/build/release-debuginfo), so relative paths land there
+# rather than at /src/reports where demo.sh's `podman cp /src/reports/`
+# looks for them.
+RUN mkdir -p /src/reports \
+ && ctest --preset release-debuginfo --output-on-failure \
+          --output-junit /src/reports/gtest.xml \
   || (echo "test stage failed"; exit 1)
 
 # ---- asan stage ----
@@ -166,8 +176,9 @@ RUN if [ -s conan.lock ]; then \
  && cmake --build --preset asan -j"$(nproc)"
 ENV ASAN_OPTIONS=halt_on_error=1:detect_leaks=1:print_stacktrace=1:abort_on_error=1
 ENV UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
-RUN ctest --preset asan --output-on-failure --output-junit reports/asan.xml 2>&1 \
-        | tee reports/asan.txt \
+RUN mkdir -p /src/reports \
+ && ctest --preset asan --output-on-failure --output-junit /src/reports/asan.xml 2>&1 \
+        | tee /src/reports/asan.txt \
   || (echo "ASan stage failed; see reports/asan.txt"; exit 1)
 
 # ---- abi stage ----
@@ -176,15 +187,17 @@ WORKDIR /src
 COPY abi-reference/ ./abi-reference/
 # If reference exists, compare; otherwise just record current ABI as a baseline
 # the developer can commit.
-RUN if [ -f abi-reference/libdemo07_channel.so.1.abi ]; then \
-        abidw --out-file reports/current.abi build/release-debuginfo/libdemo07_channel.so.1; \
-        abidiff abi-reference/libdemo07_channel.so.1.abi reports/current.abi \
-            > reports/abidiff.txt 2>&1 \
-        || (echo "ABI changed:"; cat reports/abidiff.txt; exit 2); \
+RUN mkdir -p /src/reports \
+ && if [ -f abi-reference/libdemo07_channel.so.1.abi ]; then \
+        abidw --out-file /src/reports/current.abi \
+              build/release-debuginfo/libdemo07_channel.so.1 \
+     && abidiff abi-reference/libdemo07_channel.so.1.abi /src/reports/current.abi \
+            > /src/reports/abidiff.txt 2>&1 \
+        || (echo "ABI changed:"; cat /src/reports/abidiff.txt; exit 2); \
     else \
-        mkdir -p reports; \
-        abidw --out-file reports/current.abi build/release-debuginfo/libdemo07_channel.so.1; \
-        echo "No reference yet; current ABI saved at reports/current.abi"; \
+        abidw --out-file /src/reports/current.abi \
+              build/release-debuginfo/libdemo07_channel.so.1 \
+     && echo "No reference yet; current ABI saved at reports/current.abi"; \
     fi
 
 # ---- release runtime ----
