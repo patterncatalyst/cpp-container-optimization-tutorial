@@ -101,7 +101,7 @@
 
   <!-- Results band -->
   <rect class="band b-result" x="80" y="488" width="740" height="76"/>
-  <text x="450" y="508" class="res-h" text-anchor="middle">Verified Round B results (p99 tenant-a latency, r102)</text>
+  <text x="450" y="508" class="res-h" text-anchor="middle">Verified tenant-a p99 latency results</text>
 
   <!-- Result columns -->
   <text x="180" y="534" class="lbl" text-anchor="middle">baseline (alone)</text>

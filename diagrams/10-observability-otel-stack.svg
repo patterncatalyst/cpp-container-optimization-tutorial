@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 560" role="img"
-     aria-label="OpenTelemetry data flow from a C++ application through the OTel SDK (with the Simple-vs-Batch SpanProcessor decision highlighted in red as the single biggest performance knob) into OTLP-over-gRPC, then into the otel-lgtm container which fans signals out to Tempo (traces), Mimir (metrics), and Loki (logs), all queried by Grafana. The verified r88 result shows the 8.5x throughput collapse caused by choosing the wrong processor.">
+     aria-label="OpenTelemetry data flow from a C++ application through the OTel SDK (with the Simple-vs-Batch SpanProcessor decision highlighted in red as the single biggest performance knob) into OTLP-over-gRPC, then into the otel-lgtm container which fans signals out to Tempo (traces), Mimir (metrics), and Loki (logs), all queried by Grafana. The verified result shows the 8.5x throughput collapse caused by choosing the wrong processor.">
   <defs>
     <style><![CDATA[
       .bg       { fill: #fdfbf7; }
@@ -122,7 +122,7 @@
 
   <!-- Per-span cost panel (left side, below app) -->
   <rect class="band b-result" x="40" y="350" width="440" height="170"/>
-  <text x="260" y="372" class="res-h" text-anchor="middle">The cost of Simple vs Batch (verified r88, demo-06)</text>
+  <text x="260" y="372" class="res-h" text-anchor="middle">The cost of Simple vs Batch (verified, demo-06)</text>
 
   <text x="60" y="396" class="lbl">Simple processor</text>
   <text x="80" y="414" class="mono">1. serialize OTLP protobuf</text>
@@ -146,7 +146,7 @@
 
   <!-- Right side: result numbers -->
   <rect class="band b-result" x="500" y="350" width="380" height="170"/>
-  <text x="690" y="372" class="res-h" text-anchor="middle">Demo-06 verified result (r88)</text>
+  <text x="690" y="372" class="res-h" text-anchor="middle">Demo-06 verified result</text>
 
   <text x="520" y="396" class="lbl">No OTel</text>
   <text x="700" y="396" class="mono">18,469 req/s    p50 200 µs    p99 400 µs</text>

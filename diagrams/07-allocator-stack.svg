@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 580" role="img"
-     aria-label="The C++ memory allocator stack from application code down through PMR (with the cache-locality bonus), the chosen allocator (glibc/jemalloc/mimalloc), kernel page cache, the cgroup memory.high throttle, the cgroup memory.max ceiling, and finally the host. The cost actually lives at the first-write page fault, not at malloc itself; that arrow is shown in red. Verified r96 batch-mode PMR numbers are at the bottom: PMR is 2.12x faster than std::allocator at p50.">
+     aria-label="The C++ memory allocator stack from application code down through PMR (with the cache-locality bonus), the chosen allocator (glibc/jemalloc/mimalloc), kernel page cache, the cgroup memory.high throttle, the cgroup memory.max ceiling, and finally the host. The cost actually lives at the first-write page fault, not at malloc itself; that arrow is shown in red. Verified batch-mode PMR numbers are at the bottom: PMR is 2.12x faster than std::allocator at p50.">
   <defs>
     <style><![CDATA[
       .bg       { fill: #fdfbf7; }
@@ -104,7 +104,7 @@
 
   <!-- Result panel on right -->
   <rect class="band b-result" x="720" y="124" width="160" height="200"/>
-  <text x="800" y="146" class="res-h" text-anchor="middle">PMR result (r96)</text>
+  <text x="800" y="146" class="res-h" text-anchor="middle">PMR result (batch mode)</text>
   <text x="800" y="160" class="sec" text-anchor="middle">batch mode, 200 iters/req</text>
 
   <text x="740" y="184" class="lbl">std::allocator</text>

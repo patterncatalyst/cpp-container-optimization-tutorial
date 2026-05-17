@@ -119,6 +119,6 @@
 
   <!-- Bottom result band -->
   <rect class="band b-result" x="120" y="464" width="660" height="60"/>
-  <text x="450" y="486" class="ttl-sub" text-anchor="middle">Demo-01 verified result (r20)</text>
+  <text x="450" y="486" class="ttl-sub" text-anchor="middle">Demo-01 verified result</text>
   <text x="450" y="510" class="accent-h" text-anchor="middle">689 MB  →  26.4 MB    (26× smaller; faster pull, smaller attack surface)</text>
 </svg>
