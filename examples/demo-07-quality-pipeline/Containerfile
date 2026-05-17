@@ -78,7 +78,17 @@ COPY conan.lock ./conan.lock
 
 # Hermetic Conan install: reads conan.lock when present, falls back to
 # fresh resolution when not (e.g., when host-side regen failed and the
-# placeholder lockfile was removed — see G-44 in demo.sh).
+# placeholder lockfile was truncated to zero bytes — see G-44 + G-48
+# in demo.sh).
+#
+# G-50: in the else-branch we explicitly `rm -f conan.lock` BEFORE
+# running `conan install`. Conan 2.x auto-discovers any `conan.lock`
+# in CWD even without the --lockfile flag, and trying to parse a
+# zero-byte file fails with:
+#   ERROR: Error parsing lockfile '/src/conan.lock':
+#   Expecting value: line 1 column 1 (char 0)
+# Removing the empty placeholder before conan install fires lets the
+# fresh-resolve path actually run.
 RUN conan profile detect --force \
  && if [ -s conan.lock ]; then \
         conan install . \
@@ -87,6 +97,7 @@ RUN conan profile detect --force \
             --build=missing \
             -s build_type=RelWithDebInfo ; \
     else \
+        rm -f conan.lock && \
         conan install . \
             --output-folder=build/release-debuginfo \
             --build=missing \
@@ -126,6 +137,12 @@ RUN ctest --preset release-debuginfo --output-on-failure --output-junit reports/
 # captures them in reports/asan.txt for CI consumption.
 FROM build AS asan
 WORKDIR /src
+# G-50: rm -f conan.lock in else-branch before conan install — conan
+# 2.x auto-discovers conan.lock in CWD even without --lockfile flag,
+# and a zero-byte file fails JSON parse. See build stage above.
+# Note: the conan.lock from the build stage's CWD is inherited via the
+# FROM build base, so it may already be present here even if we're
+# re-resolving against different sanitizer settings.
 RUN if [ -s conan.lock ]; then \
         conan install . \
             --output-folder=build/asan \
@@ -136,6 +153,7 @@ RUN if [ -s conan.lock ]; then \
             -c tools.build:exelinkflags=[\"-fsanitize=address,undefined\"] \
             -c tools.build:sharedlinkflags=[\"-fsanitize=address,undefined\"] ; \
     else \
+        rm -f conan.lock && \
         conan install . \
             --output-folder=build/asan \
             --build=missing \

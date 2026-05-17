@@ -17412,6 +17412,233 @@ If you're seeing more than one or two missing-package gotchas in
 one stage, that's the signal to stop adding source builds and
 switch the stage's base image.
 
+### 2026-05-17 — r120: Round A verification — G-50 captured
+
+User ran r119. **All package-resolution issues finally cleared.**
+The build progressed through every step that previously failed:
+
+```
+[1/4] STEP 1/2: FROM quay.io/centos/centos:stream9 AS libabigail-builder
+Trying to pull quay.io/centos/centos:stream9...
+[...]
+  Installing       : libabigail-2.10-1.el9.x86_64                           3/3
+  Running scriptlet: libabigail-2.10-1.el9.x86_64                           3/3
+[...]
+'/usr/bin/abidiff' -> '/export/bin/abidiff'
+'/usr/bin/abidw' -> '/export/bin/abidw'
+'/usr/bin/abilint' -> '/export/bin/abilint'
+'/usr/bin/abicompat' -> '/export/bin/abicompat'
+'/usr/bin/abipkgdiff' -> '/export/bin/abipkgdiff'
+'/usr/bin/kmidiff' -> '/export/bin/kmidiff'
+'/usr/lib64/libabigail.so.9' -> '/export/lib/libabigail.so.9'
+'/usr/lib64/libabigail.so.9.0.0' -> '/export/lib/libabigail.so.9.0.0'
+--> 3659f037e6c1
+[2/4] STEP 1/8: FROM registry.access.redhat.com/ubi9/ubi:9.4 AS toolchain
+[...]
+Successfully installed [...] conan-2.28.1 [...]
+[2/4] STEP 5/8: COPY --from=libabigail-builder /export/bin/  /usr/local/bin/
+[2/4] STEP 6/8: COPY --from=libabigail-builder /export/lib/  /usr/local/lib/
+[...]
+[3/4] STEP 7/7: RUN conan profile detect --force  && if [ -s conan.lock ] [...]
+detect_api: Found cc=gcc-14.2.1
+detect_api: gcc>=5, using the major as version
+detect_api: gcc C++ standard library: libstdc++11
+Detected profile:
+[settings]
+arch=x86_64
+build_type=Release
+compiler=gcc
+compiler.cppstd=gnu17
+compiler.libcxx=libstdc++11
+compiler.version=14
+os=Linux
+```
+
+Everything cleared:
+
+- ✓ Stream 9 image pulled (one-time ~150 MB)
+- ✓ libabigail 2.10 installed via `dnf install libabigail` from CRB
+- ✓ Tools staged to `/export/{bin,lib}/`
+- ✓ EPEL added to toolchain
+- ✓ All toolchain dnf installs succeeded (cppcheck, gcc-toolset-14,
+  clang-tools-extra, ninja-build, cmake, etc.) — 147 packages, 220 MB,
+  including the SELinux scriptlet `ValueError: SELinux policy is not
+  managed` which is a non-fatal warning we can ignore (containers don't
+  have an SELinux policy store)
+- ✓ Conan 2.28.1 installed via pip
+- ✓ `COPY --from=libabigail-builder /export/bin/` and `/export/lib/`
+  succeeded — libabigail tools and shared libs are now in the toolchain
+- ✓ Build stage `COPY` of conanfile.py, CMakeLists.txt, CMakePresets.json,
+  .clang-tidy, src/, tests/, conan.lock — all succeeded (G-48 truncate
+  kept the 0-byte file present for COPY)
+- ✓ `conan profile detect --force` inside container worked perfectly:
+  detected gcc-14.2.1, libstdc++11, gnu17
+
+Then the **first new failure inside the container**:
+
+```
+ERROR: Error parsing lockfile '/src/conan.lock':
+Expecting value: line 1 column 1 (char 0)
+```
+
+This is "json.loads on empty string" — conan 2.x is trying to parse
+the truncated (0-byte) conan.lock as JSON.
+
+**G-50 root cause.** Conan 2.x **auto-discovers `conan.lock`** in the
+current working directory **even when `--lockfile` is not passed.**
+The Containerfile's else-branch ran:
+
+```bash
+conan install . --output-folder=build/release-debuginfo \
+    --build=missing -s build_type=RelWithDebInfo
+```
+
+No `--lockfile` flag — but conan still picked up the 0-byte
+`/src/conan.lock`, tried `json.loads("")`, and exploded.
+
+The `[ -s conan.lock ]` test correctly routed to the else-branch
+(file is empty so `[ -s ]` returns false), but the else-branch itself
+didn't prevent conan from auto-discovering the file we wanted it to
+ignore.
+
+**Fix.** In the else-branch, `rm -f conan.lock` BEFORE `conan install`.
+Without the file present, conan has nothing to auto-discover. Applied
+to both the build stage and the asan stage:
+
+```dockerfile
+RUN conan profile detect --force \
+ && if [ -s conan.lock ]; then \
+        conan install . --lockfile=conan.lock --build=missing ... ; \
+    else \
+        rm -f conan.lock && \
+        conan install . --build=missing ... ; \
+    fi \
+ && cmake --preset release-debuginfo \
+ && cmake --build --preset release-debuginfo -j"$(nproc)"
+```
+
+The host-side `> conan.lock` (G-48) is still correct — the empty
+file is needed for the host-side `COPY conan.lock` to work. We just
+have to remove it INSIDE the container before conan runs.
+
+**G-50 captured below.**
+
+**Round A verification status after r120:**
+
+| Step | r114-r119 | r120 |
+|---|---|---|
+| host-side lockfile regen | ✓ (G-48 truncate) | ✓ |
+| Stream 9 libabigail-builder | ✓ | ✓ |
+| EPEL added | ✓ | ✓ |
+| toolchain dnf installs | ✓ | ✓ |
+| libabigail tools COPY to /usr/local/ | ✓ | ✓ |
+| conan install in container | ✗ G-50 lockfile parse | **next to verify** |
+| cmake configure + build | not reached | after G-50 |
+| analyzer (cppcheck + clang-tidy) | not reached | after build |
+| tests (ctest with gtest) | not reached | after build |
+| asan stage (sanitizer-instrumented build) | not reached | after build |
+| abi stage (abidiff/abidw) | not reached | after build |
+
+This is the closest we've gotten to seeing the actual demo run.
+The next likely failure is one of: conan reaching center to fetch
+gtest the first time (firewall/network), cmake-conan integration
+finding the right toolchain file path, or cppcheck/clang-tidy
+finding real findings against the demo source.
+
+**Files changed in r120 (2):**
+
+- `examples/demo-07-quality-pipeline/Containerfile`: G-50 — added
+  `rm -f conan.lock &&` to the else-branch of both build (line 100)
+  and asan (line 156) stages, before `conan install`.
+- `_plans/reconciliation-plan.md`: this r120 entry + G-50 catalog.
+
+---
+
+## Gotchas (running catalog) — continued
+
+### G-50 · Conan 2.x auto-discovers `conan.lock` in CWD even without `--lockfile` (r120)
+
+**Symptom.** Inside a `conan install` inside a container build:
+
+```
+ERROR: Error parsing lockfile '/src/conan.lock':
+Expecting value: line 1 column 1 (char 0)
+```
+
+The error is "json.loads on empty string." But the `conan install`
+command in question doesn't pass `--lockfile`. So why is conan
+parsing one?
+
+**Cause.** Conan 2.x auto-discovers any `conan.lock` in the current
+working directory and reads it as a default constraint set. This
+happens **even when `--lockfile` is NOT on the command line.** If
+the discovered file is empty (or malformed), the json parse fails
+and conan aborts.
+
+In our case, the host-side `> conan.lock` (G-48 truncate) leaves a
+0-byte file present on the host so `COPY conan.lock` succeeds.
+Inside the container, the `[ -s conan.lock ]` test routes to the
+else-branch (file is empty so `[ -s ]` returns false). The
+else-branch correctly omits `--lockfile`. But conan picks the
+file up anyway via auto-discovery — and the parse explodes.
+
+**Fix.** Inside the container, before running `conan install` in
+the no-lockfile path, remove the empty placeholder file:
+
+```dockerfile
+RUN if [ -s conan.lock ]; then \
+        conan install . --lockfile=conan.lock --build=missing ... ; \
+    else \
+        rm -f conan.lock && \
+        conan install . --build=missing ... ; \
+    fi
+```
+
+The `rm -f conan.lock` makes the file invisible to auto-discovery.
+Conan resolves dependencies fresh and writes whatever lockfile it
+likes for its own internal use, but no external constraint applies.
+
+Equivalent alternatives that also work:
+- Write a **minimally-valid empty lockfile** instead of truncating:
+  `{"version": "0.5", "requires": [], "build_requires": [],
+  "python_requires": [], "config_requires": []}`. Conan parses it,
+  sees no constraints, and proceeds. Slightly more elegant but
+  adds another JSON-format-dependency.
+- Pass `--lockfile=NONE` to explicitly disable lockfile use. This
+  is `conan install`'s documented opt-out, but it requires conan
+  2.7.0 or later and changes the command for both branches; not
+  worth the version constraint.
+
+The `rm -f` approach is the simplest and version-portable.
+
+**Where else this applies.** Any conan 2.x build that:
+- Auto-discovers a lockfile you intentionally want ignored
+- Has an "optionally present" lockfile (placeholder for first run,
+  real lockfile after)
+- Combines `COPY` (unconditional file presence) with `[ -s file ]`
+  (conditional content check)
+
+If you ever see `Error parsing lockfile` from a conan command that
+DOESN'T have `--lockfile` in it, this is the cause. The presence
+of `conan.lock` in CWD is the trigger, not the explicit flag.
+
+**Aside on the G-48/G-50 interaction.** Together these two gotchas
+describe the COMPLETE workflow for "ship a lockfile placeholder
+that gets resolved properly on first run":
+
+1. **On host (G-48):** if the placeholder lockfile is detected,
+   truncate it to 0 bytes (don't delete; `COPY` needs the file
+   to exist).
+2. **In Containerfile (G-50):** if the lockfile is empty (`[ -s
+   conan.lock ]` returns false), `rm -f conan.lock` BEFORE running
+   `conan install` (else-branch only).
+3. **Outcome:** conan resolves fresh, no parse error, no missing
+   COPY error. After first run, the build produces a real lockfile
+   that the user can extract and commit.
+
+Both fixes are needed together. Skip either and you get a different
+failure mode.
+
 ---
 
 ## Known divergences from the PRD
