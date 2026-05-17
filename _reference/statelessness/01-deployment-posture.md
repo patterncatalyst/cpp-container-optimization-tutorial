@@ -14,6 +14,8 @@ In a Kubernetes or container-orchestrator context, "stateless" and "stateful" ar
 
 This document establishes the vocabulary used throughout the rest of the set. Subsequent documents go deep on the C++ mechanics: RAII discipline (Doc 02), per-request arenas (Doc 03), the boundary between request-scoped and process-scoped state (Doc 04), the threading model that crosses both (Doc 05), the 12-factor implications for C++ (Doc 06), and so on. The point of starting here is that none of those mechanics matter if the architectural posture is wrong: a binary that *cannot* be deployed stateless will have its design problems amplified by every clever per-request optimization, not solved by them.
 
+{% include excalidraw.html name="statelessness/01-deployment-posture" caption="Stateless vs stateful as deployment posture — the same C++ binary, two state choices." %}
+
 ## What "stateless" actually means
 
 The word is overloaded. Three meanings are worth distinguishing because conflating them is the source of most confusion.

@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 500" role="img"
+     aria-label="RequestContext as RAII per-request scope: constructor acquires arena, connection, and span; destructor releases them on every exit path">
+  <defs>
+    <style><![CDATA[
+      .bg       { fill: #fdfbf7; }
+      .grid     { stroke: #e8e1d3; stroke-width: 0.5; fill: none; }
+
+      .panel    { fill: #ffffff; stroke: #2d2d2d; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-bad{ fill: #fef3f0; stroke: #b86742; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-ok { fill: #eef5ed; stroke: #5a8870; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-acc{ fill: #f0f5fc; stroke: #4a73b8; stroke-width: 1.5; rx: 8; ry: 8; }
+
+      .scope    { fill: #fbfaf6; stroke: #888; stroke-dasharray: 4 3; stroke-width: 1; rx: 4; ry: 4; }
+
+      .step     { fill: #ffffff; stroke: #2d2d2d; stroke-width: 1; rx: 4; ry: 4; }
+      .step-acq { fill: #e8f0fb; stroke: #4a73b8; }
+      .step-use { fill: #fdfbf7; stroke: #2d2d2d; }
+      .step-rel { fill: #d8e8df; stroke: #5a8870; }
+      .step-leak{ fill: #fef3f0; stroke: #c0392b; }
+      .step-ext { fill: #faf0e6; stroke: #a06030; }
+
+      .ttl      { font: 700 18px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .pttl     { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .pttl-bad { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #b86742; }
+      .pttl-ok  { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #5a8870; }
+      .pttl-acc { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #4a73b8; }
+      .step-t   { font: 12px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .step-tm  { font: 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .cap      { font: 13px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .lbl      { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #555; }
+      .lbl-bd   { font: italic 700 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #444; }
+      .ok-l     { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #5a8870; }
+      .bad-l    { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+      .acc-l    { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #4a73b8; }
+
+      .arrow    { stroke: #2d2d2d; stroke-width: 1.3; fill: none; }
+      .arrow-ok { stroke: #5a8870; stroke-width: 1.6; fill: none; }
+      .arrow-bad{ stroke: #c0392b; stroke-width: 1.6; fill: none; stroke-dasharray: 5 3; }
+      .arrow-acc{ stroke: #4a73b8; stroke-width: 1.6; fill: none; }
+    ]]></style>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" class="grid"/>
+    </pattern>
+    <marker id="ah-blk" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+    <marker id="ah-ok" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a8870"/>
+    </marker>
+    <marker id="ah-bad" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
+    <marker id="ah-acc" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4a73b8"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="920" height="500"/>
+  <rect width="920" height="500" fill="url(#grid)"/>
+
+  <text x="460" y="34" text-anchor="middle" class="ttl">RequestContext: RAII as the per-request scope</text>
+  <text x="460" y="54" text-anchor="middle" class="cap">Constructor acquires · body uses · destructor releases — on every exit path</text>
+
+  <!-- request enters -->
+  <rect class="step step-acq" x="60" y="85" width="800" height="36"/>
+  <text x="460" y="108" text-anchor="middle" class="step-t">gRPC handler: rpc ComputePrice(...) → Reply</text>
+
+  <!-- request scope outline -->
+  <rect class="scope" x="80" y="140" width="760" height="295"/>
+  <text x="92" y="159" class="lbl">{ // RequestContext scope</text>
+
+  <!-- construction step (acquires three things) -->
+  <rect class="step step-acq" x="100" y="170" width="720" height="80"/>
+  <text x="460" y="190" text-anchor="middle" class="pttl-acc">RequestContext ctx{server_ctx};   // ctor acquires:</text>
+  <rect class="step" x="125" y="200" width="220" height="40"/>
+  <text x="235" y="218" text-anchor="middle" class="step-tm">ctx.arena</text>
+  <text x="235" y="234" text-anchor="middle" class="lbl">PMR monotonic buffer</text>
+  <rect class="step" x="355" y="200" width="220" height="40"/>
+  <text x="465" y="218" text-anchor="middle" class="step-tm">ctx.conn</text>
+  <text x="465" y="234" text-anchor="middle" class="lbl">ScopedConnection from pool</text>
+  <rect class="step" x="585" y="200" width="220" height="40"/>
+  <text x="695" y="218" text-anchor="middle" class="step-tm">ctx.span</text>
+  <text x="695" y="234" text-anchor="middle" class="lbl">OTel span (with parent)</text>
+
+  <!-- handler body -->
+  <rect class="step step-use" x="100" y="265" width="720" height="60"/>
+  <text x="460" y="285" text-anchor="middle" class="pttl">handler body uses ctx — may throw, may early-return</text>
+  <text x="460" y="305" text-anchor="middle" class="step-tm">auto row = ctx.conn->query(sql);  ctx.span->set("rows", row.n);</text>
+  <text x="460" y="320" text-anchor="middle" class="step-tm">if (...) return Status::CANCELLED;  // RAII still runs</text>
+
+  <!-- destructor (reverse order) -->
+  <rect class="step step-rel" x="100" y="340" width="720" height="80"/>
+  <text x="460" y="360" text-anchor="middle" class="pttl-ok">} // ~RequestContext()   — reverse order of construction:</text>
+  <rect class="step" x="125" y="370" width="220" height="40"/>
+  <text x="235" y="388" text-anchor="middle" class="step-tm">ctx.span ends</text>
+  <text x="235" y="404" text-anchor="middle" class="lbl">exported to OTel collector</text>
+  <rect class="step" x="355" y="370" width="220" height="40"/>
+  <text x="465" y="388" text-anchor="middle" class="step-tm">ctx.conn returned</text>
+  <text x="465" y="404" text-anchor="middle" class="lbl">back to the pool</text>
+  <rect class="step" x="585" y="370" width="220" height="40"/>
+  <text x="695" y="388" text-anchor="middle" class="step-tm">ctx.arena freed</text>
+  <text x="695" y="404" text-anchor="middle" class="lbl">single deallocation</text>
+
+  <!-- callout below -->
+  <text x="460" y="465" text-anchor="middle" class="ok-l">Three exit paths — return, return Status, throw — all fire the destructor.</text>
+  <text x="460" y="483" text-anchor="middle" class="lbl">This is what makes "stateful work, stateless posture" tractable in C++.</text>
+</svg>

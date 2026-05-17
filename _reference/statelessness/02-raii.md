@@ -18,6 +18,8 @@ Done well, this gives both correctness — no resource leaks, no stale state cro
 
 This document covers the RAII discipline for a stateless service: how to model request-scoped state as RAII types, the canonical gRPC pattern, the common mistakes, the counterexample of manual cleanup that goes wrong, and the performance angle the project brief specifically asked for — how the constants of construction and destruction matter in a hot path.
 
+{% include excalidraw.html name="statelessness/02-raii" caption="RequestContext as RAII per-request scope: ctor acquires, dtor releases on every exit." %}
+
 ## A refresher on the three guarantees
 
 The C++ exception-safety vocabulary distinguishes three levels.

@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 490" role="img"
+     aria-label="The Twelve-Factor App methodology adapted to C++ services: most factors map directly, three (Config, Build-Release-Run, Disposability) collide with C++ defaults">
+  <defs>
+    <style><![CDATA[
+      .bg       { fill: #fdfbf7; }
+      .grid     { stroke: #e8e1d3; stroke-width: 0.5; fill: none; }
+
+      .panel    { fill: #ffffff; stroke: #2d2d2d; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-bad{ fill: #fef3f0; stroke: #b86742; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-ok { fill: #eef5ed; stroke: #5a8870; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-acc{ fill: #f0f5fc; stroke: #4a73b8; stroke-width: 1.5; rx: 8; ry: 8; }
+
+      .scope    { fill: #fbfaf6; stroke: #888; stroke-dasharray: 4 3; stroke-width: 1; rx: 4; ry: 4; }
+
+      .step     { fill: #ffffff; stroke: #2d2d2d; stroke-width: 1; rx: 4; ry: 4; }
+      .step-acq { fill: #e8f0fb; stroke: #4a73b8; }
+      .step-use { fill: #fdfbf7; stroke: #2d2d2d; }
+      .step-rel { fill: #d8e8df; stroke: #5a8870; }
+      .step-leak{ fill: #fef3f0; stroke: #c0392b; }
+      .step-ext { fill: #faf0e6; stroke: #a06030; }
+
+      .ttl      { font: 700 18px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .pttl     { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .pttl-bad { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #b86742; }
+      .pttl-ok  { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #5a8870; }
+      .pttl-acc { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #4a73b8; }
+      .step-t   { font: 12px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .step-tm  { font: 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .cap      { font: 13px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .lbl      { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #555; }
+      .lbl-bd   { font: italic 700 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #444; }
+      .ok-l     { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #5a8870; }
+      .bad-l    { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+      .acc-l    { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #4a73b8; }
+
+      .arrow    { stroke: #2d2d2d; stroke-width: 1.3; fill: none; }
+      .arrow-ok { stroke: #5a8870; stroke-width: 1.6; fill: none; }
+      .arrow-bad{ stroke: #c0392b; stroke-width: 1.6; fill: none; stroke-dasharray: 5 3; }
+      .arrow-acc{ stroke: #4a73b8; stroke-width: 1.6; fill: none; }
+    ]]></style>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" class="grid"/>
+    </pattern>
+    <marker id="ah-blk" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+    <marker id="ah-ok" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a8870"/>
+    </marker>
+    <marker id="ah-bad" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
+    <marker id="ah-acc" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4a73b8"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="920" height="490"/>
+  <rect width="920" height="490" fill="url(#grid)"/>
+
+  <text x="460" y="34" text-anchor="middle" class="ttl">12-Factor adapted to C++</text>
+  <text x="460" y="54" text-anchor="middle" class="cap">Nine factors map directly · three collide with C++ defaults · here is what changes for each</text>
+
+  <!-- 12 factor grid: 4 rows x 3 cols, each card 270×80, gap 10 -->
+  <!-- ROW 1 -->
+  <rect class="panel-ok" x="30" y="80" width="270" height="78"/>
+  <text x="42" y="100" class="step-tm">I.</text>
+  <text x="165" y="100" text-anchor="middle" class="pttl-ok">Codebase</text>
+  <text x="165" y="120" text-anchor="middle" class="lbl">One repo, many deploys.</text>
+  <text x="165" y="138" text-anchor="middle" class="ok-l">Maps directly. No C++ twist.</text>
+
+  <rect class="panel-ok" x="310" y="80" width="270" height="78"/>
+  <text x="322" y="100" class="step-tm">II.</text>
+  <text x="445" y="100" text-anchor="middle" class="pttl-ok">Dependencies</text>
+  <text x="445" y="120" text-anchor="middle" class="lbl">Conan 2.x with version-pinned</text>
+  <text x="445" y="138" text-anchor="middle" class="ok-l">conanfile.py + conan.lock</text>
+
+  <rect class="panel-bad" x="590" y="80" width="270" height="78"/>
+  <text x="602" y="100" class="step-tm">III.</text>
+  <text x="725" y="100" text-anchor="middle" class="pttl-bad">Config</text>
+  <text x="725" y="120" text-anchor="middle" class="lbl">Collision: 4 layers in C++</text>
+  <text x="725" y="138" text-anchor="middle" class="bad-l">compile · link · env · runtime</text>
+
+  <!-- ROW 2 -->
+  <rect class="panel-ok" x="30" y="170" width="270" height="78"/>
+  <text x="42" y="190" class="step-tm">IV.</text>
+  <text x="165" y="190" text-anchor="middle" class="pttl-ok">Backing services</text>
+  <text x="165" y="210" text-anchor="middle" class="lbl">Postgres, Redis, Kafka via env</text>
+  <text x="165" y="228" text-anchor="middle" class="ok-l">Direct map — same as any svc</text>
+
+  <rect class="panel-bad" x="310" y="170" width="270" height="78"/>
+  <text x="322" y="190" class="step-tm">V.</text>
+  <text x="445" y="190" text-anchor="middle" class="pttl-bad">Build · release · run</text>
+  <text x="445" y="210" text-anchor="middle" class="lbl">Meyers singleton vs DI</text>
+  <text x="445" y="228" text-anchor="middle" class="bad-l">main() owns wiring, not statics</text>
+
+  <rect class="panel-ok" x="590" y="170" width="270" height="78"/>
+  <text x="602" y="190" class="step-tm">VI.</text>
+  <text x="725" y="190" text-anchor="middle" class="pttl-ok">Processes</text>
+  <text x="725" y="210" text-anchor="middle" class="lbl">Stateless — what this set is for</text>
+  <text x="725" y="228" text-anchor="middle" class="ok-l">Three-scope vocabulary</text>
+
+  <!-- ROW 3 -->
+  <rect class="panel-ok" x="30" y="260" width="270" height="78"/>
+  <text x="42" y="280" class="step-tm">VII.</text>
+  <text x="165" y="280" text-anchor="middle" class="pttl-ok">Port binding</text>
+  <text x="165" y="300" text-anchor="middle" class="lbl">grpc::ServerBuilder().AddListening</text>
+  <text x="165" y="318" text-anchor="middle" class="ok-l">PORT from env, bound at startup</text>
+
+  <rect class="panel-ok" x="310" y="260" width="270" height="78"/>
+  <text x="322" y="280" class="step-tm">VIII.</text>
+  <text x="445" y="280" text-anchor="middle" class="pttl-ok">Concurrency</text>
+  <text x="445" y="300" text-anchor="middle" class="lbl">Scale horizontally; CPU via cgroup</text>
+  <text x="445" y="318" text-anchor="middle" class="ok-l">Worker pool sized to quota</text>
+
+  <rect class="panel-bad" x="590" y="260" width="270" height="78"/>
+  <text x="602" y="280" class="step-tm">IX.</text>
+  <text x="725" y="280" text-anchor="middle" class="pttl-bad">Disposability</text>
+  <text x="725" y="300" text-anchor="middle" class="lbl">C++ startup tax — order matters</text>
+  <text x="725" y="318" text-anchor="middle" class="bad-l">constinit · staged startup</text>
+
+  <!-- ROW 4 -->
+  <rect class="panel-ok" x="30" y="350" width="270" height="78"/>
+  <text x="42" y="370" class="step-tm">X.</text>
+  <text x="165" y="370" text-anchor="middle" class="pttl-ok">Dev/prod parity</text>
+  <text x="165" y="390" text-anchor="middle" class="lbl">Same Containerfile, same lockfile</text>
+  <text x="165" y="408" text-anchor="middle" class="ok-l">ASan dev profile / LTO release</text>
+
+  <rect class="panel-ok" x="310" y="350" width="270" height="78"/>
+  <text x="322" y="370" class="step-tm">XI.</text>
+  <text x="445" y="370" text-anchor="middle" class="pttl-ok">Logs</text>
+  <text x="445" y="390" text-anchor="middle" class="lbl">spdlog → stdout sink (not files)</text>
+  <text x="445" y="408" text-anchor="middle" class="ok-l">Orchestrator collects via Loki</text>
+
+  <rect class="panel-ok" x="590" y="350" width="270" height="78"/>
+  <text x="602" y="370" class="step-tm">XII.</text>
+  <text x="725" y="370" text-anchor="middle" class="pttl-ok">Admin processes</text>
+  <text x="725" y="390" text-anchor="middle" class="lbl">Separate binaries (db-migrate etc.)</text>
+  <text x="725" y="408" text-anchor="middle" class="ok-l">Same image, different ENTRYPOINT</text>
+
+  <text x="460" y="463" text-anchor="middle" class="cap">III, V, IX — the three that need C++-specific thinking. See Doc 06.</text>
+</svg>

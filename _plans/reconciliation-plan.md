@@ -20124,6 +20124,71 @@ Fixed by rewriting the gallery block in `diagrams.html` with:
 - `diagrams.html` (entire gallery rewritten)
 - `_plans/reconciliation-plan.md` (this entry)
 
+### 2026-05-17 — r133.1: Statelessness diagrams part 1 (6 of 11)
+
+**Item 1 from the punch list, split into two rounds.**
+
+The Statelessness section has 11 docs (01-11) but no inline diagrams.
+Authoring 11 substantive SVG diagrams in one round is too much to
+verify in a single review cycle, so split into:
+
+- **r133.1 (this round):** docs 01-06 — foundational + threading
+- **r133.2 (next):** docs 07-11 — operations + capstone + appendix
+
+#### What ships
+
+For each of the 6 sections, a paired set of files in a new
+subdirectory `diagrams/statelessness/`:
+
+| Section | Diagram | Concept |
+|---|---|---|
+| 01 | 01-deployment-posture | Same binary, two postures; orchestrator-interaction contract |
+| 02 | 02-raii | RequestContext lifecycle (construct/use/destruct on all exits) |
+| 03 | 03-pmr | monotonic_buffer_resource bump-pointer + bulk free |
+| 04 | 04-process-scoped-state | The State Architecture Table (3 columns) |
+| 05 | 05-threading | cgroup cpu.max as the budget, worker pool sized to it |
+| 06 | 06-twelve-factor | 12 factors with the 3 C++ collisions called out |
+
+Each diagram follows the existing tutorial-diagram style:
+- 920×480 or 920×500 viewBox
+- Warm off-white background (`#fdfbf7`) with subtle grid pattern
+- Two-tone color coding: blue (acquire), green (ok/release), red (bad/leak), tan (external)
+- System fonts for prose, monospace for code/identifiers
+- `role="img"` + descriptive `aria-label`
+- Paired `.excalidraw` placeholder (matches existing convention)
+
+Sizes: 7.2KB - 9.1KB per SVG. Same magnitude as `03-raii-discipline.svg` (8.2KB) and `07-allocator-stack.svg` (8.0KB).
+
+#### Embedding
+
+Each diagram is embedded in its section markdown via the existing
+`_includes/excalidraw.html` template:
+
+    {% include excalidraw.html name="statelessness/01-deployment-posture"
+                               caption="..." %}
+
+Insertion point: right after the `## Thesis` section, before the
+first non-thesis `## ` heading. This puts the visual summary
+between the conceptual framing and the deep technical content,
+where readers benefit most.
+
+Captions kept under 15 words each (consistent with the r132 cut on
+the tutorial diagram captions).
+
+#### Files changed
+
+- 12 new files in `diagrams/statelessness/` (6 svg + 6 excalidraw)
+- 6 modified files in `_reference/statelessness/` (each got one
+  `{% include excalidraw.html %}` block inserted)
+- `_plans/reconciliation-plan.md` (this entry)
+
+#### Style notes for r133.2
+
+To keep diagrams consistent across both batches, the helper script
+`/tmp/diagram_lib.py` (lives outside the repo, regenerable) holds
+the shared SVG header + defs and the placeholder template. The
+r133.2 batch will use the same library.
+
 ---
 
 ## Known divergences from the PRD

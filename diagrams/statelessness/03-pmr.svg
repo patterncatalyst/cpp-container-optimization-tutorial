@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 500" role="img"
+     aria-label="PMR monotonic_buffer_resource as architectural statelessness: bump-pointer allocations during request, single bulk free at scope-end">
+  <defs>
+    <style><![CDATA[
+      .bg       { fill: #fdfbf7; }
+      .grid     { stroke: #e8e1d3; stroke-width: 0.5; fill: none; }
+
+      .panel    { fill: #ffffff; stroke: #2d2d2d; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-bad{ fill: #fef3f0; stroke: #b86742; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-ok { fill: #eef5ed; stroke: #5a8870; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-acc{ fill: #f0f5fc; stroke: #4a73b8; stroke-width: 1.5; rx: 8; ry: 8; }
+
+      .scope    { fill: #fbfaf6; stroke: #888; stroke-dasharray: 4 3; stroke-width: 1; rx: 4; ry: 4; }
+
+      .step     { fill: #ffffff; stroke: #2d2d2d; stroke-width: 1; rx: 4; ry: 4; }
+      .step-acq { fill: #e8f0fb; stroke: #4a73b8; }
+      .step-use { fill: #fdfbf7; stroke: #2d2d2d; }
+      .step-rel { fill: #d8e8df; stroke: #5a8870; }
+      .step-leak{ fill: #fef3f0; stroke: #c0392b; }
+      .step-ext { fill: #faf0e6; stroke: #a06030; }
+
+      .ttl      { font: 700 18px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .pttl     { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .pttl-bad { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #b86742; }
+      .pttl-ok  { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #5a8870; }
+      .pttl-acc { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #4a73b8; }
+      .step-t   { font: 12px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .step-tm  { font: 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .cap      { font: 13px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .lbl      { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #555; }
+      .lbl-bd   { font: italic 700 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #444; }
+      .ok-l     { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #5a8870; }
+      .bad-l    { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+      .acc-l    { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #4a73b8; }
+
+      .arrow    { stroke: #2d2d2d; stroke-width: 1.3; fill: none; }
+      .arrow-ok { stroke: #5a8870; stroke-width: 1.6; fill: none; }
+      .arrow-bad{ stroke: #c0392b; stroke-width: 1.6; fill: none; stroke-dasharray: 5 3; }
+      .arrow-acc{ stroke: #4a73b8; stroke-width: 1.6; fill: none; }
+    ]]></style>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" class="grid"/>
+    </pattern>
+    <marker id="ah-blk" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+    <marker id="ah-ok" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a8870"/>
+    </marker>
+    <marker id="ah-bad" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
+    <marker id="ah-acc" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4a73b8"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="920" height="500"/>
+  <rect width="920" height="500" fill="url(#grid)"/>
+
+  <text x="460" y="34" text-anchor="middle" class="ttl">PMR monotonic_buffer_resource: bulk-reclaim per request</text>
+  <text x="460" y="54" text-anchor="middle" class="cap">Bump-pointer during request · single deallocation at end of scope</text>
+
+  <!-- LEFT: traditional per-allocation -->
+  <rect class="panel-bad" x="30" y="80" width="420" height="400"/>
+  <text x="240" y="106" text-anchor="middle" class="pttl-bad">Traditional: malloc/free per object</text>
+
+  <text x="50" y="135" class="lbl-bd">Handler body</text>
+  <rect class="step step-leak" x="50" y="145" width="380" height="28"/>
+  <text x="240" y="164" text-anchor="middle" class="step-tm">auto* row1 = new Row(...);   // malloc</text>
+
+  <rect class="step step-leak" x="50" y="180" width="380" height="28"/>
+  <text x="240" y="199" text-anchor="middle" class="step-tm">auto* row2 = new Row(...);   // malloc</text>
+
+  <rect class="step step-leak" x="50" y="215" width="380" height="28"/>
+  <text x="240" y="234" text-anchor="middle" class="step-tm">auto* row3 = new Row(...);   // malloc</text>
+
+  <rect class="step step-leak" x="50" y="250" width="380" height="28"/>
+  <text x="240" y="269" text-anchor="middle" class="step-tm">/* ... N allocations later ... */</text>
+
+  <rect class="step step-leak" x="50" y="285" width="380" height="28"/>
+  <text x="240" y="304" text-anchor="middle" class="step-tm">auto* rowN = new Row(...);   // malloc</text>
+
+  <text x="50" y="345" class="lbl-bd">End of handler</text>
+  <rect class="step step-leak" x="50" y="355" width="380" height="62"/>
+  <text x="240" y="377" text-anchor="middle" class="step-tm">delete row1; delete row2; ...</text>
+  <text x="240" y="397" text-anchor="middle" class="step-tm">N free() calls — or worse, you forget</text>
+  <text x="240" y="413" text-anchor="middle" class="bad-l">— and leak</text>
+
+  <text x="240" y="448" text-anchor="middle" class="bad-l">Costs: N × malloc/free · pointer-chasing · fragmentation</text>
+  <text x="240" y="466" text-anchor="middle" class="bad-l">Lifetime: per-object, ad-hoc — easy to mismanage</text>
+
+  <!-- RIGHT: PMR arena -->
+  <rect class="panel-ok" x="470" y="80" width="420" height="400"/>
+  <text x="680" y="106" text-anchor="middle" class="pttl-ok">PMR: arena per request, bulk free at scope-end</text>
+
+  <text x="490" y="135" class="lbl-bd">Construction (RequestContext ctor)</text>
+  <rect class="step step-acq" x="490" y="145" width="380" height="42"/>
+  <text x="680" y="163" text-anchor="middle" class="step-tm">std::pmr::monotonic_buffer_resource arena{</text>
+  <text x="680" y="180" text-anchor="middle" class="step-tm">&amp;backing_buf, 64*1024};</text>
+
+  <text x="490" y="210" class="lbl-bd">Handler body — allocations grow within the arena</text>
+
+  <!-- arena visualization: stacked allocations -->
+  <rect class="step" x="490" y="220" width="380" height="155"/>
+  <text x="680" y="238" text-anchor="middle" class="step-tm">backing_buf (stack or static, 64 KiB)</text>
+
+  <rect class="step step-acq" x="510" y="248" width="80" height="22"/>
+  <text x="550" y="263" text-anchor="middle" class="step-tm">row 1</text>
+  <rect class="step step-acq" x="590" y="248" width="80" height="22"/>
+  <text x="630" y="263" text-anchor="middle" class="step-tm">row 2</text>
+  <rect class="step step-acq" x="670" y="248" width="80" height="22"/>
+  <text x="710" y="263" text-anchor="middle" class="step-tm">row 3</text>
+  <rect class="step step-acq" x="750" y="248" width="100" height="22"/>
+  <text x="800" y="263" text-anchor="middle" class="step-tm">... row N</text>
+
+  <text x="680" y="295" text-anchor="middle" class="lbl">↓ bump-pointer: each allocate() is pointer += size</text>
+  <text x="680" y="313" text-anchor="middle" class="lbl">↓ no per-object free, no per-object bookkeeping</text>
+
+  <text x="680" y="343" text-anchor="middle" class="step-tm">std::pmr::vector&lt;Row&gt; rows{&amp;arena};</text>
+  <text x="680" y="362" text-anchor="middle" class="step-tm">rows.emplace_back(...);   // allocates in arena</text>
+
+  <text x="490" y="395" class="lbl-bd">Destruction (RequestContext dtor)</text>
+  <rect class="step step-rel" x="490" y="405" width="380" height="42"/>
+  <text x="680" y="425" text-anchor="middle" class="step-tm">~monotonic_buffer_resource();</text>
+  <text x="680" y="441" text-anchor="middle" class="ok-l">→ ONE deallocation, the whole arena</text>
+
+  <text x="680" y="471" text-anchor="middle" class="ok-l">No free-list bookkeeping. No fragmentation. Predictable cost.</text>
+</svg>

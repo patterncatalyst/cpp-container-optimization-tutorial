@@ -1,0 +1,42 @@
+{
+    "type": "excalidraw",
+    "version": 2,
+    "source": "https://excalidraw.com",
+    "elements": [
+        {
+            "type": "text",
+            "version": 1,
+            "id": "03-pmr-placeholder",
+            "x": 100,
+            "y": 100,
+            "width": 600,
+            "height": 40,
+            "text": "PMR monotonic_buffer_resource arena — see paired SVG; .excalidraw to be authored",
+            "fontSize": 24,
+            "fontFamily": 1,
+            "textAlign": "left",
+            "verticalAlign": "top",
+            "strokeColor": "#1a1a1a",
+            "backgroundColor": "transparent",
+            "fillStyle": "solid",
+            "strokeWidth": 1,
+            "strokeStyle": "solid",
+            "roughness": 1,
+            "opacity": 100,
+            "groupIds": [],
+            "frameId": null,
+            "roundness": null,
+            "seed": 1,
+            "boundElements": null,
+            "updated": 1,
+            "link": null,
+            "locked": false
+        }
+    ],
+    "appState": {
+        "viewBackgroundColor": "#ffffff",
+        "currentItemFontFamily": 1,
+        "gridSize": null
+    },
+    "files": {}
+}

@@ -14,6 +14,8 @@ Doc 02 established the discipline: bundle per-request state into a `RequestConte
 
 This document covers PMR for service handlers: how `monotonic_buffer_resource` works, the layered-resource pattern that's become the canonical recipe, how the `std::pmr::*` container family integrates, the choice of `std::` container types over PMR, and the lifetime traps that catch people the first few times. The performance angle from Doc 02 — the asymmetry between O(N) per-entry destruction and O(1) arena release — gets its concrete realization here.
 
+{% include excalidraw.html name="statelessness/03-pmr" caption="PMR monotonic_buffer_resource: bump-pointer per request, single bulk free at scope-end." %}
+
 ## Why PMR
 
 The Polymorphic Memory Resources facility, introduced in C++17 in `<memory_resource>`, separates two things that pre-PMR custom allocators conflated: *which* memory resource to use, and *how* to use it. A `std::pmr::memory_resource` is an abstract base with a single allocate/deallocate pair. A `std::pmr::polymorphic_allocator<T>` wraps a pointer to a memory resource and presents the standard allocator interface. The same vector type — `std::pmr::vector<int>` — can be backed by a stack-allocated arena, a heap-backed pool, a third-party allocator, or even a memory-mapped region, simply by handing it a different resource pointer.

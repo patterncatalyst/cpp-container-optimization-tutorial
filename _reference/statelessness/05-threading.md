@@ -14,6 +14,8 @@ Threading is the dimension of statelessness that catches C++ developers off-guar
 
 Doing concurrency correctly in a stateless service requires understanding which concurrency primitives carry which state across which scope, and arranging for that state to be either cleared at request boundaries or kept legitimately process-scoped. This document covers the operative cases: TLS as process-scoped state, the three concurrency families (OS threads, stackless coroutines, fibers) and their TLS interactions, the gRPC threading model, the CPU and memory limits that constrain everything, and the cooperative cancellation pattern that ties cleanup back to request scope.
 
+{% include excalidraw.html name="statelessness/05-threading" caption="Threading in a cgroup-constrained service: cpu.max budgets the worker pool." %}
+
 ## Thread-local storage is process-scoped, not request-scoped
 
 The most common subtle bug at the threading-statelessness interface is treating `thread_local` storage as if it were request-local. It is not. In a thread-pool model — which is the standard service model — a thread handles many requests sequentially, and any `thread_local` variable persists across those requests. A `thread_local` correlation ID set in handler A and not cleared remains set for handler B that happens to land on the same thread.

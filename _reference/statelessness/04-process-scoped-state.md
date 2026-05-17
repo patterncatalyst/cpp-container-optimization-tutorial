@@ -16,6 +16,8 @@ The mental error to avoid is the C++ developer's instinct to treat any persisten
 
 This document covers process-scoped state: what belongs there, what doesn't, the State Architecture Table that anchors the distinction across the doc set, how to wire process-scoped state in `main()` rather than reaching for singletons, and how to size it against the OS container's memory and ephemeral-storage budget. CPU limits get a sizing-budget mention here; the threading-correctness consequences are Doc 05's subject.
 
+{% include excalidraw.html name="statelessness/04-process-scoped-state" caption="The State Architecture Table: process-scoped, request-scoped, external — sort early." %}
+
 ## Categories of process-scoped state
 
 A typical C++ microservice in this stack carries several kinds of process-scoped state.

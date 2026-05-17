@@ -16,6 +16,8 @@ The three collisions are Factor III (Config), Factor VI (Processes), and Factor 
 
 This document covers all twelve factors briefly, lingers on the three that collide, and develops the C++-specific patterns: where configuration lives, why dependency injection beats singletons, and how to design for fast startup. The treatment is opinionated by design — the brief flagged this as the chapter that needed a clear point of view, not a survey.
 
+{% include excalidraw.html name="statelessness/06-twelve-factor" caption="12-Factor adapted to C++: nine map directly, three collide (Config, Processes, Disposability)." %}
+
 ## A brief tour of the non-controversial factors
 
 Eight of the twelve factors map cleanly to C++ practice and warrant short treatment.

@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 480" role="img"
+     aria-label="Threading and concurrency in a cgroup-constrained C++ service: cpu.max as the budget, worker pool sized to it, std::stop_token cooperative shutdown">
+  <defs>
+    <style><![CDATA[
+      .bg       { fill: #fdfbf7; }
+      .grid     { stroke: #e8e1d3; stroke-width: 0.5; fill: none; }
+
+      .panel    { fill: #ffffff; stroke: #2d2d2d; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-bad{ fill: #fef3f0; stroke: #b86742; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-ok { fill: #eef5ed; stroke: #5a8870; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-acc{ fill: #f0f5fc; stroke: #4a73b8; stroke-width: 1.5; rx: 8; ry: 8; }
+
+      .scope    { fill: #fbfaf6; stroke: #888; stroke-dasharray: 4 3; stroke-width: 1; rx: 4; ry: 4; }
+
+      .step     { fill: #ffffff; stroke: #2d2d2d; stroke-width: 1; rx: 4; ry: 4; }
+      .step-acq { fill: #e8f0fb; stroke: #4a73b8; }
+      .step-use { fill: #fdfbf7; stroke: #2d2d2d; }
+      .step-rel { fill: #d8e8df; stroke: #5a8870; }
+      .step-leak{ fill: #fef3f0; stroke: #c0392b; }
+      .step-ext { fill: #faf0e6; stroke: #a06030; }
+
+      .ttl      { font: 700 18px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .pttl     { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .pttl-bad { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #b86742; }
+      .pttl-ok  { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #5a8870; }
+      .pttl-acc { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #4a73b8; }
+      .step-t   { font: 12px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .step-tm  { font: 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .cap      { font: 13px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .lbl      { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #555; }
+      .lbl-bd   { font: italic 700 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #444; }
+      .ok-l     { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #5a8870; }
+      .bad-l    { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+      .acc-l    { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #4a73b8; }
+
+      .arrow    { stroke: #2d2d2d; stroke-width: 1.3; fill: none; }
+      .arrow-ok { stroke: #5a8870; stroke-width: 1.6; fill: none; }
+      .arrow-bad{ stroke: #c0392b; stroke-width: 1.6; fill: none; stroke-dasharray: 5 3; }
+      .arrow-acc{ stroke: #4a73b8; stroke-width: 1.6; fill: none; }
+    ]]></style>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" class="grid"/>
+    </pattern>
+    <marker id="ah-blk" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+    <marker id="ah-ok" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a8870"/>
+    </marker>
+    <marker id="ah-bad" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
+    <marker id="ah-acc" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4a73b8"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="920" height="480"/>
+  <rect width="920" height="480" fill="url(#grid)"/>
+
+  <text x="460" y="34" text-anchor="middle" class="ttl">Threading in a cgroup-constrained service</text>
+  <text x="460" y="54" text-anchor="middle" class="cap">The container's CPU quota — not the host's CPU count — bounds the worker pool</text>
+
+  <!-- cgroup outer box -->
+  <rect class="panel-acc" x="50" y="80" width="820" height="380"/>
+  <text x="460" y="106" text-anchor="middle" class="pttl-acc">cgroup v2 slice: cpu.max = "200000 100000"  (≈ 2 CPUs)</text>
+  <text x="460" y="122" text-anchor="middle" class="lbl">Detected via /sys/fs/cgroup/cpu.max — NOT std::thread::hardware_concurrency()</text>
+
+  <!-- inbound RPCs -->
+  <rect class="step step-acq" x="80" y="155" width="200" height="55"/>
+  <text x="180" y="178" text-anchor="middle" class="step-t">inbound RPCs</text>
+  <text x="180" y="196" text-anchor="middle" class="lbl">async server queue</text>
+
+  <path d="M 280 182 L 330 182" class="arrow-acc" marker-end="url(#ah-acc)"/>
+
+  <!-- gRPC server scheduling box -->
+  <rect class="step" x="330" y="145" width="510" height="76"/>
+  <text x="585" y="167" text-anchor="middle" class="step-t">grpc::Server completion-queue dispatch</text>
+  <text x="585" y="185" text-anchor="middle" class="lbl">ResourceQuota — explicit cap on max threads (default unbounded!)</text>
+  <text x="585" y="206" text-anchor="middle" class="lbl-bd">ResourceQuota::SetMaxThreads(2)</text>
+
+  <!-- worker threads -->
+  <text x="120" y="251" class="lbl-bd">Worker threads</text>
+  <rect class="step step-rel" x="80" y="262" width="180" height="160"/>
+  <text x="170" y="282" text-anchor="middle" class="pttl-ok">T0 (pinned cpu 0)</text>
+  <text x="170" y="302" text-anchor="middle" class="step-tm">handler(ctx) { ... }</text>
+  <text x="170" y="320" text-anchor="middle" class="step-tm">RequestContext ctx;</text>
+  <text x="170" y="338" text-anchor="middle" class="step-tm">// throws? RAII fires.</text>
+  <text x="170" y="362" text-anchor="middle" class="lbl">stack: 8 MiB</text>
+  <text x="170" y="378" text-anchor="middle" class="lbl">co_await OK — but no</text>
+  <text x="170" y="394" text-anchor="middle" class="lbl">TLS across await points</text>
+  <text x="170" y="414" text-anchor="middle" class="ok-l">cooperative cancellation</text>
+
+  <rect class="step step-rel" x="280" y="262" width="180" height="160"/>
+  <text x="370" y="282" text-anchor="middle" class="pttl-ok">T1 (pinned cpu 1)</text>
+  <text x="370" y="302" text-anchor="middle" class="step-tm">handler(ctx) { ... }</text>
+  <text x="370" y="320" text-anchor="middle" class="step-tm">RequestContext ctx;</text>
+  <text x="370" y="338" text-anchor="middle" class="step-tm">// same shape</text>
+  <text x="370" y="362" text-anchor="middle" class="lbl">stack: 8 MiB</text>
+  <text x="370" y="378" text-anchor="middle" class="lbl">PMR upstream is</text>
+  <text x="370" y="394" text-anchor="middle" class="lbl">unsynchronized_pool</text>
+  <text x="370" y="414" text-anchor="middle" class="ok-l">— per thread</text>
+
+  <!-- shutdown signaling -->
+  <rect class="step step-leak" x="500" y="262" width="340" height="78"/>
+  <text x="670" y="282" text-anchor="middle" class="pttl-bad">SIGTERM → graceful shutdown</text>
+  <text x="670" y="302" text-anchor="middle" class="step-tm">stop_source.request_stop();</text>
+  <text x="670" y="320" text-anchor="middle" class="step-tm">server.Shutdown(deadline);</text>
+  <text x="670" y="334" text-anchor="middle" class="lbl">drain queue · then destroy</text>
+
+  <rect class="step" x="500" y="350" width="340" height="72"/>
+  <text x="670" y="370" text-anchor="middle" class="pttl">std::stop_token in handlers</text>
+  <text x="670" y="388" text-anchor="middle" class="step-tm">if (token.stop_requested()) ...</text>
+  <text x="670" y="404" text-anchor="middle" class="lbl">Polite: finish current step, return Status::CANCELLED</text>
+  <text x="670" y="418" text-anchor="middle" class="lbl">— don't start new long work</text>
+
+  <!-- footer caption -->
+  <text x="460" y="450" text-anchor="middle" class="cap">CPU quota throttles tail latency under load — size the worker pool to match.</text>
+</svg>
