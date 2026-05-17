@@ -1,9 +1,9 @@
-#include "demo06/channel.hpp"
+#include "demo07/channel.hpp"
 
 #include <algorithm>
 #include <cstring>
 
-namespace demo06 {
+namespace demo07 {
 
 namespace {
 inline std::size_t copy_in(std::vector<std::byte>& buf, std::size_t& w,
@@ -49,4 +49,4 @@ std::string_view greet(const Greeting& g) {
     return {g.text};
 }
 
-}  // namespace demo06
+}  // namespace demo07

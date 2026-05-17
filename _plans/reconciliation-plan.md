@@ -16252,6 +16252,168 @@ expected around:
 After demo-07: optional demo-08-ebpf-analysis decision, then
 path F (PPTX).
 
+### 2026-05-16 — r114: Path C — demo-07 quality-pipeline, Round A
+
+Inspection of the demo-07 stub state revealed it was more
+substantively developed than expected: library + service +
+tests + Containerfile (5 build stages) + CMakePresets + Conan
+lockfile + gdbserver sidecar compose were all in place. The
+gaps were three categories:
+
+1. **Pervasive stale naming**: `demo06` namespace, lib, binary,
+   container labels, compose service names, README header
+   ("Demo 6"), code comments, `src/include/demo06/` directory.
+   The directory had been moved from `demo-06-quality-pipeline`
+   to `demo-07-quality-pipeline` (per project history) but the
+   code itself wasn't renamed.
+2. **Stale section references**: README pointed at "§11 (Static
+   analysis and debugging), §12 (Reproducibility and ABI)" —
+   stale section numbers from before the §10 (observability)
+   insertion that shifted everything by one. Correct mapping is
+   §12 + §13.
+3. **Missing scope from the §12/§13 prose**: the prose written
+   in r112 describes demo-07 as having an ASan + UBSan stage,
+   a ulimit + core_pattern recipe in the README, gcov/lcov and
+   clang source-based coverage stages, and a hermetic-build
+   comparison. None were in the stub.
+
+The scope split:
+- **Round A (this round) — get the demo coherent**: mass-rename
+  + README rewrite + ASan stage + ulimit/core_pattern recipe.
+- **Round B (r115)** — fill in §13 coverage + ABI claims: gcov/
+  lcov stage + clang source-based coverage stage + hermetic
+  build comparison + deliberate ABI-break demo + deliberate
+  cppcheck/clang-tidy finding examples.
+
+**Round A — files changed (13):**
+
+1. **Mass rename `demo06` → `demo07` throughout** (11 files):
+   - Code: `src/include/demo06/channel.hpp` → `src/include/demo07/channel.hpp`
+     (directory renamed), `src/lib/channel.cpp`, `src/svc/main.cpp`,
+     `tests/test_channel.cpp`
+   - Build: `CMakeLists.txt`, `conanfile.py`, `Containerfile`
+   - Orchestration: `demo.sh`, `compose.debug.yml`
+   - Docs: `README.md`, `abi-reference/README.md`
+   - All `demo06::` namespace, `demo06_channel` lib, `demo06-svc`
+     binary, `Demo 6` headers, `tutorial.demo="06-quality-pipeline"`
+     labels — converted.
+2. **README rewrite** — references §12 + §13 (not §11 + §12);
+   adds the ASan + UBSan phase to the pipeline description;
+   adds the ulimit + core_pattern recipe for core-dump capture
+   from containers (matching the §12 prose claim that demo-07
+   includes this recipe); adds the "Where the lesson lives"
+   cross-reference back to §12 + §13.
+3. **ASan + UBSan stage added to Containerfile**: new `asan`
+   stage between `tests` and `abi`. Conan-installs the same
+   deps with sanitizer cxxflags/linkflags via `-c
+   tools.build:cxxflags=...`; runs `cmake --preset asan` and
+   `ctest --preset asan` with `ASAN_OPTIONS` and `UBSAN_OPTIONS`
+   set in the stage environment.
+4. **CMakePresets.json — added asan preset triple** (configure,
+   build, test) plus the missing `release-debuginfo` testPreset
+   (bug fix: build stage configures `release-debuginfo` but
+   prior `tests` stage tried `ctest --preset release` against a
+   non-existent build dir; r114 fixes this).
+5. **demo.sh updates**:
+   - Phase names match Containerfile stage names: `analyze,
+     test, abi` → `analyzer, tests, asan, abi` (the prior
+     names were broken — Containerfile stages have always been
+     plural; would have caused `--target analyze: not found`).
+   - New `--asan-only` flag.
+   - `run_phase asan` invokes `podman build --security-opt
+     seccomp=unconfined` because ASan's shadow-memory mapping
+     can clash with the default build-time seccomp profile.
+     Comment in the function explicitly references §12's
+     "Runtime sanitizers in containers" diagnosis path.
+   - `--clean` removes the new `cpp-tut/demo-07:asan` image.
+6. **Stale `§11/§13` reference in `channel.hpp` code comment**
+   fixed to `§12/§14` (the section numbers that actually cover
+   the abstraction-cost lesson + the §14 over-abstraction
+   pitfall).
+
+**Sanity checks run:**
+
+- `python3 -c "import json; json.load(open('CMakePresets.json'))"` —
+  ✓ valid JSON, 4 configurePresets + 4 buildPresets + 4 testPresets
+- `bash -n demo.sh` — ✓ syntax ok
+- `grep -rn 'demo06\|Demo 6'` across all demo-07 files — ✓ 0 matches
+- `grep -rn '§[0-9]'` across all demo-07 files — ✓ all references
+  point at §12, §13, or §14 (no stale §11)
+- Containerfile stages enumerated — ✓ analyzer, tests, asan, abi,
+  svc, gdbserver all align with demo.sh phase names
+
+**Not yet verified on user's host (the bash environment for these
+rounds has no network access, so `podman build` can't pull the UBI
+base image to actually run the pipeline)**. The user's host has
+the full toolchain — first-run verification on real hardware will
+likely surface 1-2 issues to address in Round B:
+
+1. **ASan shadow-memory mapping vs. seccomp.** Round A applies
+   `--security-opt seccomp=unconfined` to the build, which should
+   address the common case. If `vm.mmap_min_addr` is set high on
+   the user's host, the README documents the additional sysctl fix.
+2. **Conan sanitizer-flag propagation.** The `-c
+   tools.build:cxxflags=[...]` flags need to apply to *all* deps
+   including transitive ones; if gtest builds without sanitizer
+   instrumentation, the libstdc++ used in the test harness may
+   have shadow-memory issues. If this surfaces, Round B will add
+   `compiler.libcxx=libstdc++_asan` or similar.
+3. **`abidiff` packaging on UBI 9.** The Containerfile installs
+   `libabigail` from UBI repos; if the package name differs from
+   what's expected, Round B will adjust.
+
+**Round B (r115) scope, captured here so it doesn't get lost:**
+
+- Add gcov/lcov coverage Containerfile stage + `conan-coverage-gcc`
+  CMakePreset + `./demo.sh --coverage-gcc` (matches §13 prose).
+- Add clang source-based coverage stage + `conan-coverage-llvm`
+  preset using `-fprofile-instr-generate -fcoverage-mapping`
+  flag pair + `./demo.sh --coverage-llvm` (matches §13 prose,
+  with the LLVM docs URL as canonical reference).
+- Add hermetic build comparison: build the library twice in two
+  separately-named-but-identical builder containers; assert
+  byte-identical SHA-256 output (matches §13 prose).
+- Add `./demo.sh --abi-break-demo`: deliberately patch
+  `channel.hpp` to add a field to `Greeting`, rebuild abi stage,
+  show abidiff catching it, restore the file.
+- Add deliberate cppcheck and clang-tidy finding examples
+  behind a `--demo-findings` flag (matches §12 prose claim
+  that demo-07 "ships one deliberate finding to demonstrate
+  the failure mode" for each tool).
+- Verify all of it works on the user's host; capture any new
+  gotchas (G-44 onward).
+
+**Files changed in r114 (3 in plan + 13 in demo-07):**
+
+- `examples/demo-07-quality-pipeline/CMakeLists.txt`
+- `examples/demo-07-quality-pipeline/CMakePresets.json`
+- `examples/demo-07-quality-pipeline/Containerfile`
+- `examples/demo-07-quality-pipeline/README.md`
+- `examples/demo-07-quality-pipeline/abi-reference/README.md`
+- `examples/demo-07-quality-pipeline/compose.debug.yml`
+- `examples/demo-07-quality-pipeline/conanfile.py`
+- `examples/demo-07-quality-pipeline/demo.sh`
+- `examples/demo-07-quality-pipeline/src/include/demo06/channel.hpp` (deleted)
+- `examples/demo-07-quality-pipeline/src/include/demo07/channel.hpp` (renamed + content updated)
+- `examples/demo-07-quality-pipeline/src/lib/channel.cpp`
+- `examples/demo-07-quality-pipeline/src/svc/main.cpp`
+- `examples/demo-07-quality-pipeline/tests/test_channel.cpp`
+- `_plans/reconciliation-plan.md`
+
+**No diagrams changed. No section prose changed.**
+
+Status after r114:
+
+| Path | State |
+|---|---|
+| A. demo-06 | ✓ complete |
+| B. demo-05 | ✓ complete |
+| **C. demo-07 (Round A: rename + ASan + README)** | **✓ done** |
+| C. demo-07 Round B (coverage + hermetic + ABI-break) | **next** |
+| D. Section prose | ✓ COMPLETE |
+| E. Diagrams (15) | ✓ complete |
+| F. PPTX | last |
+
 ---
 
 ## Known divergences from the PRD

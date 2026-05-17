@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Demo 6 — quality pipeline: cppcheck, clang-tidy, gtest, abidiff, gdbserver.
+# Demo 7 — quality pipeline: cppcheck, clang-tidy, gtest, ASan+UBSan, abidiff, gdbserver.
 #
-#   ./demo.sh                # everything
+#   ./demo.sh                # everything (analyze + test + asan + abi)
 #   ./demo.sh --analyze-only
 #   ./demo.sh --test-only
+#   ./demo.sh --asan-only
 #   ./demo.sh --abi-only
 #   ./demo.sh --debug        # spin up gdbserver sidecar
 #   ./demo.sh --clean
@@ -16,13 +17,14 @@ cd "$DEMO_DIR"
 # shellcheck source=../../scripts/lib/_helpers.sh
 source "$(cd ../../scripts/lib && pwd)/_helpers.sh"
 
-PHASES=(analyze test abi)
+PHASES=(analyzer tests asan abi)
 DO_DEBUG=0
 DO_CLEAN=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --analyze-only) PHASES=(analyze);     shift;;
-    --test-only)    PHASES=(test);        shift;;
+    --analyze-only) PHASES=(analyzer);    shift;;
+    --test-only)    PHASES=(tests);       shift;;
+    --asan-only)    PHASES=(asan);        shift;;
     --abi-only)     PHASES=(abi);         shift;;
     --debug)        DO_DEBUG=1;           shift;;
     --clean)        DO_CLEAN=1;           shift;;
@@ -35,6 +37,7 @@ if [[ $DO_CLEAN -eq 1 ]]; then
   podman rmi -f \
     cpp-tut/demo-07:analyzer \
     cpp-tut/demo-07:tests \
+    cpp-tut/demo-07:asan \
     cpp-tut/demo-07:abi \
     cpp-tut/demo-07:svc \
     cpp-tut/demo-07:gdbserver 2>/dev/null || true
@@ -62,7 +65,15 @@ fi
 run_phase() {
   local phase="$1"
   log_step "Phase: $phase"
-  podman build --target "$phase" -t "cpp-tut/demo-07:$phase" .
+  # ASan's shadow-memory mapping can clash with the default build-time
+  # seccomp profile on some hosts. Relax seccomp specifically for the
+  # ASan stage so the in-stage `ctest` invocation can fire ASan's
+  # mprotect/mmap pattern. See §12 "Runtime sanitizers in containers".
+  local sec_opts=()
+  if [[ "$phase" == "asan" ]]; then
+    sec_opts+=(--security-opt seccomp=unconfined)
+  fi
+  podman build "${sec_opts[@]}" --target "$phase" -t "cpp-tut/demo-07:$phase" .
   # Pull the reports out of the image so the host sees them.
   local cid
   cid=$(podman create "cpp-tut/demo-07:$phase")
@@ -80,8 +91,8 @@ if [[ $DO_DEBUG -eq 1 ]]; then
   podman compose -f compose.debug.yml up -d --build
   log_ok "gdbserver listening on 127.0.0.1:1234"
   log_info "  Connect with:"
-  log_info "    podman cp demo06-svc:/app/demo06-svc /tmp/demo06-svc"
-  log_info "    gdb -ex 'target remote 127.0.0.1:1234' /tmp/demo06-svc"
+  log_info "    podman cp demo07-svc:/app/demo07-svc /tmp/demo07-svc"
+  log_info "    gdb -ex 'target remote 127.0.0.1:1234' /tmp/demo07-svc"
   log_info "  Tear down with:  ./demo.sh --clean"
 fi
 

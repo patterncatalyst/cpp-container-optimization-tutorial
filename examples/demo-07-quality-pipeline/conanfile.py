@@ -3,7 +3,7 @@ from conan.tools.cmake import CMakeDeps, CMakeToolchain, cmake_layout
 
 
 class Demo06Conan(ConanFile):
-    name = "demo06"
+    name = "demo07"
     version = "1.0.0"
     settings = "os", "compiler", "build_type", "arch"
     generators = "CMakeDeps", "CMakeToolchain"

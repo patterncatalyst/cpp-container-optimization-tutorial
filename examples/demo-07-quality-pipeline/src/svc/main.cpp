@@ -1,7 +1,7 @@
-// Demo 6 — service that exercises the library at runtime.
+// Demo 7 — service that exercises the library at runtime.
 // Used by the gdbserver sidecar example.
 
-#include "demo06/channel.hpp"
+#include "demo07/channel.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -21,13 +21,13 @@ int main() {
     std::signal(SIGTERM, on_sig);
     std::signal(SIGINT,  on_sig);
 
-    demo06::Greeting g{};
+    demo07::Greeting g{};
     g.version = 1;
     std::strncpy(g.text, "hello from demo-07", sizeof(g.text) - 1);
-    std::print("{}\n", demo06::greet(g));
+    std::print("{}\n", demo07::greet(g));
 
-    demo06::MemoryChannel mc(64 * 1024);
-    demo06::StaticMemoryChannel sc(64 * 1024);
+    demo07::MemoryChannel mc(64 * 1024);
+    demo07::StaticMemoryChannel sc(64 * 1024);
 
     std::array<std::byte, 1024> payload{};
     for (std::size_t i = 0; i < payload.size(); ++i) {

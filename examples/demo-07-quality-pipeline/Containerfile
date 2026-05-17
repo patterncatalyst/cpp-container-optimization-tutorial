@@ -63,7 +63,30 @@ RUN run-clang-tidy -p build/release-debuginfo -j"$(nproc)" \
 # ---- test stage ----
 FROM build AS tests
 WORKDIR /src
-RUN ctest --preset release --output-on-failure --output-junit reports/gtest.xml
+RUN ctest --preset release-debuginfo --output-on-failure --output-junit reports/gtest.xml \
+  || (echo "test stage failed"; exit 1)
+
+# ---- asan stage ----
+# Builds a parallel ASan+UBSan-instrumented variant of the library and tests,
+# then runs ctest. Sanitizer findings exit nonzero with a stack trace; ctest
+# captures them in reports/asan.txt for CI consumption.
+FROM build AS asan
+WORKDIR /src
+RUN conan install . \
+        --output-folder=build/asan \
+        --lockfile=conan.lock \
+        --build=missing \
+        -s build_type=Debug \
+        -c tools.build:cxxflags=[\"-fsanitize=address,undefined\",\"-fno-omit-frame-pointer\",\"-O1\",\"-g\"] \
+        -c tools.build:exelinkflags=[\"-fsanitize=address,undefined\"] \
+        -c tools.build:sharedlinkflags=[\"-fsanitize=address,undefined\"] \
+ && cmake --preset asan \
+ && cmake --build --preset asan -j"$(nproc)"
+ENV ASAN_OPTIONS=halt_on_error=1:detect_leaks=1:print_stacktrace=1:abort_on_error=1
+ENV UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
+RUN ctest --preset asan --output-on-failure --output-junit reports/asan.xml 2>&1 \
+        | tee reports/asan.txt \
+  || (echo "ASan stage failed; see reports/asan.txt"; exit 1)
 
 # ---- abi stage ----
 FROM build AS abi
@@ -71,14 +94,14 @@ WORKDIR /src
 COPY abi-reference/ ./abi-reference/
 # If reference exists, compare; otherwise just record current ABI as a baseline
 # the developer can commit.
-RUN if [ -f abi-reference/libdemo06_channel.so.1.abi ]; then \
-        abidw --out-file reports/current.abi build/release-debuginfo/libdemo06_channel.so.1; \
-        abidiff abi-reference/libdemo06_channel.so.1.abi reports/current.abi \
+RUN if [ -f abi-reference/libdemo07_channel.so.1.abi ]; then \
+        abidw --out-file reports/current.abi build/release-debuginfo/libdemo07_channel.so.1; \
+        abidiff abi-reference/libdemo07_channel.so.1.abi reports/current.abi \
             > reports/abidiff.txt 2>&1 \
         || (echo "ABI changed:"; cat reports/abidiff.txt; exit 2); \
     else \
         mkdir -p reports; \
-        abidw --out-file reports/current.abi build/release-debuginfo/libdemo06_channel.so.1; \
+        abidw --out-file reports/current.abi build/release-debuginfo/libdemo07_channel.so.1; \
         echo "No reference yet; current ABI saved at reports/current.abi"; \
     fi
 
@@ -86,12 +109,12 @@ RUN if [ -f abi-reference/libdemo06_channel.so.1.abi ]; then \
 FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION} AS svc
 RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ \
  && microdnf clean all
-COPY --from=build /src/build/release-debuginfo/demo06-svc /app/demo06-svc
-COPY --from=build /src/build/release-debuginfo/libdemo06_channel.so* /usr/local/lib/
+COPY --from=build /src/build/release-debuginfo/demo07-svc /app/demo07-svc
+COPY --from=build /src/build/release-debuginfo/libdemo07_channel.so* /usr/local/lib/
 ENV LD_LIBRARY_PATH=/usr/local/lib
 LABEL tutorial.demo="06-quality-pipeline" tutorial.variant="svc"
 USER 1001:1001
-ENTRYPOINT ["/app/demo06-svc"]
+ENTRYPOINT ["/app/demo07-svc"]
 
 # ---- gdbserver sidecar ----
 FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS gdbserver
@@ -104,9 +127,9 @@ RUN rm -f /etc/yum.repos.d/redhat.repo && \
 RUN dnf install -y --setopt=install_weak_deps=False \
         libstdc++ gdb-gdbserver \
     && dnf clean all
-COPY --from=build /src/build/release-debuginfo/demo06-svc /app/demo06-svc
-COPY --from=build /src/build/release-debuginfo/libdemo06_channel.so* /usr/local/lib/
+COPY --from=build /src/build/release-debuginfo/demo07-svc /app/demo07-svc
+COPY --from=build /src/build/release-debuginfo/libdemo07_channel.so* /usr/local/lib/
 ENV LD_LIBRARY_PATH=/usr/local/lib
 LABEL tutorial.demo="06-quality-pipeline" tutorial.variant="gdbserver"
 EXPOSE 1234
-ENTRYPOINT ["gdbserver", "0.0.0.0:1234", "/app/demo06-svc"]
+ENTRYPOINT ["gdbserver", "0.0.0.0:1234", "/app/demo07-svc"]

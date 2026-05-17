@@ -1,7 +1,7 @@
-// Demo 6 — gtest+gmock for the channel library, including a tiny
+// Demo 7 — gtest+gmock for the channel library, including a tiny
 // micro-benchmark for the virtual-vs-CRTP comparison.
 
-#include "demo06/channel.hpp"
+#include "demo07/channel.hpp"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -12,7 +12,7 @@
 #include <print>
 #include <vector>
 
-using namespace demo06;
+using namespace demo07;
 using ::testing::ElementsAreArray;
 
 namespace {

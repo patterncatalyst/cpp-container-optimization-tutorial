@@ -1,6 +1,6 @@
 # ABI reference
 
-This directory holds the "frozen" ABI snapshot for `libdemo06_channel.so.1`.
+This directory holds the "frozen" ABI snapshot for `libdemo07_channel.so.1`.
 
 ## How it gets populated
 
@@ -11,8 +11,8 @@ commit:
 ```bash
 podman build --target abi -t cpp-tut/demo-07:abi ../
 podman run --rm cpp-tut/demo-07:abi cat /src/reports/current.abi \
-  > libdemo06_channel.so.1.abi
-git add libdemo06_channel.so.1.abi
+  > libdemo07_channel.so.1.abi
+git add libdemo07_channel.so.1.abi
 git commit -m "abi: snapshot v1.0 baseline"
 ```
 
