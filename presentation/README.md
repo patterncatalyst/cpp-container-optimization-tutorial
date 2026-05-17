@@ -35,6 +35,38 @@ copy, Consolas for code blocks.
 
 ## Rebuilding the deck locally
 
+### First-time setup
+
+Install the build dependencies — two from pip, two from the system
+package manager.
+
+**Python packages** (pinned in [`tools/requirements.txt`](../tools/requirements.txt)):
+
+```bash
+# Recommended — in a virtualenv:
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r tools/requirements.txt
+
+# Or system-wide on Fedora 44 (uses PEP 668's escape hatch):
+pip install --break-system-packages -r tools/requirements.txt
+
+# Or just the two packages directly:
+pip install python-pptx Pillow
+```
+
+**System packages** (for SVG → PDF → JPG conversion):
+
+```bash
+# Fedora 44:
+sudo dnf install libreoffice-impress poppler-utils
+
+# Debian/Ubuntu:
+sudo apt install libreoffice-impress poppler-utils
+```
+
+### Rebuild
+
 One command, from the project root:
 
 ```bash
@@ -51,17 +83,18 @@ This handles both phases:
    slide content from `tools/sections.py` and writes the deck to
    `presentation/cpp-container-tutorial.pptx`.
 
-Force a full re-conversion of the diagrams (e.g. after editing an SVG):
+Force a full re-conversion of the diagrams (e.g. after editing an
+SVG):
 
 ```bash
 ./tools/build-deck.sh --force
 ```
 
-### Prerequisites
+### Prerequisites — at a glance
 
-| Dependency | Why | Install on Fedora 44 |
+| Dependency | Why | Install |
 |---|---|---|
-| `python3` ≥ 3.10 | runs the build script | (preinstalled) |
+| `python3` ≥ 3.10 | runs the build script | (preinstalled on Fedora 44) |
 | `python-pptx` | writes PPTX format | `pip install python-pptx` |
 | `Pillow` | reads PNG dimensions for aspect-ratio sizing | `pip install Pillow` |
 | `soffice` (LibreOffice) | SVG → PDF conversion | `dnf install libreoffice-impress` |

@@ -88,13 +88,15 @@ echo "==> Phase 2: building PPTX"
 
 if ! python3 -c "import pptx" 2>/dev/null; then
     echo "  ERROR: python-pptx not installed" >&2
-    echo "  Install with: pip install python-pptx" >&2
+    echo "  Install with: pip install -r tools/requirements.txt" >&2
+    echo "          or:   pip install python-pptx" >&2
     exit 1
 fi
 
 if ! python3 -c "from PIL import Image" 2>/dev/null; then
     echo "  ERROR: Pillow not installed" >&2
-    echo "  Install with: pip install Pillow" >&2
+    echo "  Install with: pip install -r tools/requirements.txt" >&2
+    echo "          or:   pip install Pillow" >&2
     exit 1
 fi
 

@@ -1,0 +1,14 @@
+# Python dependencies for tools/build-pptx.py
+#
+# Install with:
+#   pip install -r tools/requirements.txt
+#
+# Or on Fedora 44 with system Python (PEP 668):
+#   pip install --break-system-packages -r tools/requirements.txt
+#
+# Recommended: use a virtualenv to keep these out of system site-packages:
+#   python3 -m venv .venv && source .venv/bin/activate
+#   pip install -r tools/requirements.txt
+
+python-pptx>=1.0,<2.0
+Pillow>=10.0
