@@ -20010,7 +20010,7 @@ diagrams/ correctly separated from assets/, presentation/ listed.
 
 #### Item 8 — reading-time audit (planned)
 
-The site renders `⏱ {{ doc.duration }}` from each section's frontmatter
+The site renders `⏱ {% raw %}{{ doc.duration }}{% endraw %}` from each section's frontmatter
 `duration:` field. Audited 17 sections by stripping frontmatter and
 running `wc -w` on the body, then dividing by 200 wpm to get a
 baseline estimate. Found three issues:
@@ -20434,6 +20434,7 @@ to refresh `_examples/`. Commit the regenerated collection files
 alongside the README changes. The script is idempotent — re-running
 on no-change READMEs is safe.
 
+{% raw %}
 ### 2026-05-17 — r134.1: hotfix — Jekyll build failure from r134
 
 **The breakage.**
@@ -20535,6 +20536,86 @@ This rule now lives in a comment at the top of
   added — two `{% raw %}` / `{% endraw %}` pairs wrapping the
   affected code blocks)
 - `_plans/reconciliation-plan.md` (this entry)
+{% endraw %}
+
+{% raw %}
+### 2026-05-17 — r134.2: hotfix-of-the-hotfix — Liquid recursion in the plan file
+
+**The bug, brutally.**
+
+The r134.1 plan entry I added was supposed to document the Liquid
+build failure and explain the fix. To explain the fix, the prose
+quoted the problematic constructs verbatim:
+
+  - The C++ initializer lists: `{{"correlation_id", correlation_id_}}`
+    and `{{"customer_id", customer.id}}`
+  - The plugin-dependent reference: `{{ site.github.repository_url }}`
+  - The placeholder constructs: `{{ ... , ... }}` and `{{ ... }}`
+
+These appeared in PROSE inside the plan entry — outside any code
+fence, just in a regular paragraph. The plan file is in the `plans`
+collection (`output: true`, served at `/plans/reconciliation-plan/`),
+so Jekyll renders it like any other content file. Liquid runs over
+the whole file BEFORE Kramdown. It saw the prose-embedded
+constructs and tried to parse them as Liquid output statements.
+
+Result:
+
+  - Liquid warnings on each prose-quoted comma'd construct
+    ({{"correlation_id", ...}}, etc.)
+  - Fatal error on the `{{ site.github.repository_url }}` mention,
+    because that's still a real (failing) plugin reference, just
+    quoted in prose.
+
+The build re-failed with the SAME `No repo name found` exception
+the r134.1 entry was supposed to be eliminating. Documenting a
+trap by demonstrating it is one way to test it.
+
+**The fix.**
+
+Wrap the entire r134.1 plan entry in `{% raw %}` ... `{% endraw %}`.
+Liquid treats the contents as literal text; the prose is then
+rendered as-is by Kramdown. Now `{{"correlation_id", correlation_id_}}`
+appears in the rendered plan page as that literal text, instead of
+triggering a Liquid parse.
+
+Also caught while sweeping: line 20013 (in the r132 plan entry)
+contained a bare `\`⏱ {{ doc.duration }}\`` reference in inline
+code. Jekyll was silently rendering it as `<code>⏱ </code>` (empty
+after the icon) because `doc.duration` is undefined in plan-page
+context. Not a build failure, but wrong output. Fixed with an
+inline `{% raw %}{{ doc.duration }}{% endraw %}` escape so it
+renders literally.
+
+**Procedural rule (added permanently).**
+
+When a plan entry — or any markdown file in a `output: true`
+collection — discusses Liquid syntax, the entire entry's prose
+discussion must be wrapped in `{% raw %}` ... `{% endraw %}`. This
+applies whether the offending pattern is:
+
+  - C++ initializer lists like `{{key, value}}`
+  - Plugin-dependent references quoted in prose
+  - Liquid placeholders in documentation (e.g., `{{ variable }}` shown
+    as an example)
+  - Anything else with `{{` or `{%` that the writer intends as text,
+    not as a template instruction
+
+Existing file already had five `{% raw %}` blocks (around lines 288,
+399, 4546, 5251, 13266) protecting Podman format strings and
+existing Liquid-template examples — so this convention is already
+in use in the plan. The r134.1 entry just forgot to follow it.
+
+**Files changed.**
+
+- `_plans/reconciliation-plan.md`:
+  - Wrapped the entire r134.1 entry (lines 20437-20539) in
+    `{% raw %}` ... `{% endraw %}`
+  - Escaped inline `{{ doc.duration }}` reference at line 20013
+    with `{% raw %}{{ doc.duration }}{% endraw %}`
+  - This entry pre-wrapped in `{% raw %}` to avoid the same
+    problem recursively
+{% endraw %}
 
 ---
 
