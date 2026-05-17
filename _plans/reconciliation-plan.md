@@ -19556,6 +19556,90 @@ demo iterations. Production CI runs always see clean cache.
 After r129: Path F (PPTX rendering 14 sections + appendix). Round
 B will be functionally complete.
 
+### 2026-05-17 — r128.1: clang-tidy `-quiet` — drop the 280-line preamble
+
+User verified r128 works end-to-end with real findings from both
+tools. Noted a noise issue:
+
+> Your `reports/clang-tidy.txt` is now 10547 bytes — but 99% of that
+> is `run-clang-tidy`'s "Enabled checks:" preamble (300+ lines listing
+> every enabled check) before the actual 3 findings at the bottom.
+
+User picked polish-first, then r129.
+
+**The signal-to-noise problem.**
+
+`run-clang-tidy` invokes clang-tidy once per translation unit. Each
+invocation prints, in order:
+
+1. **"Enabled checks:" header** + the full list (~280 lines for our
+   checks config) — *informational, redundant when you already know
+   the .clang-tidy config*
+2. **Progress messages** like `[1/2][2.4s] /usr/bin/clang-tidy ...` —
+   *useful for live execution, noise in a captured log*
+3. **Actual diagnostics** in `path:line:col: severity: msg [check]`
+   format with code-snippet context — *the signal*
+4. **Summary lines** like `63719 warnings generated`, `Suppressed
+   63716 warnings`, `3 warnings treated as errors` — *useful metadata*
+
+The 10547-byte file from r128's run was ~95% category (1). The
+3-finding payload in `src/lib/channel.cpp` was buried at the bottom.
+
+**The fix: clang-tidy's `-quiet` flag.**
+
+Documented behavior from clang-tidy source:
+
+```
+-quiet: Run clang-tidy in quiet mode. In this mode clang-tidy
+        will not print anything about progress or enabled
+        checks. Useful when running clang-tidy from a Continuous
+        Integration environment, where progress information can
+        be a distraction.
+```
+
+The flag suppresses categories (1) and (2) only. Categories (3)
+and (4) — diagnostics and summary — are *not* affected. That's
+exactly what we want.
+
+`run-clang-tidy.py` accepts `-quiet` and passes it through to each
+clang-tidy invocation. We add it to the analyzer-soft stage's
+invocation; the analyzer stage chains from analyzer-soft so it
+inherits the cleaner output without changes to its grep gates
+(diagnostic format unchanged).
+
+**Expected file-size delta.**
+
+Before r128.1: ~10.5 KB (mostly "Enabled checks:" list).
+After r128.1: ~1-2 KB (just the meaningful output).
+
+Diagnostic format is preserved exactly, so:
+- The §12 prose sample output in r128 docs still matches reality
+- analyzer stage's `grep -qE ':[0-9]+:[0-9]+: (warning|error):'`
+  gate still works identically
+- `--demo-findings`'s `cat reports/clang-tidy.txt` is now readable
+  without scrolling
+
+**Files changed (1):**
+
+`examples/demo-07-quality-pipeline/Containerfile` — added `-quiet`
+to the `run-clang-tidy` invocation in the analyzer-soft stage.
+Added explanatory comment block above the command documenting
+exactly what `-quiet` does (and doesn't) suppress, so a future
+reader doesn't have to look it up.
+
+**Round B sequencing — r128.1 done:**
+
+| Round | Item | Status |
+|---|---|---|
+| r125 | Housekeeping + `--abi-bless` | shipped + verified |
+| r126 | `--abi-break-demo` flag | shipped + verified |
+| r126-docs | §12 reports/ explainer | shipped |
+| r127.2 | G-55 pivot — gcovr | shipped + verified |
+| r127-docs | §12 reading coverage output | shipped |
+| r128 | `--demo-findings` flag | shipped + verified |
+| **r128.1** | **clang-tidy `-quiet` flag — drop preamble** | **this round** |
+| r129 | Hermetic build comparison | next (final Round B item) |
+
 ---
 
 ## Known divergences from the PRD

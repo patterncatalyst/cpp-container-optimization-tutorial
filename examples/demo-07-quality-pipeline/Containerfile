@@ -143,7 +143,12 @@ RUN cppcheck --enable=warning,style,performance,portability \
 # make run-clang-tidy exit non-zero on any finding. The `|| true` swallows
 # that exit; the diagnostics are already captured in reports/clang-tidy.txt
 # regardless. The gating happens in the `analyzer` stage.
-RUN run-clang-tidy -p build/release-debuginfo -j"$(nproc)" \
+#
+# `-quiet` suppresses clang-tidy's "Enabled checks:" preamble (~280 lines
+# listing every check) and progress messages. Diagnostics, code-snippet
+# context lines, and summary lines ("N warnings generated", "M warnings
+# treated as errors") are NOT affected — those are the signal.
+RUN run-clang-tidy -p build/release-debuginfo -j"$(nproc)" -quiet \
         $(find src -name '*.cpp') > reports/clang-tidy.txt 2>&1 \
   || true
 
