@@ -19310,6 +19310,84 @@ The toolchain layer rebuilds (we changed dnf+pip lists). After that:
 | r128 | `--demo-findings` flag | next |
 | r129 | Hermetic build comparison | after r128 |
 
+### 2026-05-17 — r127-docs: §12 prose — "Reading coverage output: numbers ≠ quality"
+
+User ran r127.2 successfully. Coverage stage clean end-to-end:
+
+```
+lines: 44.3% (27 out of 61)
+functions: 70.6% (12 out of 17)
+branches: 5.3% (2 out of 38)
+```
+
+Per-file breakdown landed exactly as designed pedagogically:
+
+| File | Coverage | Why |
+|---|---|---|
+| `src/include/demo07/channel.hpp` | 85% | Tests exercise the channel templates |
+| `src/lib/channel.cpp` | 91% | Tests exercise the channel implementations |
+| `src/svc/main.cpp` | **0%** | Tests never invoke the service binary |
+
+All 5 report formats land on host: cobertura XML, JUnit XML,
+gcovr HTML, JSON, text summary.
+
+**The teaching moment in the numbers.**
+
+The 44% total looks bad until you understand WHY it's 44%. main.cpp
+shows 0% because unit tests don't exercise the service binary — tests
+exercise the LIBRARY (channel.hpp + channel.cpp), which is well-
+covered at 85-91%. The project-level number is a misleading KPI; the
+library-only number is the real one.
+
+Likewise the 5.3% branch coverage isn't catastrophic — it's an
+artifact of how gcc emits branch info for exception paths, std::
+optional unwraps, std::span bounds checks, and inlined STL templates
+that the test build doesn't fully instantiate. Branch coverage is a
+diagnostic ("are error paths tested?") not a KPI.
+
+This is real lived experience that teams hit but rarely write down.
+Capturing it in the §12 prose gives readers context for what they're
+looking at when they run the demo themselves.
+
+**Changes in r127-docs (1 file):**
+
+`_docs/12-analysis-debugging.md` — added new subsection "Reading
+coverage output: numbers ≠ quality" between "libabigail's XML is its
+own thing too" and the section-wrap take-away. Covers three points:
+
+1. **Coverage % depends on what you measure.** Recommend two reports
+   — library-only (for the team dashboard) and full-tree (for spotting
+   forgotten test directories). gcovr `--filter` lets you pick.
+
+2. **Branch coverage is always lower than line coverage.** Lists
+   exactly where those branches come from (exception edges,
+   std::optional, std::span, inlined STL ranges). Notes
+   `--exclude-throw-branches` / `--exclude-unreachable-branches` as
+   the right knobs when teams want meaningful branch numbers.
+
+3. **Per-file trends > project absolutes.** Recommend gating per-file
+   with `--fail-under-line=80` against the library-only filter, not
+   project-level threshold.
+
+The numbers in the prose subsection are the LITERAL numbers from
+this user's run — 85% on hpp, 91% on cpp, 0% on main.cpp. Readers
+who walk through the demo see EXACTLY the same output the prose
+describes.
+
+**Round B sequencing — r127.x complete:**
+
+| Round | Item | Status |
+|---|---|---|
+| r125 | Housekeeping + `--abi-bless` | shipped |
+| r126 | `--abi-break-demo` flag | shipped + verified |
+| r126-docs | §12 reports/ explainer | shipped |
+| r127 | Coverage stage (initially lcov) | superseded |
+| r127.1 | G-55 fix attempt #1 | superseded |
+| r127.2 | G-55 pivot — gcovr | shipped + VERIFIED |
+| **r127-docs** | **§12 prose: reading coverage output** | **this round** |
+| r128 | `--demo-findings` flag | next |
+| r129 | Hermetic build comparison | after r128 |
+
 ---
 
 ## Known divergences from the PRD

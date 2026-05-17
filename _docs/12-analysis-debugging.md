@@ -274,6 +274,76 @@ compares two .abi files semantically — it knows that re-ordering
 struct fields is meaningful but re-ordering function definitions in
 the source isn't.
 
+### Reading coverage output: numbers ≠ quality
+
+When the demo's coverage stage finishes, you'll see something like:
+
+```
+File                                       Lines     Exec  Cover   Missing
+src/include/demo07/channel.hpp                 7        6    85%   34
+src/lib/channel.cpp                           23       21    91%   48,51
+src/svc/main.cpp                              31        0     0%   31,41,44-45,...
+TOTAL                                         61       27    44%
+```
+
+That 44% total looks bad, but it's misleading without context. Three
+things to internalize before reading any coverage report:
+
+**1. Coverage % depends entirely on what you measure.** The demo's
+gcovr invocation includes everything under `src/` — both the library
+(`channel.hpp` + `channel.cpp`) and the service entrypoint
+(`svc/main.cpp`). The unit tests exercise the **library**; nothing
+runs `main.cpp` during `ctest`. So `main.cpp` shows 0%, which drags
+the project-level number from "great" (90%+ on the library) to
+"mediocre" (44% overall).
+
+In a real project you'd usually want two coverage reports:
+
+- **Library coverage** — `--filter src/include/` `--filter src/lib/`
+  to focus on the testable units. This is the number that goes on
+  the team dashboard.
+- **Full-tree coverage** — what we ship in the demo. Useful for
+  spotting "I forgot to test this entire subdirectory" but bad as a
+  KPI.
+
+Choose your filter based on what question the number is trying to
+answer: "is the library well-tested?" or "what fraction of all source
+lines was exercised?"
+
+**2. Branch coverage is almost always much lower than line coverage.**
+The demo reports `branches: 5.3% (2/38)` which sounds catastrophic —
+until you realize where those branches come from. gcc emits branch
+information for:
+
+- Every C++ exception edge (`try`/`catch`, RAII destruction order)
+- Every `std::optional<T>::value()` unwrap
+- Every `std::span` bounds check the compiler can't eliminate
+- Every inlined std::ranges iterator advance check
+- Every `if constexpr` inlined-stdlib path that didn't get
+  instantiated in the test build
+
+Most of those branches are exception-handling paths that
+unit tests don't typically exercise (you don't usually test "what
+happens if the heap is exhausted at this point"). Branch coverage
+is a useful **diagnostic** ("are my error paths tested?") but a poor
+**KPI**.
+
+If your team genuinely wants meaningful branch coverage numbers,
+filter for branches in your own code only — `gcovr` has
+`--exclude-throw-branches` and `--exclude-unreachable-branches` for
+exactly this purpose. We don't enable them in the demo because seeing
+the raw numbers first makes the lesson land.
+
+**3. Per-file trends matter more than project-level absolutes.** A
+project moving from 70% → 73% on the library files this sprint is a
+better signal than the absolute number. Track the diff, not the
+threshold.
+
+If you need a gate (CI fails when coverage drops), gate **per-file**
+not per-project: `gcovr --fail-under-line=80` against the library-
+only filter. A new feature that ships at 0% coverage is a quality
+issue regardless of what the project-level number says.
+
 The take-away for the reports/ directory as a whole: **every file is
 designed to be machine-consumable by something**. The XML ones plug
 into CI. The .abi file plugs into abidiff. The .txt files are the
