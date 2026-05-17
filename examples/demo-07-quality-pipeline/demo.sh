@@ -6,6 +6,8 @@
 #   ./demo.sh --test-only
 #   ./demo.sh --asan-only
 #   ./demo.sh --abi-only
+#   ./demo.sh --abi-bless    # promote reports/current.abi to abi-reference/
+#                            #   (run --abi-only first to produce it)
 #   ./demo.sh --debug        # spin up gdbserver sidecar
 #   ./demo.sh --clean
 
@@ -20,12 +22,14 @@ source "$(cd ../../scripts/lib && pwd)/_helpers.sh"
 PHASES=(analyzer tests asan abi)
 DO_DEBUG=0
 DO_CLEAN=0
+DO_ABI_BLESS=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --analyze-only) PHASES=(analyzer);    shift;;
     --test-only)    PHASES=(tests);       shift;;
     --asan-only)    PHASES=(asan);        shift;;
     --abi-only)     PHASES=(abi);         shift;;
+    --abi-bless)    DO_ABI_BLESS=1;       shift;;
     --debug)        DO_DEBUG=1;           shift;;
     --clean)        DO_CLEAN=1;           shift;;
     *) log_err "unknown arg: $1"; exit 2;;
@@ -43,6 +47,37 @@ if [[ $DO_CLEAN -eq 1 ]]; then
     cpp-tut/demo-07:gdbserver 2>/dev/null || true
   rm -rf reports
   log_ok "Cleaned."
+  exit 0
+fi
+
+# --abi-bless: promote reports/current.abi to abi-reference/. This is the
+# operational counterpart to --abi-only. After running --abi-only at least
+# once to produce reports/current.abi, run --abi-bless to copy it into
+# abi-reference/ as the new baseline. Future --abi-only runs will then
+# diff against this baseline instead of just recording it.
+#
+# The committed baseline is what `abidiff` compares to inside the abi
+# stage of the Containerfile. The workflow is:
+#
+#   1. ./demo.sh --abi-only       (produces reports/current.abi)
+#   2. inspect reports/current.abi if you want to
+#   3. ./demo.sh --abi-bless      (promotes it to abi-reference/)
+#   4. git add abi-reference/ && git commit -m "abi: bless v1.0 baseline"
+#
+# After step 4, any header change that breaks ABI causes the abi stage
+# to exit non-zero with abidiff's report.
+if [[ $DO_ABI_BLESS -eq 1 ]]; then
+  if [[ ! -f reports/current.abi ]]; then
+    log_err "No reports/current.abi found. Run './demo.sh --abi-only' first."
+    exit 1
+  fi
+  mkdir -p abi-reference
+  cp -v reports/current.abi abi-reference/libdemo07_channel.so.1.abi
+  log_ok "ABI reference updated."
+  log_info "Next steps:"
+  log_info "  git diff abi-reference/      # review what you're freezing"
+  log_info "  git add  abi-reference/"
+  log_info "  git commit -m \"abi: bless v1.0 baseline\""
   exit 0
 fi
 

@@ -18657,6 +18657,100 @@ both stages were built from the same base + same dnf installs), then
 breaks later when one stage's deps drift (or you slim down the target
 stage). Always test the runtime invocations after multi-stage COPY.
 
+### 2026-05-17 — r125: Round A COMPLETE — housekeeping + --abi-bless workflow
+
+User ran r124. All four phases pass end-to-end with proper artifact
+extraction:
+
+```
+==> Reports
+-rw-r--r--. 1 rsedor rsedor    798 May 17 08:38 asan.txt
+-rw-r--r--. 1 rsedor rsedor   4101 May 17 08:38 asan.xml
+-rw-r--r--. 1 rsedor rsedor  10547 May 17 08:39 clang-tidy.txt
+-rw-r--r--. 1 rsedor rsedor    129 May 17 08:38 cppcheck.xml
+-rw-r--r--. 1 rsedor rsedor  98450 May 17 08:38 current.abi
+-rw-r--r--. 1 rsedor rsedor   4099 May 17 08:38 gtest.xml
+```
+
+Six artifacts. Four phases (analyzer, tests, asan, abi). Zero gotchas.
+
+**Round A is closed.** The demo-07 quality pipeline is operationally
+complete: every container layer produces real, reviewable evidence
+on the host. The 23 gotchas captured (G-32 through G-54) provide
+lived examples for the §12 and §13 prose.
+
+**Housekeeping observations from r124's user run:**
+
+1. The previous `r123` apply step inadvertently committed
+   `examples/demo-07-quality-pipeline/reports/clang-tidy.txt` and
+   `reports/cppcheck.xml` to git. The top-level `.gitignore` covers
+   most build artifacts (build/, CMakeFiles/, conan/*) but doesn't
+   list `reports/`. Same risk applies to all per-demo `reports/`
+   directories going forward.
+
+2. The toolchain stage dnf install showed
+   `ValueError: SELinux policy is not managed or store cannot be accessed.`
+   during `gcc-toolset-14-runtime` scriptlet. This is benign — the
+   container has no SELinux policy store to manage; the scriptlet's
+   `semanage` call fails non-fatally. Not blocking, not a gotcha
+   (it's expected container behavior), but worth a footnote in §11's
+   "Running SCL packages in containers" prose.
+
+**Changes in r125 (4 files):**
+
+1. **Top-level `.gitignore`**: added `reports/` (covers all per-demo
+   report dirs) and `CMakeUserPresets.json` (conan generates this in
+   the source tree on every install).
+
+2. **`examples/demo-07-quality-pipeline/demo.sh`**: added `--abi-bless`
+   flag. Run after `--abi-only` to promote `reports/current.abi` →
+   `abi-reference/libdemo07_channel.so.1.abi`. This is the ergonomic
+   counterpart to the abi-reference README's bootstrap workflow.
+
+3. **`examples/demo-07-quality-pipeline/abi-reference/README.md`**:
+   rewritten around the new `--abi-bless` flag, with explicit
+   bootstrap workflow, regression-catching mechanics, and a section
+   on intentional ABI bumps (the soname coupling) that previously
+   wasn't documented.
+
+4. **`_plans/reconciliation-plan.md`**: this entry.
+
+**Bootstrap workflow now ergonomic:**
+
+```bash
+./demo.sh --abi-only       # produces reports/current.abi
+./demo.sh --abi-bless      # promotes to abi-reference/
+git add abi-reference/
+git commit -m "abi: bless v1.0 baseline"
+```
+
+After step 4, the abi stage's if-branch fires on every build (reference
+exists → real diff), catching any header change that breaks ABI.
+
+**Round B sequencing (next 4 rounds, planned):**
+
+| Round | Item | Effort |
+|---|---|---|
+| r126 | `--abi-break-demo` flag (deliberate ABI break workflow) | 1-2 rounds |
+| r127 | Coverage stage: `--coverage-gcc` (gcov + lcov, html out) | 2-3 rounds |
+| r128 | `--demo-findings` flag (deliberate code that fires checkers) | 1 round |
+| r129 | Hermetic build comparison (SHA-256 byte-identical assert) | 1-3 rounds |
+
+After r129, Path F (PPTX rendering of the 14 sections + appendix).
+
+**Apply step note for user:**
+
+After extracting r125, two `git rm --cached` commands untrack the
+accidentally-committed report files from r123:
+
+```bash
+git rm --cached \
+    examples/demo-07-quality-pipeline/reports/clang-tidy.txt \
+    examples/demo-07-quality-pipeline/reports/cppcheck.xml
+```
+
+The new `.gitignore` then prevents this recurring.
+
 ---
 
 ## Known divergences from the PRD
