@@ -20313,6 +20313,127 @@ filenames reference a file that doesn't exist on disk.
   diagram embed inserted)
 - `_plans/reconciliation-plan.md` (this entry)
 
+### 2026-05-17 — r134: per-demo Jekyll wrapper pages + README augmentation (item 2)
+
+**The shape of the change.**
+
+User: "Item 2 - let's Create the Jekyll wrapper pages and render each
+existing README.md - perhaps add a little more demo specific content
+to the readme.md's as some are a little lean on the rationale and
+what we're doing it for and the output and how it is relevant."
+
+Two related changes:
+
+1. **README augmentation** — the lean ones get more rationale/output/
+   interpretation; the substantial ones get left alone.
+2. **`_examples` Jekyll collection** — one wrapper page per demo,
+   generated from each demo's README, served at
+   `/examples/demo-NN-name/`.
+
+#### Part 1 — README augmentation
+
+Surveyed all 7 READMEs by word count:
+
+| Demo | Was | Status |
+|---|---:|---|
+| demo-01-image-strategy | 214 | LEAN — augmented to ~600 words |
+| demo-02-stl-layout | 496 | OK as-is |
+| demo-03-io-uring-grpc | 869 | OK as-is |
+| demo-04-observability | 295 | LEAN — augmented to ~660 words |
+| demo-05-isolation | 710 | OK as-is |
+| demo-06-memory-and-allocators | 2874 | OK as-is (deep treatment) |
+| demo-07-quality-pipeline | 727 | OK as-is |
+
+Augmented sections added to demo-01 and demo-04:
+
+- **"Why this matters"** — rationale for the demo at the production
+  level (pull time, security surface, runtime cost; or telemetry as
+  the foundation for production debugging)
+- **"What you'll see"** — concrete representative output numbers
+- **"How to interpret the output"** — rules of thumb for when the
+  numbers look wrong, what to investigate, when each variant is the
+  right default
+
+Also corrected stale tutorial-section cross-references in demo-01's
+"Topics covered" (§3, §4, §12 → §4, §5, §13 reflecting the
+renumbering done in earlier rounds).
+
+#### Part 2 — `_examples` Jekyll collection
+
+Three concrete changes to the site infrastructure:
+
+1. **`_config.yml` — new collection.** Added under `collections:`:
+
+       examples:
+           output: true
+           permalink: /examples/:name/
+
+   And matching `defaults:` block:
+
+       - scope: { path: "", type: examples }
+         values:
+           layout: example
+           sectionid: examples
+
+2. **New layout `_layouts/example.html`.** Modeled on the `tutorial`
+   layout but with the differences a demo page needs:
+   - Breadcrumb: Home → Examples → [demo title]
+   - Title pill: "Demo NN" instead of "Section NN"
+   - Optional "Source on GitHub ↗" pill (driven by `github_path`
+     frontmatter field)
+   - **NO** prev/next pager — the existing tutorial layout iterates
+     `site.docs` to compute prev/next, which would point demos to
+     `_docs/16-appendix` every time. Replaced with a single "Back to
+     all demos" link.
+
+3. **Generator script `scripts/regen-examples-collection.sh`.**
+   Re-runs whenever a README is edited:
+   - Reads each `examples/demo-NN-name/README.md`
+   - Extracts H1 → title; first paragraph → description (skipping
+     "Tutorial section:" preambles); demo number → order
+   - Strips the H1 from the body (Jekyll renders title from
+     frontmatter, would duplicate)
+   - Writes `_examples/demo-NN-name.md` with proper frontmatter +
+     a brief "full source lives in..." callout + the README body
+
+   The READMEs remain the single source of truth; the `_examples/`
+   collection is regenerated content checked into the repo so Jekyll
+   can build without running the script.
+
+**`examples.html` updated:**
+
+- "Six runnable companions" → "Seven runnable companions"
+- Each card now links to `/examples/demo-NN-name/` (Jekyll wrapper)
+  rather than the GitHub README URL
+- Card section labels (§N) corrected for the renumbering:
+  - demo-01: §3, §4 → §4, §5
+  - demo-02: §5, §6 → §6
+  - demo-03: §7, §8 → §8, §9
+  - demo-04: §9 → §10
+  - demo-05: §10 → §11
+  - demo-06: §7 → §7 (unchanged)
+  - demo-07: §11, §12 → §12, §13
+- "Memory & STL" demo-02 title fixed to "STL & layout" (matches
+  the actual demo scope; the memory work is in demo-06)
+- Card meta changed from "Source ↗" to "Read page →"
+
+**Files changed:**
+
+- 7 new files in `_examples/` (one per demo)
+- 1 new file `_layouts/example.html`
+- 1 new file `scripts/regen-examples-collection.sh` (executable)
+- 2 modified files in `examples/demo-NN/README.md` (demos 01, 04)
+- `_config.yml` (collection + defaults additions)
+- `examples.html` (rewritten to link Jekyll pages)
+- `_plans/reconciliation-plan.md` (this entry)
+
+**Notes on the workflow going forward:**
+
+When editing a demo README, run `./scripts/regen-examples-collection.sh`
+to refresh `_examples/`. Commit the regenerated collection files
+alongside the README changes. The script is idempotent — re-running
+on no-change READMEs is safe.
+
 ---
 
 ## Known divergences from the PRD

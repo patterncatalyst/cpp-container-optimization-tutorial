@@ -1,14 +1,14 @@
 ---
 layout: default
 title: Example demos
-description: Six runnable companion demos covering image strategy, memory, I/O, observability, isolation, and the quality pipeline. Each runs via ./demo.sh on Fedora 44.
+description: Seven runnable companion demos covering image strategy, STL & layout, I/O, observability, isolation, memory, and the quality pipeline. Each runs via ./demo.sh on Fedora 44.
 permalink: /examples/
 ---
 
 <section class="hero hero--compact">
     <div class="container">
         <span class="hero__eyebrow">Example demos</span>
-        <h1>Six runnable companions to the tutorial.</h1>
+        <h1>Seven runnable companions to the tutorial.</h1>
         <p class="hero__lead">
             Every claim made in the tutorial body has a demo behind it.
             Each demo is a self-contained Podman project with its own
@@ -24,16 +24,16 @@ permalink: /examples/
     <div class="container">
         <h2 class="section-heading">Demos</h2>
         <p class="section-sub">
-            Each card links to the demo's README on GitHub. Each demo
-            also stands alone — run the demo without reading the
-            tutorial first if you'd rather poke at it directly.
+            Each card links to the demo's page on this site (a
+            rendering of the README with cross-references), and each
+            page links to the source on GitHub. Each demo also stands
+            alone — run it without reading the tutorial first if you'd
+            rather poke at it directly.
         </p>
 
         <div class="cards">
-            <a class="card"
-               href="https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-01-image-strategy"
-               rel="noopener">
-                <div class="card__eyebrow">Demo 01 · <strong>§3, §4</strong></div>
+            <a class="card" href="{{ '/examples/demo-01-image-strategy/' | relative_url }}">
+                <div class="card__eyebrow">Demo 01 · <strong>§4, §5</strong></div>
                 <h3 class="card__title">Image strategy &amp; PGO</h3>
                 <p class="card__desc">
                     UBI multi-stage vs UBI-micro vs single-stage-naive,
@@ -41,54 +41,48 @@ permalink: /examples/
                     against each variant; the demo prints a p50/p95/p99 table
                     side by side.
                 </p>
-                <div class="card__meta"><span>Source ↗</span></div>
+                <div class="card__meta"><span>Read page →</span></div>
             </a>
 
-            <a class="card"
-               href="https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-02-stl-layout"
-               rel="noopener">
-                <div class="card__eyebrow">Demo 02 · <strong>§5, §6</strong></div>
-                <h3 class="card__title">Memory &amp; STL</h3>
+            <a class="card" href="{{ '/examples/demo-02-stl-layout/' | relative_url }}">
+                <div class="card__eyebrow">Demo 02 · <strong>§6</strong></div>
+                <h3 class="card__title">STL &amp; layout</h3>
                 <p class="card__desc">
-                    <code>set</code> vs <code>flat_set</code>, default <code>new</code>
-                    vs mimalloc-via-<code>LD_PRELOAD</code> vs PMR arena, plus a
-                    random-access workload with cgroup <code>memory.high</code> applied.
+                    <code>unordered_map</code> vs <code>map</code> vs
+                    <code>flat_map</code> vs <code>vector</code> with a linear
+                    scan; Google Benchmark median timings under a baseline
+                    and a 128 MB cgroup memory cap, side-by-side.
                 </p>
-                <div class="card__meta"><span>Source ↗</span></div>
+                <div class="card__meta"><span>Read page →</span></div>
             </a>
 
-            <a class="card"
-               href="https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-03-io-uring-grpc"
-               rel="noopener">
-                <div class="card__eyebrow">Demo 03 · <strong>§7, §8</strong></div>
+            <a class="card" href="{{ '/examples/demo-03-io-uring-grpc/' | relative_url }}">
+                <div class="card__eyebrow">Demo 03 · <strong>§8, §9</strong></div>
                 <h3 class="card__title">io_uring &amp; async gRPC</h3>
                 <p class="card__desc">
-                    Multishot accept + multishot recv with provided buffer
-                    rings; async gRPC with completion-queue workers and
-                    <code>SO_REUSEPORT</code>. Rootless vs host networking
-                    comparison built in.
+                    Direct liburing, an Asio io_uring executor, and an async
+                    gRPC server — three servers in one binary. Wired into
+                    the LGTM observability stack; <code>ghz</code> drives
+                    load and the demo writes results to disk.
                 </p>
-                <div class="card__meta"><span>Source ↗</span></div>
+                <div class="card__meta"><span>Read page →</span></div>
             </a>
 
-            <a class="card"
-               href="https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-04-observability"
-               rel="noopener">
-                <div class="card__eyebrow">Demo 04 · <strong>§9</strong></div>
+            <a class="card" href="{{ '/examples/demo-04-observability/' | relative_url }}">
+                <div class="card__eyebrow">Demo 04 · <strong>§10</strong></div>
                 <h3 class="card__title">Observability stack</h3>
                 <p class="card__desc">
-                    Full Grafana + Prometheus + Mimir + Tempo + Loki + OTel
-                    Collector compose stack with a C++ service emitting
-                    traces, metrics, and logs over OTLP/gRPC. Optional
-                    bpftrace probes live alongside.
+                    A C++ HTTP service instrumented with OpenTelemetry
+                    (traces, metrics, logs) running alongside
+                    <code>grafana/otel-lgtm</code>. Optional
+                    <code>bpftrace</code> probes add the kernel-side dimension
+                    above the application telemetry.
                 </p>
-                <div class="card__meta"><span>Source ↗</span></div>
+                <div class="card__meta"><span>Read page →</span></div>
             </a>
 
-            <a class="card"
-               href="https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-05-isolation"
-               rel="noopener">
-                <div class="card__eyebrow">Demo 05 · <strong>§10</strong></div>
+            <a class="card" href="{{ '/examples/demo-05-isolation/' | relative_url }}">
+                <div class="card__eyebrow">Demo 05 · <strong>§11</strong></div>
                 <h3 class="card__title">Noisy neighbor isolation</h3>
                 <p class="card__desc">
                     Twin-tenant scenario: a latency-sensitive HTTP service
@@ -96,12 +90,10 @@ permalink: /examples/
                     baseline, unisolated, <code>cpu.weight</code>, and
                     <code>cpuset.cpus</code> pinning.
                 </p>
-                <div class="card__meta"><span>Source ↗</span></div>
+                <div class="card__meta"><span>Read page →</span></div>
             </a>
 
-            <a class="card"
-               href="https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-06-memory-and-allocators"
-               rel="noopener">
+            <a class="card" href="{{ '/examples/demo-06-memory-and-allocators/' | relative_url }}">
                 <div class="card__eyebrow">Demo 06 · <strong>§7</strong></div>
                 <h3 class="card__title">Memory &amp; allocators</h3>
                 <p class="card__desc">
@@ -112,13 +104,11 @@ permalink: /examples/
                     <code>memory.high</code> pressure. OTel-instrumented;
                     histograms reach the LGTM stack.
                 </p>
-                <div class="card__meta"><span>Source ↗</span></div>
+                <div class="card__meta"><span>Read page →</span></div>
             </a>
 
-            <a class="card"
-               href="https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-07-quality-pipeline"
-               rel="noopener">
-                <div class="card__eyebrow">Demo 07 · <strong>§11, §12</strong></div>
+            <a class="card" href="{{ '/examples/demo-07-quality-pipeline/' | relative_url }}">
+                <div class="card__eyebrow">Demo 07 · <strong>§12, §13</strong></div>
                 <h3 class="card__title">Quality &amp; ABI pipeline</h3>
                 <p class="card__desc">
                     cppcheck and clang-tidy as build stages, gtest+gmock
@@ -126,7 +116,7 @@ permalink: /examples/
                     reference, plus a gdbserver sidecar for live debugging.
                     Hermetic Conan 2 lockfile + CMake presets throughout.
                 </p>
-                <div class="card__meta"><span>Source ↗</span></div>
+                <div class="card__meta"><span>Read page →</span></div>
             </a>
         </div>
     </div>

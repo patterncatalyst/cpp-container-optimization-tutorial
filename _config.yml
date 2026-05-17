@@ -46,6 +46,9 @@ collections:
     reference:
         output: true
         permalink: /reference/:path/
+    examples:
+        output: true
+        permalink: /examples/:name/
 
 defaults:
     - scope:
@@ -66,6 +69,12 @@ defaults:
       values:
           layout: tutorial
           sectionid: reference
+    - scope:
+          path: ""
+          type: examples
+      values:
+          layout: example
+          sectionid: examples
 
 # ── Plugins ───────────────────────────────────────────────────────────────────
 plugins:

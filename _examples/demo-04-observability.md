@@ -1,4 +1,16 @@
-# Demo 4 — Observability stack with OpenTelemetry
+---
+title: "Demo 4 — Observability stack with OpenTelemetry"
+description: "A small C++ HTTP service instrumented with OpenTelemetry (logs, metrics, traces) running alongside the **`grafana/otel-lgtm`** all-in-one observability container from `observability/`. That single image bundles the receiving end of all…"
+order: 4
+layout: example
+sectionid: examples
+permalink: /examples/demo-04-observability/
+demo_dir: demo-04-observability
+github_path: examples/demo-04-observability
+---
+
+> The full source for this demo lives in [`examples/demo-04-observability/`]({{ site.github.repository_url }}/tree/main/examples/demo-04-observability) — clone the repo, `cd` in, and `./demo.sh`.
+
 
 Tutorial section: §10 (Observability & profiling)
 
