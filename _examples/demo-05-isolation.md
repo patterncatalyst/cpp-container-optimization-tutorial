@@ -12,7 +12,7 @@ github_path: examples/demo-05-isolation
 > The full source for this demo lives in [`examples/demo-05-isolation/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-05-isolation) — clone the repo, `cd` in, and `./demo.sh`.
 
 
-Tutorial section: [§11 Noisy Neighbor Isolation](/docs/11-noisy-neighbors/)
+Tutorial section: [§11 Noisy Neighbor Isolation]({{ '/docs/11-noisy-neighbors/' | relative_url }})
 
 Two services running side-by-side on the same host, with a load
 generator hammering one of them. The demo measures what happens to
@@ -234,7 +234,7 @@ with a warning — you'll see baseline and unisolated rows, with
 ## Source materials
 
 This demo deepens material from the project's
-[**bibliography**](/bibliography/):
+[**bibliography**]({{ '/bibliography/' | relative_url }}):
 
 - **Enberg, *Latency*, ch. 7** — scheduler-induced latency and
   the priority-inheritance argument; what cgroup weighting
@@ -247,18 +247,18 @@ This demo deepens material from the project's
 
 ## Linked tutorial sections
 
-- [**§11 Noisy Neighbor Isolation**](/docs/11-noisy-neighbors/) —
+- [**§11 Noisy Neighbor Isolation**]({{ '/docs/11-noisy-neighbors/' | relative_url }}) —
   this demo is §11's worked example. The §11 prose develops the
   cgroup v2 model, `cpu.weight` semantics, `cpuset.cpus`
   semantics, and the NUMA story; this demo measures them.
-- [**§7 Memory Management**](/docs/07-memory-management/) — the
+- [**§7 Memory Management**]({{ '/docs/07-memory-management/' | relative_url }}) — the
   `memory.high` / `memory.max` knobs in §7 are the memory-side
   complement to this demo's CPU work. Together they cover the
   two most important cgroup controllers for C++ services.
-- [**§9 Networking & Kernel Parameters**](/docs/09-networking-kernel/)
+- [**§9 Networking & Kernel Parameters**]({{ '/docs/09-networking-kernel/' | relative_url }})
   — `io.weight` for storage-side noisy-neighbor isolation works
   analogously to `cpu.weight` here; §9 covers it.
-- [**§10 Observability & Profiling**](/docs/10-observability-profiling/)
+- [**§10 Observability & Profiling**]({{ '/docs/10-observability-profiling/' | relative_url }})
   — demo-04's bpftrace sched-switch probes are how you confirm
   what cgroup weighting is doing in production. Sched-switch
   spikes coinciding with p99 spikes are a textbook signal.

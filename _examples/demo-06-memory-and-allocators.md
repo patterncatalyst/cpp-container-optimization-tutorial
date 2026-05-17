@@ -12,7 +12,7 @@ github_path: examples/demo-06-memory-and-allocators
 > The full source for this demo lives in [`examples/demo-06-memory-and-allocators/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-06-memory-and-allocators) — clone the repo, `cd` in, and `./demo.sh`.
 
 
-Tutorial section: [§7 Memory Management](/docs/07-memory-management/)
+Tutorial section: [§7 Memory Management]({{ '/docs/07-memory-management/' | relative_url }})
 
 Three allocator variants of the same C++23 binary, side-by-side on a
 synthetic JSON-shaped allocator-stress workload:
@@ -478,7 +478,7 @@ work" reports.
 ## Source materials
 
 This demo deepens material from the project's
-[**bibliography**](/bibliography/):
+[**bibliography**]({{ '/bibliography/' | relative_url }}):
 
 - **Andrist & Sehr, *C++ High Performance* 2e, ch. 7** — custom
   allocators, PMR design rationale, allocator-aware containers
@@ -492,14 +492,14 @@ This demo deepens material from the project's
 
 ## Linked tutorial sections
 
-- [**§7 Memory Management**](/docs/07-memory-management/) — this
+- [**§7 Memory Management**]({{ '/docs/07-memory-management/' | relative_url }}) — this
   demo is §7's worked example. The §7 prose discusses the theory;
   this demo measures it.
-- [**§10 Observability & Profiling**](/docs/10-observability-profiling/)
+- [**§10 Observability & Profiling**]({{ '/docs/10-observability-profiling/' | relative_url }})
   — the OTel-instrumented mode here uses the same LGTM bundle as
   demo-04, and the Simple-vs-Batch finding is one of §10's
   canonical teaching points.
-- [**§11 Noisy Neighbors**](/docs/11-noisy-neighbors/) — the
+- [**§11 Noisy Neighbors**]({{ '/docs/11-noisy-neighbors/' | relative_url }}) — the
   per-allocator tail-latency observations under sustained load
   complement demo-05's CPU isolation work; allocator strategy and
   CPU scheduling both shape tail behavior.

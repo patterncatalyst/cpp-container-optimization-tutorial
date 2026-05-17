@@ -13,8 +13,8 @@ github_path: examples/demo-01-image-strategy
 
 
 Tutorial sections:
-[§4 Container Strategy](/docs/04-image-strategy/) +
-[§5 Compile-Time Wins](/docs/05-compile-time-wins/)
+[§4 Container Strategy]({{ '/docs/04-image-strategy/' | relative_url }}) +
+[§5 Compile-Time Wins]({{ '/docs/05-compile-time-wins/' | relative_url }})
 
 Builds the same trivial C++23 HTTP service three different ways and
 compares the results. Adds a Profile-Guided Optimization pass on top
@@ -152,7 +152,7 @@ A few rules of thumb when you're reading the table:
 ## Source materials
 
 This demo deepens material from the project's
-[**bibliography**](/bibliography/):
+[**bibliography**]({{ '/bibliography/' | relative_url }}):
 
 - **Andrist & Sehr, *C++ High Performance* 2e, ch. 5** — compile-
   and link-time optimizations, the LTO / PGO mechanics
@@ -162,14 +162,14 @@ This demo deepens material from the project's
 
 ## Linked tutorial sections
 
-- [**§4 Container Strategy**](/docs/04-image-strategy/) — base
+- [**§4 Container Strategy**]({{ '/docs/04-image-strategy/' | relative_url }}) — base
   image choice (UBI vs ubi-micro vs scratch) and the multi-stage
   build pattern. This demo's three Containerfiles are §4's worked
   example.
-- [**§5 Compile-Time Wins**](/docs/05-compile-time-wins/) — what
+- [**§5 Compile-Time Wins**]({{ '/docs/05-compile-time-wins/' | relative_url }}) — what
   LTO actually does, when PGO is worth the build-time tax,
   `constexpr` and the related compile-time tools. The PGO step
   in this demo is §5's measurable claim.
-- [**§13 Reproducibility & ABI**](/docs/13-reproducibility-abi/) —
+- [**§13 Reproducibility & ABI**]({{ '/docs/13-reproducibility-abi/' | relative_url }}) —
   image labels and reproducible-image discipline. This demo's
   Containerfiles use the labeling pattern §13 develops.

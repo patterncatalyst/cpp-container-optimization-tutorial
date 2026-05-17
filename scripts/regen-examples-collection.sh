@@ -125,7 +125,14 @@ for demo_dir in "$EXAMPLES_DIR"/demo-*; do
         echo ""
         echo "> The full source for this demo lives in [\`examples/$demo_name/\`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/$demo_name) — clone the repo, \`cd\` in, and \`./demo.sh\`."
         echo ""
-        echo "$body"
+        # Transform absolute-path markdown links so they pick up the
+        # Jekyll baseurl. The README on disk uses simple `](/path/)`
+        # syntax; in the generated _examples/ file we wrap each in
+        # `{{ '/path/' | relative_url }}` so GitHub Pages serves them
+        # at /cpp-container-optimization-tutorial/path/ correctly.
+        # External URLs (https://...) and same-page anchors (#sec)
+        # are left untouched.
+        echo "$body" | sed -E "s#\]\(/([^)]+)\)#](\{{ '/\1' | relative_url }})#g"
     } > "$out_file"
 
     count=$((count + 1))

@@ -21151,6 +21151,156 @@ the connection (not just the section name).
 
   _plans/reconciliation-plan.md (this entry)
 
+### 2026-05-17 — r138: fix all baseurl 404s (Jekyll relative_url filter)
+
+**The trigger.**
+
+User reviewed the live site after r137 and reported: *"the links at
+the bottom of the demo's 404 - e.g. the bibliography and the section
+links"*.
+
+**The diagnosis.**
+
+GitHub Pages serves the site at:
+
+    https://patterncatalyst.github.io/cpp-container-optimization-tutorial/
+
+The repo-name suffix is the **baseurl**, set in `_config.yml`:
+
+    baseurl: "/cpp-container-optimization-tutorial"
+    url: "https://patterncatalyst.github.io"
+
+Markdown links written as plain absolute paths bypass that baseurl:
+
+    [bibliography](/bibliography/)
+    →
+    https://patterncatalyst.github.io/bibliography/   ← 404 (no baseurl)
+
+The site's HTML layouts already handle this via Liquid's
+`relative_url` filter:
+
+    <a href="{{ '/bibliography/' | relative_url }}">
+    →
+    https://patterncatalyst.github.io/cpp-container-optimization-tutorial/bibliography/
+
+But the markdown bodies in `_examples/` and the HTML body of
+`bibliography.html` (both written in r137) used the bare absolute-
+path form, so every newly-introduced cross-reference at the bottom
+of each demo and inside the cross-reference matrix landed on a 404.
+
+This is **G-63** in the gotcha catalog: *Absolute /path/ links in
+markdown bypass Jekyll's baseurl; project-page deployments on GitHub
+Pages must use `{{ '/path/' | relative_url }}` for every internal
+link.*
+
+**The fix — three categories.**
+
+**Category 1: `_examples/*.md` (generator-level transform).**
+
+`scripts/regen-examples-collection.sh` now sed-transforms each
+README's body when writing into `_examples/`:
+
+    s#\]\(/([^)]+)\)#](\{{ '/\1' | relative_url }})#g
+
+(Uses `#` as the sed separator to avoid conflict with the Liquid
+`|` pipe in the replacement.)
+
+After running the regen script, every absolute-path link in every
+`_examples/demo-NN-*.md` becomes a `relative_url` filter call.
+Before/after on one line from demo-06:
+
+    Before: Tutorial section: [§7 Memory Management](/docs/07-memory-management/)
+    After:  Tutorial section: [§7 Memory Management]({{ '/docs/07-memory-management/' | relative_url }})
+
+The READMEs themselves keep their clean absolute-path form. Reading
+`cd examples/demo-NN/ && cat README.md` shows clean text; the
+absolute paths in those READMEs were never going to work on the
+rendered site anyway (the README is excluded from the Jekyll build),
+and the link target descriptions are clear to a terminal reader.
+
+**Category 2: `bibliography.html` (direct HTML transform).**
+
+The page's 45 `<a href="/path/">` patterns transformed via Python:
+
+    href="/docs/07-memory-management/"
+    →
+    href="{{ '/docs/07-memory-management/' | relative_url }}"
+
+Covers:
+
+  - 22 `<strong>§N</strong>` book-annotation links (added r137)
+  - 14 cross-reference matrix `<td>` cells for tutorial sections
+  - 8 cross-reference matrix `<td>` cells for statelessness reference docs
+  - 1 cross-reference matrix `<td>` cell for Demo 06
+
+Skip rule: any `href="/..."` already containing `{{` Liquid syntax
+left untouched (defensive against double-wrapping).
+
+**Category 3: `_docs/15-where-to-go-next.md`.**
+
+The r136 closing paragraph linking to the bibliography page
+already had the right syntax (`{{ '/bibliography/' | relative_url }}`) —
+verified during the sweep, no change needed.
+
+**Defensive sweep across the rest of the site.**
+
+After the three fixes above, ran a full sweep:
+
+    grep -rln '\](/[a-z]\|href="/[a-z]' \
+      _examples/ _docs/ _reference/ \
+      bibliography.html examples.html diagrams.html index.html \
+      examples/*/README.md
+
+Result: only the 7 source READMEs in `examples/demo-NN-*/` remain
+with bare absolute paths. Those are not served by Jekyll (they're
+in the `exclude:` list in `_config.yml`); they exist only as
+inputs to the regen script and as terminal-reader documentation.
+
+**The READMEs vs the served pages.**
+
+Decision: keep the READMEs with clean absolute paths (e.g.
+`[bibliography](/bibliography/)`). The generator transforms them
+on the way into `_examples/`. Rationale:
+
+  - The READMEs are primarily for terminal-reader use (`cd examples/
+    demo-NN && cat README.md`); cleaner source text beats working
+    links there
+  - Reading on GitHub (github.com/.../blob/main/README.md) would
+    show the URLs as text either way — even working URLs would
+    need the full https:// form, which hardcodes the publication
+    URL into the README
+  - The served Jekyll pages — where users actually click — get
+    proper `relative_url` filtering via the generator
+
+The trade-off: README link targets shown as `[bibliography](/bibliography/)`
+on GitHub describe the destination clearly even when not clickable.
+A reader who wants to follow the link types the URL or navigates
+from the published site.
+
+**Verification.**
+
+  - `scripts/check-liquid.py`: clean (no escape hazards introduced)
+  - Regen script ran: 7 demos regenerated, all 7 with relative_url
+    filter calls visible in the output
+  - Manual inspection of `_examples/demo-04-observability.md`'s
+    Linked tutorial sections at the bottom: all three bullets use
+    `{{ '/docs/NN-name/' | relative_url }}`
+  - Manual inspection of `bibliography.html`'s matrix table:
+    every linked cell uses the filter
+  - Manual inspection of `bibliography.html`'s book-annotation
+    `<strong>§N</strong>` wrappers: all linked with the filter
+
+After this round pushes, the GitHub Actions Pages build should
+emit working URLs for every demo's bottom-of-page links and every
+cell in the bibliography's cross-reference matrix.
+
+**Files changed.**
+
+  scripts/regen-examples-collection.sh    sed transform added
+  7 _examples/*.md                         regenerated with filter calls
+  bibliography.html                        45 href values fixed
+  _plans/reconciliation-plan.md            this entry
+
 ---
 
 ## Known divergences from the PRD

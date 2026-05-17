@@ -13,8 +13,8 @@ github_path: examples/demo-03-io-uring-grpc
 
 
 Tutorial sections:
-[§8 I/O Latency](/docs/08-io-latency/) +
-[§9 Networking & Kernel Parameters](/docs/09-networking-kernel/)
+[§8 I/O Latency]({{ '/docs/08-io-latency/' | relative_url }}) +
+[§9 Networking & Kernel Parameters]({{ '/docs/09-networking-kernel/' | relative_url }})
 
 Three servers in one binary, all wired into the LGTM observability
 stack. Two of the three speak the same protocol — raw TCP echo —
@@ -264,7 +264,7 @@ resolution.
 ## Source materials
 
 This demo deepens material from the project's
-[**bibliography**](/bibliography/):
+[**bibliography**]({{ '/bibliography/' | relative_url }}):
 
 - **Enberg, *Latency*, ch. 5-6** — the syscall-cost model that
   motivates io_uring; the case for batched submissions
@@ -278,22 +278,22 @@ This demo deepens material from the project's
 
 ## Linked tutorial sections
 
-- [**§8 I/O Latency**](/docs/08-io-latency/) — this demo is §8's
+- [**§8 I/O Latency**]({{ '/docs/08-io-latency/' | relative_url }}) — this demo is §8's
   worked example. The §8 prose develops the syscall-cost model
   and the io_uring submission/completion machinery; this demo
   measures both.
-- [**§9 Networking & Kernel Parameters**](/docs/09-networking-kernel/)
+- [**§9 Networking & Kernel Parameters**]({{ '/docs/09-networking-kernel/' | relative_url }})
   — `SO_REUSEPORT`, the rootless vs host-networking trade-off,
   and the seccomp/SELinux story around io_uring. §9 covers each;
   this demo exercises all of them.
-- [**§10 Observability & Profiling**](/docs/10-observability-profiling/)
+- [**§10 Observability & Profiling**]({{ '/docs/10-observability-profiling/' | relative_url }})
   — traces and metrics emitted exactly like demo-04. The gRPC
   panel in the Grafana dashboard is from this demo's
   instrumentation.
-- [**§13 Reproducibility & ABI**](/docs/13-reproducibility-abi/) —
+- [**§13 Reproducibility & ABI**]({{ '/docs/13-reproducibility-abi/' | relative_url }}) —
   the lockfile-inheritance pattern this demo uses (`cp` from
   demo-04, then `--lockfile-partial`) is a §13 worked example of
   how lockfiles compose across related builds.
-- [**§14 Pitfalls**](/docs/14-pitfalls/) — the abstraction-cost
+- [**§14 Pitfalls**]({{ '/docs/14-pitfalls/' | relative_url }}) — the abstraction-cost
   angle: Asio's executor model is friendlier and costs more.
   §14 generalizes the pattern.

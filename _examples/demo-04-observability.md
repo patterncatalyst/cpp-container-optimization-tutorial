@@ -12,7 +12,7 @@ github_path: examples/demo-04-observability
 > The full source for this demo lives in [`examples/demo-04-observability/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-04-observability) — clone the repo, `cd` in, and `./demo.sh`.
 
 
-Tutorial section: [§10 Observability & Profiling](/docs/10-observability-profiling/)
+Tutorial section: [§10 Observability & Profiling]({{ '/docs/10-observability-profiling/' | relative_url }})
 
 A small C++ HTTP service instrumented with OpenTelemetry (logs, metrics,
 traces) running alongside the `grafana/otel-lgtm` all-in-one
@@ -143,7 +143,7 @@ stack is reusable from elsewhere if you want it.
 ## Source materials
 
 This demo deepens material from the project's
-[**bibliography**](/bibliography/):
+[**bibliography**]({{ '/bibliography/' | relative_url }}):
 
 - **Andrist & Sehr, *C++ High Performance* 2e, ch. 12** — runtime
   instrumentation and the cost models around it
@@ -155,15 +155,15 @@ This demo deepens material from the project's
 
 ## Linked tutorial sections
 
-- [**§10 Observability & Profiling**](/docs/10-observability-profiling/)
+- [**§10 Observability & Profiling**]({{ '/docs/10-observability-profiling/' | relative_url }})
   — this demo is §10's worked example. The §10 prose covers OTel,
   the LGTM stack, perf, eBPF; this demo gets you to a running
   dashboard with all of them wired up.
-- [**§11 Noisy Neighbors**](/docs/11-noisy-neighbors/) — the
+- [**§11 Noisy Neighbors**]({{ '/docs/11-noisy-neighbors/' | relative_url }}) — the
   bpftrace sched-switch probes here complement demo-05's CPU
   isolation work. Sched-switch spikes from a noisy neighbor show up
   as p99 spikes in this demo's Grafana panel.
-- [**§7 Memory Management**](/docs/07-memory-management/) — demo-06
+- [**§7 Memory Management**]({{ '/docs/07-memory-management/' | relative_url }}) — demo-06
   uses the same observability stack to compare PMR / std / mimalloc
   under sustained load. If you want allocator-specific telemetry,
   that's where to go after this.

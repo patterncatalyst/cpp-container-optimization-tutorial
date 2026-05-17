@@ -13,8 +13,8 @@ github_path: examples/demo-07-quality-pipeline
 
 
 Tutorial sections:
-[§12 Static Analysis & Debugging in Containers](/docs/12-analysis-debugging/) +
-[§13 Reproducibility & ABI](/docs/13-reproducibility-abi/)
+[§12 Static Analysis & Debugging in Containers]({{ '/docs/12-analysis-debugging/' | relative_url }}) +
+[§13 Reproducibility & ABI]({{ '/docs/13-reproducibility-abi/' | relative_url }})
 
 A complete pre-merge quality pipeline for a small C++ library and
 its service, all running inside containers. Static analysis, unit
@@ -208,7 +208,7 @@ miniature.
 ## Source materials
 
 This demo deepens material from the project's
-[**bibliography**](/bibliography/):
+[**bibliography**]({{ '/bibliography/' | relative_url }}):
 
 - **Iglberger, *C++ Software Design*, ch. 3-5** — the design
   principles that static analysis can detect violations of;
@@ -222,19 +222,19 @@ This demo deepens material from the project's
 
 ## Linked tutorial sections
 
-- [**§12 Static Analysis & Debugging in Containers**](/docs/12-analysis-debugging/)
+- [**§12 Static Analysis & Debugging in Containers**]({{ '/docs/12-analysis-debugging/' | relative_url }})
   — every tool above is one of the analysis-and-debugging
   responses §12 walks through (static analysis = build-time
   prevention, sanitizers = CI-time prevention, debugger + core
   dumps = incident-time diagnosis).
-- [**§13 Reproducibility & ABI**](/docs/13-reproducibility-abi/)
+- [**§13 Reproducibility & ABI**]({{ '/docs/13-reproducibility-abi/' | relative_url }})
   — the Conan lockfile, CMakePresets, and `abidiff` invocation
   here are the minimum-viable version of the §13 "Reproducibility
   & ABI" toolkit. The §13 prose covers Konflux + Cachi2 for full
   hermetic CI, gcov/lcov + clang source-based coverage, and the
   abidiff CI integration — those further integrations are
   documented in §13 but not exercised in this demo's scripts.
-- [**§14 Pitfalls**](/docs/14-pitfalls/) — the abstraction-cost
+- [**§14 Pitfalls**]({{ '/docs/14-pitfalls/' | relative_url }}) — the abstraction-cost
   microbenchmark unit-test in this demo's library is §14's
   worked example: the Channel interface vs the templated CRTP
   form, with measured numbers showing the cost.

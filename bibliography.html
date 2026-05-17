@@ -58,12 +58,12 @@ at. The two work in either order — they answer adjacent questions.
 <h3>What this tutorial points at it for</h3>
 
 <ul>
-<li><a href="/docs/05-compile-time-wins/"><strong>§5</strong></a> (Compile-time wins) — the LTO/PGO mechanics</li>
-<li><a href="/docs/06-stl-layout/"><strong>§6</strong></a> (STL &amp; layout) — cache-conscious container choice</li>
-<li><a href="/docs/07-memory-management/"><strong>§7</strong></a> (Memory management) — PMR design rationale, custom allocators, the whole chapter 7</li>
-<li><a href="/docs/08-io-latency/"><strong>§8</strong></a> (I/O latency) — async patterns, coroutines that we didn't cover</li>
-<li><a href="/docs/11-noisy-neighbors/"><strong>§11</strong></a> (Noisy neighbors) — the parallel STL and thread-pool material</li>
-<li><a href="/docs/14-pitfalls/"><strong>§14</strong></a> (Pitfalls) — the over-abstraction and silent-overhead patterns</li>
+<li><a href="{{ '/docs/05-compile-time-wins/' | relative_url }}"><strong>§5</strong></a> (Compile-time wins) — the LTO/PGO mechanics</li>
+<li><a href="{{ '/docs/06-stl-layout/' | relative_url }}"><strong>§6</strong></a> (STL &amp; layout) — cache-conscious container choice</li>
+<li><a href="{{ '/docs/07-memory-management/' | relative_url }}"><strong>§7</strong></a> (Memory management) — PMR design rationale, custom allocators, the whole chapter 7</li>
+<li><a href="{{ '/docs/08-io-latency/' | relative_url }}"><strong>§8</strong></a> (I/O latency) — async patterns, coroutines that we didn't cover</li>
+<li><a href="{{ '/docs/11-noisy-neighbors/' | relative_url }}"><strong>§11</strong></a> (Noisy neighbors) — the parallel STL and thread-pool material</li>
+<li><a href="{{ '/docs/14-pitfalls/' | relative_url }}"><strong>§14</strong></a> (Pitfalls) — the over-abstraction and silent-overhead patterns</li>
 </ul>
 
 <h2>Iglberger — <em>C++ Software Design</em></h2>
@@ -100,11 +100,11 @@ into ABI corners.
 <h3>What this tutorial points at it for</h3>
 
 <ul>
-<li><a href="/docs/02-introduction/"><strong>§2</strong></a> (Introduction) — the four-layer mental model loosely tracks Iglberger's separation-of-concerns argument</li>
-<li><a href="/docs/06-stl-layout/"><strong>§6</strong></a> (STL &amp; layout) — value-based polymorphism vs virtual dispatch trade-offs</li>
-<li><a href="/docs/12-analysis-debugging/"><strong>§12</strong></a> (Static analysis &amp; debugging) — what a clean type design enables for the analyzers</li>
-<li><a href="/docs/13-reproducibility-abi/"><strong>§13</strong></a> (Reproducibility &amp; ABI) — ABI stability follows from Iglberger's loose-coupling argument</li>
-<li><a href="/docs/14-pitfalls/"><strong>§14</strong></a> (Pitfalls) — over-abstraction is the dual problem to under-abstraction</li>
+<li><a href="{{ '/docs/02-introduction/' | relative_url }}"><strong>§2</strong></a> (Introduction) — the four-layer mental model loosely tracks Iglberger's separation-of-concerns argument</li>
+<li><a href="{{ '/docs/06-stl-layout/' | relative_url }}"><strong>§6</strong></a> (STL &amp; layout) — value-based polymorphism vs virtual dispatch trade-offs</li>
+<li><a href="{{ '/docs/12-analysis-debugging/' | relative_url }}"><strong>§12</strong></a> (Static analysis &amp; debugging) — what a clean type design enables for the analyzers</li>
+<li><a href="{{ '/docs/13-reproducibility-abi/' | relative_url }}"><strong>§13</strong></a> (Reproducibility &amp; ABI) — ABI stability follows from Iglberger's loose-coupling argument</li>
+<li><a href="{{ '/docs/14-pitfalls/' | relative_url }}"><strong>§14</strong></a> (Pitfalls) — over-abstraction is the dual problem to under-abstraction</li>
 <li>The <a href="{{ '/reference/statelessness/' | relative_url }}">Statelessness reference</a> section draws on Iglberger throughout — especially Doc 02 (RAII), Doc 03 (PMR), and Doc 06 (12-factor) where lifetime ownership intersects design pattern</li>
 </ul>
 
@@ -143,12 +143,12 @@ section that talks about scheduling, I/O, or kernel-side behavior.
 <h3>What this tutorial points at it for</h3>
 
 <ul>
-<li><a href="/docs/07-memory-management/"><strong>§7</strong></a> (Memory management) — the allocator-tax thesis, chapter 3 is the canonical reference</li>
-<li><a href="/docs/08-io-latency/"><strong>§8</strong></a> (I/O latency) — <code>io_uring</code> motivation, the syscall-cost model</li>
-<li><a href="/docs/09-networking-kernel/"><strong>§9</strong></a> (Networking &amp; kernel) — kernel-bypass alternatives and their trade-offs</li>
-<li><a href="/docs/10-observability-profiling/"><strong>§10</strong></a> (Observability) — where to look in the kernel for latency that doesn't show up in application telemetry</li>
-<li><a href="/docs/11-noisy-neighbors/"><strong>§11</strong></a> (Noisy neighbors) — CPU scheduling and the priority-inheritance discussion</li>
-<li><a href="/docs/14-pitfalls/"><strong>§14</strong></a> (Pitfalls) — the patterns of why low-level performance work goes wrong</li>
+<li><a href="{{ '/docs/07-memory-management/' | relative_url }}"><strong>§7</strong></a> (Memory management) — the allocator-tax thesis, chapter 3 is the canonical reference</li>
+<li><a href="{{ '/docs/08-io-latency/' | relative_url }}"><strong>§8</strong></a> (I/O latency) — <code>io_uring</code> motivation, the syscall-cost model</li>
+<li><a href="{{ '/docs/09-networking-kernel/' | relative_url }}"><strong>§9</strong></a> (Networking &amp; kernel) — kernel-bypass alternatives and their trade-offs</li>
+<li><a href="{{ '/docs/10-observability-profiling/' | relative_url }}"><strong>§10</strong></a> (Observability) — where to look in the kernel for latency that doesn't show up in application telemetry</li>
+<li><a href="{{ '/docs/11-noisy-neighbors/' | relative_url }}"><strong>§11</strong></a> (Noisy neighbors) — CPU scheduling and the priority-inheritance discussion</li>
+<li><a href="{{ '/docs/14-pitfalls/' | relative_url }}"><strong>§14</strong></a> (Pitfalls) — the patterns of why low-level performance work goes wrong</li>
 </ul>
 
 <h2>Ghosh — <em>Building Low Latency Applications with C++</em></h2>
@@ -188,11 +188,11 @@ conversations.
 <h3>What this tutorial points at it for</h3>
 
 <ul>
-<li><a href="/docs/07-memory-management/"><strong>§7</strong></a> (Memory management) — pre-allocated pools and the &ldquo;no allocation on hot path&rdquo; discipline</li>
-<li><a href="/docs/08-io-latency/"><strong>§8</strong></a> (I/O latency) — the kernel-bypass walkthroughs and busy-spin vs futex decision</li>
-<li><a href="/docs/11-noisy-neighbors/"><strong>§11</strong></a> (Noisy neighbors) — NUMA-aware design at the architectural level</li>
-<li><a href="/docs/12-analysis-debugging/"><strong>§12</strong></a> (Static analysis &amp; debugging) — what an &ldquo;all sanitizers, all the time&rdquo; CI looks like for latency-sensitive code</li>
-<li><a href="/docs/15-where-to-go-next/"><strong>§15</strong></a> (Where to go next) — Ghosh is the &ldquo;build a complete system&rdquo; recommendation for any reader who wants to extend this tutorial's patterns into a full architecture</li>
+<li><a href="{{ '/docs/07-memory-management/' | relative_url }}"><strong>§7</strong></a> (Memory management) — pre-allocated pools and the &ldquo;no allocation on hot path&rdquo; discipline</li>
+<li><a href="{{ '/docs/08-io-latency/' | relative_url }}"><strong>§8</strong></a> (I/O latency) — the kernel-bypass walkthroughs and busy-spin vs futex decision</li>
+<li><a href="{{ '/docs/11-noisy-neighbors/' | relative_url }}"><strong>§11</strong></a> (Noisy neighbors) — NUMA-aware design at the architectural level</li>
+<li><a href="{{ '/docs/12-analysis-debugging/' | relative_url }}"><strong>§12</strong></a> (Static analysis &amp; debugging) — what an &ldquo;all sanitizers, all the time&rdquo; CI looks like for latency-sensitive code</li>
+<li><a href="{{ '/docs/15-where-to-go-next/' | relative_url }}"><strong>§15</strong></a> (Where to go next) — Ghosh is the &ldquo;build a complete system&rdquo; recommendation for any reader who wants to extend this tutorial's patterns into a full architecture</li>
 </ul>
 
 <h2>Cross-reference matrix</h2>
@@ -216,31 +216,31 @@ prose.
 </thead>
 <tbody>
 <tr><td><strong>Tutorial body</strong></td><td></td><td></td><td></td><td></td></tr>
-<tr><td><a href="/docs/02-introduction/">§2 Introduction</a></td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
-<tr><td><a href="/docs/03-raii-discipline/">§3 RAII</a></td><td>✓</td><td>✓</td><td></td><td></td></tr>
-<tr><td><a href="/docs/04-image-strategy/">§4 Image strategy</a></td><td>✓</td><td>✓</td><td></td><td></td></tr>
-<tr><td><a href="/docs/05-compile-time-wins/">§5 Compile-time wins</a></td><td>✓</td><td>✓</td><td></td><td></td></tr>
-<tr><td><a href="/docs/06-stl-layout/">§6 STL &amp; layout</a></td><td>✓</td><td>✓</td><td></td><td></td></tr>
-<tr><td><a href="/docs/07-memory-management/">§7 Memory management</a></td><td>✓</td><td></td><td>✓</td><td>✓</td></tr>
-<tr><td><a href="/docs/08-io-latency/">§8 I/O latency</a></td><td>✓</td><td></td><td>✓</td><td>✓</td></tr>
-<tr><td><a href="/docs/09-networking-kernel/">§9 Networking &amp; kernel</a></td><td></td><td></td><td>✓</td><td></td></tr>
-<tr><td><a href="/docs/10-observability-profiling/">§10 Observability</a></td><td>✓</td><td></td><td>✓</td><td></td></tr>
-<tr><td><a href="/docs/11-noisy-neighbors/">§11 Noisy neighbors</a></td><td>✓</td><td></td><td>✓</td><td>✓</td></tr>
-<tr><td><a href="/docs/12-analysis-debugging/">§12 Static analysis &amp; debugging</a></td><td></td><td>✓</td><td></td><td>✓</td></tr>
-<tr><td><a href="/docs/13-reproducibility-abi/">§13 Reproducibility &amp; ABI</a></td><td></td><td>✓</td><td></td><td></td></tr>
-<tr><td><a href="/docs/14-pitfalls/">§14 Pitfalls</a></td><td>✓</td><td>✓</td><td>✓</td><td></td></tr>
-<tr><td><a href="/docs/15-where-to-go-next/">§15 Where to go next</a></td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><a href="{{ '/docs/02-introduction/' | relative_url }}">§2 Introduction</a></td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><a href="{{ '/docs/03-raii-discipline/' | relative_url }}">§3 RAII</a></td><td>✓</td><td>✓</td><td></td><td></td></tr>
+<tr><td><a href="{{ '/docs/04-image-strategy/' | relative_url }}">§4 Image strategy</a></td><td>✓</td><td>✓</td><td></td><td></td></tr>
+<tr><td><a href="{{ '/docs/05-compile-time-wins/' | relative_url }}">§5 Compile-time wins</a></td><td>✓</td><td>✓</td><td></td><td></td></tr>
+<tr><td><a href="{{ '/docs/06-stl-layout/' | relative_url }}">§6 STL &amp; layout</a></td><td>✓</td><td>✓</td><td></td><td></td></tr>
+<tr><td><a href="{{ '/docs/07-memory-management/' | relative_url }}">§7 Memory management</a></td><td>✓</td><td></td><td>✓</td><td>✓</td></tr>
+<tr><td><a href="{{ '/docs/08-io-latency/' | relative_url }}">§8 I/O latency</a></td><td>✓</td><td></td><td>✓</td><td>✓</td></tr>
+<tr><td><a href="{{ '/docs/09-networking-kernel/' | relative_url }}">§9 Networking &amp; kernel</a></td><td></td><td></td><td>✓</td><td></td></tr>
+<tr><td><a href="{{ '/docs/10-observability-profiling/' | relative_url }}">§10 Observability</a></td><td>✓</td><td></td><td>✓</td><td></td></tr>
+<tr><td><a href="{{ '/docs/11-noisy-neighbors/' | relative_url }}">§11 Noisy neighbors</a></td><td>✓</td><td></td><td>✓</td><td>✓</td></tr>
+<tr><td><a href="{{ '/docs/12-analysis-debugging/' | relative_url }}">§12 Static analysis &amp; debugging</a></td><td></td><td>✓</td><td></td><td>✓</td></tr>
+<tr><td><a href="{{ '/docs/13-reproducibility-abi/' | relative_url }}">§13 Reproducibility &amp; ABI</a></td><td></td><td>✓</td><td></td><td></td></tr>
+<tr><td><a href="{{ '/docs/14-pitfalls/' | relative_url }}">§14 Pitfalls</a></td><td>✓</td><td>✓</td><td>✓</td><td></td></tr>
+<tr><td><a href="{{ '/docs/15-where-to-go-next/' | relative_url }}">§15 Where to go next</a></td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
 <tr><td><strong>Statelessness reference</strong></td><td></td><td></td><td></td><td></td></tr>
-<tr><td><a href="/reference/statelessness/00-index/">00 Index</a></td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
-<tr><td><a href="/reference/statelessness/01-deployment-posture/">01 Deployment posture</a></td><td></td><td>✓</td><td>✓</td><td></td></tr>
-<tr><td><a href="/reference/statelessness/02-raii/">02 RAII</a></td><td></td><td>✓</td><td>✓</td><td></td></tr>
-<tr><td><a href="/reference/statelessness/03-pmr/">03 PMR</a></td><td></td><td>✓</td><td>✓</td><td></td></tr>
-<tr><td><a href="/reference/statelessness/04-process-scoped-state/">04 Process-scoped state</a></td><td></td><td>✓</td><td>✓</td><td></td></tr>
-<tr><td><a href="/reference/statelessness/05-threading/">05 Threading</a></td><td></td><td>✓</td><td>✓</td><td></td></tr>
-<tr><td><a href="/reference/statelessness/06-twelve-factor/">06 Twelve-factor</a></td><td></td><td>✓</td><td></td><td></td></tr>
-<tr><td><a href="/reference/statelessness/07-state-externalization/">07 State externalization</a></td><td></td><td></td><td>✓</td><td></td></tr>
+<tr><td><a href="{{ '/reference/statelessness/00-index/' | relative_url }}">00 Index</a></td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><a href="{{ '/reference/statelessness/01-deployment-posture/' | relative_url }}">01 Deployment posture</a></td><td></td><td>✓</td><td>✓</td><td></td></tr>
+<tr><td><a href="{{ '/reference/statelessness/02-raii/' | relative_url }}">02 RAII</a></td><td></td><td>✓</td><td>✓</td><td></td></tr>
+<tr><td><a href="{{ '/reference/statelessness/03-pmr/' | relative_url }}">03 PMR</a></td><td></td><td>✓</td><td>✓</td><td></td></tr>
+<tr><td><a href="{{ '/reference/statelessness/04-process-scoped-state/' | relative_url }}">04 Process-scoped state</a></td><td></td><td>✓</td><td>✓</td><td></td></tr>
+<tr><td><a href="{{ '/reference/statelessness/05-threading/' | relative_url }}">05 Threading</a></td><td></td><td>✓</td><td>✓</td><td></td></tr>
+<tr><td><a href="{{ '/reference/statelessness/06-twelve-factor/' | relative_url }}">06 Twelve-factor</a></td><td></td><td>✓</td><td></td><td></td></tr>
+<tr><td><a href="{{ '/reference/statelessness/07-state-externalization/' | relative_url }}">07 State externalization</a></td><td></td><td></td><td>✓</td><td></td></tr>
 <tr><td><strong>Demos</strong></td><td></td><td></td><td></td><td></td></tr>
-<tr><td><a href="/examples/demo-06-memory-and-allocators/">Demo 06 (memory &amp; allocators)</a></td><td>✓</td><td>✓</td><td>✓</td><td></td></tr>
+<tr><td><a href="{{ '/examples/demo-06-memory-and-allocators/' | relative_url }}">Demo 06 (memory &amp; allocators)</a></td><td>✓</td><td>✓</td><td>✓</td><td></td></tr>
 </tbody>
 </table>
 

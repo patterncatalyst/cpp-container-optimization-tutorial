@@ -12,7 +12,7 @@ github_path: examples/demo-02-stl-layout
 > The full source for this demo lives in [`examples/demo-02-stl-layout/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-02-stl-layout) — clone the repo, `cd` in, and `./demo.sh`.
 
 
-Tutorial section: [§6 STL, Layout, and C++20/23 Containers](/docs/06-stl-layout/)
+Tutorial section: [§6 STL, Layout, and C++20/23 Containers]({{ '/docs/06-stl-layout/' | relative_url }})
 
 Compares four key-value container designs on two operations, run
 once unconstrained and once under a cgroup memory cap. The takeaway:
@@ -160,7 +160,7 @@ the Containerfile), Google Benchmark adds aggregate entries with
 ## Source materials
 
 This demo deepens material from the project's
-[**bibliography**](/bibliography/):
+[**bibliography**]({{ '/bibliography/' | relative_url }}):
 
 - **Andrist & Sehr, *C++ High Performance* 2e, ch. 6** — CPU and
   memory architecture; the cache-locality argument in detail
@@ -172,18 +172,18 @@ This demo deepens material from the project's
 
 ## Linked tutorial sections
 
-- [**§3 RAII & Container Resource Discipline**](/docs/03-raii-discipline/)
+- [**§3 RAII & Container Resource Discipline**]({{ '/docs/03-raii-discipline/' | relative_url }})
   — the per-element allocation count for node-based containers is
   a real cost paid at insert time and unwound at destruction time.
   Owning a million `std::map` entries means a million destructor
   calls.
-- [**§6 STL, Layout, and C++20/23 Containers**](/docs/06-stl-layout/)
+- [**§6 STL, Layout, and C++20/23 Containers**]({{ '/docs/06-stl-layout/' | relative_url }})
   — this demo. Cache locality > algorithmic complexity at the
   scales where most applications operate.
-- [**§7 Memory Management**](/docs/07-memory-management/) —
+- [**§7 Memory Management**]({{ '/docs/07-memory-management/' | relative_url }}) —
   allocator choice matters; even a custom allocator can't beat
   layout. Use both.
-- [**§11 Noisy Neighbor Isolation**](/docs/11-noisy-neighbors/) —
+- [**§11 Noisy Neighbor Isolation**]({{ '/docs/11-noisy-neighbors/' | relative_url }}) —
   cgroup memory pressure isn't theoretical on a shared host — your
   noisy neighbor's working set is what causes the kernel to evict
   your pages.
