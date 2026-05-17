@@ -20189,6 +20189,77 @@ To keep diagrams consistent across both batches, the helper script
 the shared SVG header + defs and the placeholder template. The
 r133.2 batch will use the same library.
 
+### 2026-05-17 — r133.1.1: hotfix — `/reference/statelessness/` 404 (landing page restored)
+
+**The bug.**
+
+User applied r133.1 and reported "couldn't review — the
+Statelessness reference set card returns a 404." Investigation
+confirmed: the homepage card links to `/reference/statelessness/`,
+but nothing serves that URL anymore.
+
+**Root cause.**
+
+r130 deleted `reference/statelessness.html` (a 143-line top-level
+Jekyll page with `permalink: /reference/statelessness/`) on the
+assumption that the new `_reference/statelessness/` collection was
+its successor. That was wrong — the collection produces 12
+INDIVIDUAL document URLs (`/reference/statelessness/00-index/`,
+`.../01-deployment-posture/`, etc.) via the `permalink:
+/reference/:path/` rule in `_config.yml`. It does NOT produce a
+LANDING page at `/reference/statelessness/`. The collection has
+docs; it has no "front cover".
+
+Result after r130: the homepage card → 404. The bug rode through
+r131 and r132 (no one clicked the card before r133.1).
+
+**Why not just set permalink on 00-index.md?**
+
+Tempting: add `permalink: /reference/statelessness/` to the
+00-index frontmatter and have it serve both the URL and the
+content. Doesn't work because it breaks the relative cross-links
+inside 00-index. The 00-index uses `[Doc 01](../01-deployment-posture/)`
+style links. With permalink `/reference/statelessness/00-index/`,
+`..` resolves to `/reference/statelessness/`, and the link
+correctly targets `/reference/statelessness/01-deployment-posture/`.
+With permalink `/reference/statelessness/`, `..` resolves to
+`/reference/`, and the link points to `/reference/01-deployment-posture/`
+(404). That would create 11 new broken links to fix the one.
+
+**The fix.**
+
+Create a separate top-level Jekyll page at
+`reference/statelessness.html` (modeled after `examples.html` for
+`/examples/`):
+
+- `permalink: /reference/statelessness/`
+- Hero block with the same introductory copy that used to live in
+  the legacy page
+- "Start with the index → Doc 00" CTA + "Skip to Doc 01" secondary
+- Card grid iterating `site.reference` filtered to
+  `statelessness/` paths with `order < 50` (excludes
+  `research-notes.md` whose order=99)
+- A short "where this fits in the tutorial" closer that
+  cross-links to `_docs/03`, `_docs/07`, `_docs/11` for the
+  overlapping material
+
+The collection docs keep their existing URLs. 00-index continues
+to serve at `/reference/statelessness/00-index/`. Relative
+cross-links continue to resolve correctly.
+
+**Files changed:**
+
+- 1 new file: `reference/statelessness.html` (114 lines)
+- `_plans/reconciliation-plan.md` (this entry)
+
+**Procedural lesson:**
+
+When a top-level page is deleted but a collection takes over the
+URL space underneath, the LANDING page must still exist (or be
+recreated). The collection itself doesn't auto-generate one. The
+r130 mistake was conflating "the legacy page is obsolete" with
+"the collection makes a landing page". It doesn't.
+
 ---
 
 ## Known divergences from the PRD

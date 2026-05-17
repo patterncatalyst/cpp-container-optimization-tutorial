@@ -1,0 +1,110 @@
+---
+layout: default
+title: "Statelessness reference: C++20/23 services on containers"
+description: "Companion reference set on C++20/23 service design for Linux containers — deployment posture, RAII, PMR, threading, 12-factor, gRPC capstone, build tooling appendix. Statelessness as the through-line."
+permalink: /reference/statelessness/
+---
+
+<section class="hero hero--compact">
+    <div class="container">
+        <span class="hero__eyebrow">Reference · Statelessness</span>
+        <h1>C++20/23 services on containers.</h1>
+        <p class="hero__lead">
+            A companion reference set on C++20/23 service design for
+            Linux containers, focused on
+            <em>statelessness as a deployment property</em> — what
+            makes a service safe to kill, replace, and replicate
+            at the orchestrator's discretion, and how the C++
+            language features, library choices, and operational
+            patterns either support that property or quietly
+            undermine it.
+        </p>
+        <p class="hero__lead">
+            The treatment is opinionated and reference-style. Where
+            positions are taken they are marked as
+            <code>&gt; <strong>Opinion.</strong></code> callouts; where
+            multiple acceptable approaches exist, both are described
+            with their trade-offs.
+        </p>
+        <div class="hero__cta">
+            <a class="btn btn--primary"
+               href="{{ '/reference/statelessness/00-index/' | relative_url }}">
+                Start with the index →
+            </a>
+            <a class="btn btn--secondary"
+               href="{{ '/reference/statelessness/01-deployment-posture/' | relative_url }}">
+                Skip to Doc 01
+            </a>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <h2 class="section-heading">The set</h2>
+        <p class="section-sub">
+            Read in order the first time. Each doc builds on the prior.
+            For a reader with limited time, the irreducible minimum is
+            <a href="{{ '/reference/statelessness/01-deployment-posture/' | relative_url }}">Doc 01</a>
+            (vocabulary),
+            <a href="{{ '/reference/statelessness/04-process-scoped-state/' | relative_url }}">Doc 04</a>
+            (process-scoped state and the State Architecture Table), and
+            <a href="{{ '/reference/statelessness/10-grpc-microservices/' | relative_url }}">Doc 10</a>
+            (the gRPC capstone integration) — these three together cover
+            the architectural shape without the depth on individual
+            mechanisms.
+        </p>
+
+        <div class="cards">
+            {%- assign statelessness_docs = site.reference
+                  | where_exp: "doc", "doc.path contains 'statelessness/'"
+                  | where_exp: "doc", "doc.order != nil"
+                  | where_exp: "doc", "doc.order < 50"
+                  | sort: "order" -%}
+            {%- for doc in statelessness_docs -%}
+                {%- assign two_digit = doc.order | prepend: '0' | slice: -2, 2 -%}
+                {%- if doc.order == 0 -%}
+                    {%- assign card_eyebrow = "Index" -%}
+                {%- elsif doc.order == 10 -%}
+                    {%- assign card_eyebrow = "Capstone" -%}
+                {%- elsif doc.order == 11 -%}
+                    {%- assign card_eyebrow = "Appendix" -%}
+                {%- else -%}
+                    {%- assign card_eyebrow = "Doc " | append: two_digit -%}
+                {%- endif -%}
+                <a class="card" href="{{ doc.url | relative_url }}">
+                    <div class="card__eyebrow">{{ card_eyebrow }}</div>
+                    <h3 class="card__title">
+                        <span class="card__num">{{ two_digit }}</span>
+                        {{ doc.title }}
+                    </h3>
+                    <p class="card__desc">{{ doc.description }}</p>
+                </a>
+            {%- endfor -%}
+        </div>
+    </div>
+</section>
+
+<section class="section-tight">
+    <div class="container">
+        <h2 class="section-heading">Where this fits in the tutorial</h2>
+        <p>
+            The main tutorial sections — <code>_docs/01</code> through
+            <code>_docs/16</code> — cover modern-C++ performance work
+            inside containers: image strategy, compile-time wins,
+            STL/layout, allocators, I/O, observability, isolation,
+            quality. This reference set goes wider on a single
+            architectural concern that touches all of those: what makes
+            a C++ service safe to deploy as a replaceable replica.
+        </p>
+        <p>
+            Cross-references go both directions. The main tutorial's
+            <a href="{{ '/docs/03-raii-discipline/' | relative_url }}">§3 (RAII discipline)</a>,
+            <a href="{{ '/docs/07-memory-management/' | relative_url }}">§7 (memory management)</a>, and
+            <a href="{{ '/docs/11-noisy-neighbors/' | relative_url }}">§11 (noisy neighbors)</a>
+            all overlap with material here; this set develops the
+            ideas at the service-design level rather than the
+            performance-knob level.
+        </p>
+    </div>
+</section>
