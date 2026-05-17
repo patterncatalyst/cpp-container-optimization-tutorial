@@ -16414,9 +16414,183 @@ Status after r114:
 | E. Diagrams (15) | ✓ complete |
 | F. PPTX | last |
 
+### 2026-05-17 — r115: Round A verification — G-44 captured
+
+User ran Round A's demo.sh on their Fedora 44 host and hit a
+host-side conan failure that prevented all 5 invocations
+(`--analyze-only`, `--test-only`, `--asan-only`, `--abi-only`,
+full) from proceeding past the lockfile-regeneration step:
+
+```
+[warn]  conan.lock contains placeholder revisions; regenerating
+Using lockfile: '.../demo-07-quality-pipeline/conan.lock'
+ERROR: Invalid setting '16' is not a valid 'settings.compiler.version' value.
+Possible values are ['4.1', '4.4', ..., '15', '15.1', '15.2']
+```
+
+**Root cause**: the user's host has system gcc 16 (Fedora 44
+ships it). The demo.sh's lockfile-regen path did:
+
+```bash
+conan profile detect --force >/dev/null 2>&1 || true
+conan lock create . --lockfile-out=conan.lock -s build_type=RelWithDebInfo
+```
+
+`conan profile detect` auto-detected gcc 16 and wrote
+`compiler.version=16` to the default profile. But conan 2.x's
+`settings.yml` only knows about compiler versions up to 15.2.
+Subsequent `conan lock create` failed validation.
+
+This is a real gotcha worth capturing — **the demo's lockfile-
+regen approach was tied to whatever compiler version the host
+happened to have, with no fallback when conan's settings.yml
+was behind the host distribution's gcc**.
+
+**G-44 captured (in this entry; full text follows below):**
+*Don't rely on `conan profile detect` for host-side lockfile
+regeneration. Use explicit `-s compiler.version=X` settings that
+match what the build container will use, regardless of what
+gcc happens to be on the host.*
+
+**Fix in demo.sh (G-44 mitigation):**
+
+```bash
+if grep -q '%1700000000.0' conan.lock 2>/dev/null; then
+  log_warn "conan.lock contains placeholder revisions; regenerating"
+  if command -v conan >/dev/null 2>&1; then
+    if ! conan lock create . \
+        --lockfile-out=conan.lock \
+        -s build_type=RelWithDebInfo \
+        -s compiler=gcc \
+        -s compiler.version=14 \
+        -s compiler.libcxx=libstdc++11 \
+        -s compiler.cppstd=23 \
+        -s arch=x86_64 \
+        -s os=Linux 2>&1; then
+      log_warn "host-side lockfile regen failed; removing placeholder lockfile"
+      log_warn "the build container will resolve dependencies fresh on first run"
+      rm -f conan.lock
+    fi
+  else
+    log_warn "conan not on host; removing placeholder lockfile"
+    log_warn "the build container will resolve dependencies fresh on first run"
+    rm -f conan.lock
+  fi
+fi
+```
+
+Two changes:
+1. **Explicit settings** instead of `conan profile detect`. We pin
+   gcc 14 (matches Containerfile's `gcc-toolset-14`), libstdc++11
+   ABI, C++23, x86_64 Linux. These are metadata-only for `lock
+   create`; conan doesn't actually invoke gcc.
+2. **Delete-on-failure**: if explicit-settings regen STILL fails
+   (no network, no conancenter access, conan version too old to
+   accept C++23 cppstd, etc.), delete the placeholder lockfile and
+   let the in-container conan resolve fresh.
+
+**Fix in Containerfile (belt-and-suspenders for missing lockfile):**
+
+Both the `build` stage and the `asan` stage now use the demo-04
+pattern — `if [ -s conan.lock ]; then ... --lockfile=conan.lock
+... else ... --build=missing ...; fi`. A missing lockfile (from
+the host-side delete-on-failure path above) doesn't break the
+container build — conan just resolves fresh.
+
+```dockerfile
+# build stage
+RUN conan profile detect --force \
+ && if [ -s conan.lock ]; then \
+        conan install . --output-folder=build/release-debuginfo \
+            --lockfile=conan.lock --build=missing -s build_type=RelWithDebInfo ; \
+    else \
+        conan install . --output-folder=build/release-debuginfo \
+            --build=missing -s build_type=RelWithDebInfo ; \
+    fi \
+ && cmake --preset release-debuginfo \
+ && cmake --build --preset release-debuginfo -j"$(nproc)"
+```
+
+The `conan profile detect --force` inside the container is fine
+because gcc-toolset-14 is what's installed there, and that's in
+conan's settings.yml. The host-vs-container compiler-version
+mismatch was the only failure mode.
+
+**Tarball-shipping confirmation for the user**:
+
+User asked whether they need to extract r113 + r114, or just
+r114. **Answer: just r114.** Each tarball is the full repo state
+at that commit, not a diff. r114's tarball includes every
+change from r109 (first prose round) through r114 (demo-07
+Round A). The earlier tarballs were progressive checkpoints —
+once r114 is extracted, all the intermediate state is present.
+
+For future rounds, only the most recent tarball matters.
+
+---
+
+## Gotchas (running catalog)
+
+### G-44 · `conan profile detect` is host-compiler-version-fragile (r115)
+
+**Symptom.** `conan lock create` (or any `conan install`) fails
+with:
+
+```
+ERROR: Invalid setting '16' is not a valid 'settings.compiler.version' value.
+Possible values are ['4.1', ..., '15', '15.1', '15.2']
+```
+
+The conan 2.x default `settings.yml` only knows about compiler
+versions up to whatever was current when that conan version was
+released. Distributions move faster — Fedora 44 ships gcc 16;
+conan 2.x's settings.yml caps at gcc 15.2 as of mid-2026.
+
+**Cause.** `conan profile detect --force` writes the actual host
+compiler version into the default profile. If that version isn't
+in conan's `settings.yml` enumeration, every subsequent conan
+command using that profile fails validation.
+
+**Fix.** Three options, in order of pedagogical preference:
+
+1. **Explicit settings (no profile detect).** Pass `-s
+   compiler=gcc -s compiler.version=N -s compiler.libcxx=libstdc++11
+   -s compiler.cppstd=XX -s arch=x86_64 -s os=Linux` directly to
+   the conan command. The version `N` should match what the
+   *build container* uses (gcc-toolset-14 → version 14), not
+   what's on the host. Conan treats these as metadata only for
+   `lock create`; no compiler invocation happens.
+2. **Patch conan's settings.yml** to add the host compiler
+   version: `conan config install` from a local override, or
+   directly edit `~/.conan2/settings.yml` to add `'16'` to the
+   gcc version list. Brittle (the next conan upgrade reverts
+   it) and host-specific (every contributor would need to do it).
+3. **Skip host-side regeneration entirely.** Delete the
+   placeholder lockfile and let the in-container conan resolve
+   fresh. The build container has a known gcc version that
+   conan's settings.yml does recognize.
+
+The demo-07 fix in r115 combines Options 1 and 3: try Option 1
+first, fall back to Option 3 on failure.
+
+**Why this isn't the user's fault.** It's a temporal-coupling
+problem between conan's release cycle and gcc's. Other distros
+hit the same shape: Arch ships gcc N as soon as gcc N is
+released; conan 2.x's settings.yml lags. The fix has to live in
+the *tutorial*, not in expecting the user to update their conan
+or downgrade their distro.
+
+**Where else this applies.** Demo-04 and any future demo with
+a host-side conan invocation needs the same Option-1-then-3
+pattern. Audit on next pass: demo-03 (which currently uses
+demo-04's conan.lock — same pattern needs to apply to its
+lockfile regeneration if it has one).
+
 ---
 
 ## Known divergences from the PRD
+
+(historical content continues below)
 
 A running list of things the shipped tutorial does differently from
 what the PRD says. Update as you discover them; the gap between

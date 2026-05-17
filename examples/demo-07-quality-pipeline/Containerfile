@@ -31,13 +31,22 @@ COPY src/ ./src/
 COPY tests/ ./tests/
 COPY conan.lock ./conan.lock
 
-# Hermetic Conan install: reads conan.lock, fails if it can't satisfy.
+# Hermetic Conan install: reads conan.lock when present, falls back to
+# fresh resolution when not (e.g., when host-side regen failed and the
+# placeholder lockfile was removed — see G-44 in demo.sh).
 RUN conan profile detect --force \
- && conan install . \
-        --output-folder=build/release-debuginfo \
-        --lockfile=conan.lock \
-        --build=missing \
-        -s build_type=RelWithDebInfo \
+ && if [ -s conan.lock ]; then \
+        conan install . \
+            --output-folder=build/release-debuginfo \
+            --lockfile=conan.lock \
+            --build=missing \
+            -s build_type=RelWithDebInfo ; \
+    else \
+        conan install . \
+            --output-folder=build/release-debuginfo \
+            --build=missing \
+            -s build_type=RelWithDebInfo ; \
+    fi \
  && cmake --preset release-debuginfo \
  && cmake --build --preset release-debuginfo -j"$(nproc)"
 
@@ -72,14 +81,24 @@ RUN ctest --preset release-debuginfo --output-on-failure --output-junit reports/
 # captures them in reports/asan.txt for CI consumption.
 FROM build AS asan
 WORKDIR /src
-RUN conan install . \
-        --output-folder=build/asan \
-        --lockfile=conan.lock \
-        --build=missing \
-        -s build_type=Debug \
-        -c tools.build:cxxflags=[\"-fsanitize=address,undefined\",\"-fno-omit-frame-pointer\",\"-O1\",\"-g\"] \
-        -c tools.build:exelinkflags=[\"-fsanitize=address,undefined\"] \
-        -c tools.build:sharedlinkflags=[\"-fsanitize=address,undefined\"] \
+RUN if [ -s conan.lock ]; then \
+        conan install . \
+            --output-folder=build/asan \
+            --lockfile=conan.lock \
+            --build=missing \
+            -s build_type=Debug \
+            -c tools.build:cxxflags=[\"-fsanitize=address,undefined\",\"-fno-omit-frame-pointer\",\"-O1\",\"-g\"] \
+            -c tools.build:exelinkflags=[\"-fsanitize=address,undefined\"] \
+            -c tools.build:sharedlinkflags=[\"-fsanitize=address,undefined\"] ; \
+    else \
+        conan install . \
+            --output-folder=build/asan \
+            --build=missing \
+            -s build_type=Debug \
+            -c tools.build:cxxflags=[\"-fsanitize=address,undefined\",\"-fno-omit-frame-pointer\",\"-O1\",\"-g\"] \
+            -c tools.build:exelinkflags=[\"-fsanitize=address,undefined\"] \
+            -c tools.build:sharedlinkflags=[\"-fsanitize=address,undefined\"] ; \
+    fi \
  && cmake --preset asan \
  && cmake --build --preset asan -j"$(nproc)"
 ENV ASAN_OPTIONS=halt_on_error=1:detect_leaks=1:print_stacktrace=1:abort_on_error=1

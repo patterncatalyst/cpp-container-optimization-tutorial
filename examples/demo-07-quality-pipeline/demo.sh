@@ -52,13 +52,35 @@ mkdir -p reports
 # Generate a real conan lockfile if the checked-in stub still has the
 # placeholder revision. This keeps first-run friction low while still
 # pinning everything once the lockfile is regenerated.
+#
+# G-44 (r115): we explicitly DON'T use `conan profile detect --force` here
+# because it auto-picks the host compiler version, which may be newer than
+# conan 2.x's settings.yml knows about (e.g., gcc 16 on Fedora 44 isn't
+# in conan's compiler.version list as of conan 2.x). Instead, we pin
+# explicit settings that match the Containerfile's gcc-toolset-14.
+# If the explicit-settings regeneration still fails (no conan on host,
+# no network access, etc.), we delete the placeholder lockfile and let
+# the in-container conan resolve fresh.
 if grep -q '%1700000000.0' conan.lock 2>/dev/null; then
   log_warn "conan.lock contains placeholder revisions; regenerating"
   if command -v conan >/dev/null 2>&1; then
-    conan profile detect --force >/dev/null 2>&1 || true
-    conan lock create . --lockfile-out=conan.lock -s build_type=RelWithDebInfo
+    if ! conan lock create . \
+        --lockfile-out=conan.lock \
+        -s build_type=RelWithDebInfo \
+        -s compiler=gcc \
+        -s compiler.version=14 \
+        -s compiler.libcxx=libstdc++11 \
+        -s compiler.cppstd=23 \
+        -s arch=x86_64 \
+        -s os=Linux 2>&1; then
+      log_warn "host-side lockfile regen failed; removing placeholder lockfile"
+      log_warn "the build container will resolve dependencies fresh on first run"
+      rm -f conan.lock
+    fi
   else
-    log_warn "conan not on host; the build container will install it"
+    log_warn "conan not on host; removing placeholder lockfile"
+    log_warn "the build container will resolve dependencies fresh on first run"
+    rm -f conan.lock
   fi
 fi
 
