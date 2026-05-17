@@ -18929,6 +18929,151 @@ duplicates.
 | r128 | `--demo-findings` flag | after r127 |
 | r129 | Hermetic build comparison | after r128 |
 
+### 2026-05-17 — r127: Round B item #3 — coverage stage (gcov + lcov)
+
+User ran r126 `--abi-break-demo` successfully. The pedagogical output
+landed exactly as designed:
+
+> [C] 'function std::string_view demo07::greet(const demo07::Greeting&)'
+> at channel.cpp:48:1 has some indirect sub-type changes:
+>   parameter 1 of type 'const demo07::Greeting&' has sub-type changes:
+>     in referenced type 'const demo07::Greeting':
+>       in unqualified underlying type 'struct demo07::Greeting':
+>         type size changed from 544 to 640 (in bits)
+>         1 data member insertion:
+>           'uint64_t timestamp_ns', at offset 576 (in bits) at channel.hpp:93:1
+
+Note abidiff didn't just see "the Greeting struct changed" — it
+followed the type through `greet()`'s parameter to confirm the
+function's effective signature changed. That's the part that matters
+for downstream binaries. The trap-restore fired clean.
+
+Then the user asked us to capture the JUnit-format explainer in the
+prose for §12 — done. Now r127 builds the coverage workflow.
+
+**The coverage-gcc design.**
+
+Three moving parts:
+
+1. **Compile with `--coverage`** = `-fprofile-arcs -ftest-coverage`.
+   Adds counters around every basic block; the linker pulls in
+   `libgcov` so the runtime can write `.gcda` files on exit.
+2. **Run the tests** via ctest, which exits each test as its own
+   process. On clean exit, the runtime's `atexit` handler writes
+   `.gcda` files alongside the corresponding `.gcno` files (in the
+   build directory).
+3. **Post-process** with `lcov` (capture → filter → genhtml):
+   - `lcov --capture` reads all `.gcda` + `.gcno` pairs, runs `gcov`
+     on each, aggregates into a `.info` tracefile
+   - `lcov --remove` strips system + test + conan paths
+   - `genhtml` converts the tracefile to a browseable HTML report
+   - `lcov --summary` prints the top-line percentages
+
+**Two cross-version gotchas we handle proactively in the Containerfile:**
+
+Gotcha A — **lcov must call the right gcov.** `lcov` is a perl wrapper
+that shells out to `gcov` to parse `.gcda`/`.gcno`. The gcov version
+must match the gcc version that compiled the code. UBI 9 ships gcc 11
+in /usr/bin/, but we compile with gcc-toolset-14's gcc 14.2.1. Stock
+lcov will pick /usr/bin/gcov, fail to read the gcc-14 format, and
+emit `version 'A74*', prefer '408*'` errors.
+
+Fix: always pass `--gcov-tool /opt/rh/gcc-toolset-14/root/usr/bin/gcov`.
+
+Gotcha B — **gcc 14 + lcov 1.x produces "mismatched end line" errors
+on heavily-inlined STL.** With std::ranges / std::span / lambdas
+inlined into the test binary, gcov's debuginfo can have end-line
+records that lcov 1.x rejects (issue #296 in linux-test-project/lcov).
+The fix is `--ignore-errors mismatch,unused,gcov,negative,inconsistent,format`
+which downgrades the errors to warnings. The underlying coverage data
+is still accurate; it's just that some inlined-stdlib lines are
+reported as zero-hit when they shouldn't be (and the warnings flag
+them honestly).
+
+**Files changed in r127 (4):**
+
+1. **`Containerfile`** — added `coverage-gcc` stage after asan:
+   - Conan install with `--coverage` cxxflags/linkflags
+   - cmake configure + build with the coverage-gcc preset
+   - ctest run with `--output-junit /src/reports/coverage-gcc.xml`
+   - `lcov --capture --gcov-tool …/gcc-toolset-14/…/gcov --ignore-errors …`
+   - `lcov --remove` to strip system paths
+   - `genhtml` to /src/reports/coverage-gcc/
+   - `lcov --summary` to /src/reports/coverage-summary.txt
+   - Also added `lcov` to the toolchain dnf install
+
+2. **`CMakePresets.json`** — added `coverage-gcc` configure/build/test
+   presets mirroring the asan pattern. Flags:
+   ```
+   CMAKE_CXX_FLAGS="-O0 -g --coverage"
+   CMAKE_EXE_LINKER_FLAGS="--coverage"
+   CMAKE_SHARED_LINKER_FLAGS="--coverage"
+   ```
+   No optimization (-O0) so gcov line counts match source lines.
+
+3. **`demo.sh`** — added `--coverage-gcc` flag that runs just the
+   coverage-gcc phase. After the phase loop, prints the lcov summary
+   (lines/functions/branches percentages) and points the user at the
+   HTML report path. Also added `coverage-gcc` to the `--clean`
+   image-rmi list.
+
+4. **`_docs/12-analysis-debugging.md`** — expanded the reports/ table
+   with 5 new rows: `coverage-gcc.xml`, `coverage.info`,
+   `coverage-filtered.info`, `coverage-summary.txt`,
+   `coverage-gcc/index.html`. Each row explains the schema + producer
+   + what it's for.
+
+**What we deliberately did NOT do in this round:**
+
+- **`gcovr` as an alternative tool** — gcovr is a Python tool that
+  does what lcov does, with potentially smoother gcc-14 compatibility.
+  Adding it would mean two tools doing the same job in the demo. Keep
+  lcov for r127 (canonical for the Linux ecosystem); leave gcovr as a
+  prose mention if we want to discuss alternatives.
+
+- **Clang source-based coverage (`-fprofile-instr-generate
+  -fcoverage-mapping`)** — that's a separate stage with completely
+  different tooling (llvm-profdata, llvm-cov), and we use gcc to
+  build the demo anyway. The original plan listed this as item r127b;
+  we may roll it in here if r127 lands smoothly, or split it out as
+  r127.5. Decision deferred until r127 verification.
+
+- **Coverage gating** — failing the build when coverage drops below
+  some threshold. Common in CI, but a separate decision and tooling
+  choice (gcovr has `--fail-under-line=X`; lcov requires custom
+  scripting). The demo demonstrates the data flow; gating is a
+  policy layer on top.
+
+**Round B sequencing — r127 of 4 shipped:**
+
+| Round | Item | Status |
+|---|---|---|
+| r125 | Housekeeping + `--abi-bless` | shipped |
+| r126 | `--abi-break-demo` flag | shipped + verified |
+| r126-docs | §12 reports/ explainer | shipped |
+| **r127** | **Coverage stage (gcov + lcov)** | **this round** |
+| r128 | `--demo-findings` flag | next |
+| r129 | Hermetic build comparison | after r128 |
+
+**Expected first-run behavior + what might bite:**
+
+The `coverage-gcc` stage triggers a fresh conan rebuild of gtest
+(because the cxxflags `["--coverage","-O0","-g"]` are a new conan
+package configuration). Expect ~30s for gtest rebuild + a few seconds
+for the demo's own rebuild + a few seconds for ctest run + maybe a
+second or two for lcov processing.
+
+Things that might surprise on first run:
+1. lcov's "mismatched end line" warnings — these are expected on gcc
+   14 and the `--ignore-errors` flags suppress them as errors but
+   they may still print as warnings.
+2. Coverage percentages — channel.hpp has a fair amount of template
+   code that may show as "uncovered" if specific instantiations
+   weren't exercised. The microbench test exercises both
+   VirtualChannel and CRTPChannel, so coverage should be reasonable.
+3. genhtml's "no source file at X" warnings for files that lcov's
+   filter didn't catch — `--ignore-errors source` lets it proceed.
+
 ---
 
 ## Known divergences from the PRD

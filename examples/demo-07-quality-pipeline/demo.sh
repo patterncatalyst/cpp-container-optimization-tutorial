@@ -12,6 +12,9 @@
 #                            # temporarily patch channel.hpp to break ABI;
 #                            # rebuild + run abidiff; show the report; restore.
 #                            # Requires a committed abi-reference/ baseline.
+#   ./demo.sh --coverage-gcc # build with gcov instrumentation, run tests,
+#                            # generate lcov HTML report at
+#                            # reports/coverage-gcc/index.html
 #   ./demo.sh --debug        # spin up gdbserver sidecar
 #   ./demo.sh --clean
 
@@ -34,6 +37,7 @@ while [[ $# -gt 0 ]]; do
     --test-only)       PHASES=(tests);       shift;;
     --asan-only)       PHASES=(asan);        shift;;
     --abi-only)        PHASES=(abi);         shift;;
+    --coverage-gcc)    PHASES=(coverage-gcc); shift;;
     --abi-bless)       DO_ABI_BLESS=1;       shift;;
     --abi-break-demo)  DO_ABI_BREAK_DEMO=1;  shift;;
     --debug)           DO_DEBUG=1;           shift;;
@@ -48,6 +52,8 @@ if [[ $DO_CLEAN -eq 1 ]]; then
     cpp-tut/demo-07:analyzer \
     cpp-tut/demo-07:tests \
     cpp-tut/demo-07:asan \
+    cpp-tut/demo-07:coverage-gcc \
+    cpp-tut/demo-07:abi-diff \
     cpp-tut/demo-07:abi \
     cpp-tut/demo-07:svc \
     cpp-tut/demo-07:gdbserver 2>/dev/null || true
@@ -213,6 +219,23 @@ run_phase() {
 for p in "${PHASES[@]}"; do
   run_phase "$p"
 done
+
+# Coverage-specific summary if --coverage-gcc was the phase
+if [[ " ${PHASES[*]} " == *" coverage-gcc "* ]]; then
+  echo
+  log_step "Coverage summary"
+  if [[ -f reports/coverage-summary.txt ]]; then
+    cat reports/coverage-summary.txt
+    echo
+  fi
+  if [[ -f reports/coverage-gcc/index.html ]]; then
+    log_ok "HTML report: $(pwd)/reports/coverage-gcc/index.html"
+    log_info "Open it in a browser:"
+    log_info "  xdg-open reports/coverage-gcc/index.html"
+  else
+    log_warn "Expected reports/coverage-gcc/index.html not found."
+  fi
+fi
 
 if [[ $DO_DEBUG -eq 1 ]]; then
   log_step "Bringing up gdbserver sidecar"

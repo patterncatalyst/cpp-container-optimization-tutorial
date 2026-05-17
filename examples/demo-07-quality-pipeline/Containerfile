@@ -55,6 +55,7 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         clang-tools-extra \
         cppcheck \
         gdb-gdbserver \
+        lcov \
         python3-pip \
         git \
         libxml2 \
@@ -180,6 +181,72 @@ RUN mkdir -p /src/reports \
  && ctest --preset asan --output-on-failure --output-junit /src/reports/asan.xml 2>&1 \
         | tee /src/reports/asan.txt \
   || (echo "ASan stage failed; see reports/asan.txt"; exit 1)
+
+# ---- coverage-gcc stage ----
+# Builds a parallel coverage-instrumented variant of the library and tests
+# (--coverage = -fprofile-arcs -ftest-coverage), runs ctest, then post-
+# processes with lcov + genhtml to produce reports/coverage-gcc/index.html.
+#
+# Two cross-version gotchas we handle explicitly:
+#   1. lcov needs to call the SAME gcov version as the gcc that built the
+#      code. UBI 9's stock /usr/bin/gcov is gcc 11. Our compile uses
+#      gcc-toolset-14's gcc 14.2.1. Pass --gcov-tool to point lcov at
+#      the SCL gcov so version numbers match.
+#   2. gcc 14 sometimes emits debuginfo with "mismatched end line" for
+#      heavily-inlined STL templates. lcov 1.x treats this as an error
+#      by default. --ignore-errors lets the demo proceed despite the
+#      warnings (the underlying coverage data is still accurate).
+FROM build AS coverage-gcc
+WORKDIR /src
+RUN if [ -s conan.lock ]; then \
+        conan install . \
+            --output-folder=build/coverage-gcc \
+            --lockfile=conan.lock \
+            --build=missing \
+            -s build_type=Debug \
+            -c tools.build:cxxflags='["--coverage","-O0","-g"]' \
+            -c tools.build:exelinkflags='["--coverage"]' \
+            -c tools.build:sharedlinkflags='["--coverage"]' ; \
+    else \
+        rm -f conan.lock && \
+        conan install . \
+            --output-folder=build/coverage-gcc \
+            --build=missing \
+            -s build_type=Debug \
+            -c tools.build:cxxflags='["--coverage","-O0","-g"]' \
+            -c tools.build:exelinkflags='["--coverage"]' \
+            -c tools.build:sharedlinkflags='["--coverage"]' ; \
+    fi \
+ && cmake --preset coverage-gcc \
+ && cmake --build --preset coverage-gcc -j"$(nproc)"
+RUN mkdir -p /src/reports/coverage-gcc \
+ && ctest --preset coverage-gcc --output-on-failure \
+          --output-junit /src/reports/coverage-gcc.xml \
+ && lcov --gcov-tool /opt/rh/gcc-toolset-14/root/usr/bin/gcov \
+         --directory build/coverage-gcc \
+         --capture \
+         --output-file /src/reports/coverage.info \
+         --rc geninfo_unexecuted_blocks=1 \
+         --ignore-errors mismatch,unused,gcov,negative,inconsistent,format \
+ && lcov --gcov-tool /opt/rh/gcc-toolset-14/root/usr/bin/gcov \
+         --remove /src/reports/coverage.info \
+         '/usr/*' \
+         '/opt/rh/*' \
+         '*/tests/*' \
+         '*/.conan2/*' \
+         --output-file /src/reports/coverage-filtered.info \
+         --ignore-errors unused \
+ && genhtml /src/reports/coverage-filtered.info \
+            --output-directory /src/reports/coverage-gcc \
+            --title "demo07 coverage (gcov via gcc-toolset-14)" \
+            --legend \
+            --demangle-cpp \
+            --branch-coverage \
+            --ignore-errors source \
+ && lcov --gcov-tool /opt/rh/gcc-toolset-14/root/usr/bin/gcov \
+         --summary /src/reports/coverage-filtered.info \
+         | tee /src/reports/coverage-summary.txt \
+ && echo "Coverage HTML: reports/coverage-gcc/index.html"
 
 # ---- abi-diff stage ----
 # Runs abidw + abidiff and ALWAYS captures the diff to reports/abidiff.txt.

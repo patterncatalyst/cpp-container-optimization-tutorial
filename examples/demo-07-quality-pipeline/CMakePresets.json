@@ -40,18 +40,31 @@
         "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined",
         "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=address,undefined"
       }
+    },
+    {
+      "name": "coverage-gcc",
+      "inherits": "_base",
+      "displayName": "Coverage (gcov via gcc-toolset-14, processed by lcov)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS": "-O0 -g --coverage",
+        "CMAKE_EXE_LINKER_FLAGS": "--coverage",
+        "CMAKE_SHARED_LINKER_FLAGS": "--coverage"
+      }
     }
   ],
   "buildPresets": [
     { "name": "release",            "configurePreset": "release" },
     { "name": "release-debuginfo",  "configurePreset": "release-debuginfo" },
     { "name": "debug",              "configurePreset": "debug" },
-    { "name": "asan",               "configurePreset": "asan" }
+    { "name": "asan",               "configurePreset": "asan" },
+    { "name": "coverage-gcc",       "configurePreset": "coverage-gcc" }
   ],
   "testPresets": [
     { "name": "release",            "configurePreset": "release",            "output": { "outputOnFailure": true } },
     { "name": "release-debuginfo",  "configurePreset": "release-debuginfo",  "output": { "outputOnFailure": true } },
     { "name": "debug",              "configurePreset": "debug",              "output": { "outputOnFailure": true } },
-    { "name": "asan",               "configurePreset": "asan",               "output": { "outputOnFailure": true }, "environment": { "ASAN_OPTIONS": "halt_on_error=1:detect_leaks=1:print_stacktrace=1:abort_on_error=1", "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1" } }
+    { "name": "asan",               "configurePreset": "asan",               "output": { "outputOnFailure": true }, "environment": { "ASAN_OPTIONS": "halt_on_error=1:detect_leaks=1:print_stacktrace=1:abort_on_error=1", "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1" } },
+    { "name": "coverage-gcc",       "configurePreset": "coverage-gcc",       "output": { "outputOnFailure": true } }
   ]
 }
