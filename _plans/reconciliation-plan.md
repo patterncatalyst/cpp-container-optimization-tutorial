@@ -15463,6 +15463,196 @@ Progress: 5 of the 8 sections needing prose work now publishable
 quality (was 3 of 8 before r109). 3 stubs + 3 partials remaining
 across r110-r112, then r113 polish.
 
+### 2026-05-16 — r110: Path D — §6 + §8 prose, batch 2 of 4
+
+The demo-backed performance pair: §6 STL layout backed by demo-02
+(r59-verified flat_map vs unordered_map vs map numbers), §8 I/O
+latency backed by demo-03 (r67-verified gRPC vs io_uring direct
+vs Asio io_uring throughput numbers).
+
+**§6 stl-layout — 63 → 408 lines (~2578 words, 15 sections, 12 xrefs)**
+
+Hook with the verified r58/r59 numbers as the centerpiece:
+
+| Container | Median iterate time at N=262K | Relative |
+|---|---|---|
+| `boost::container::flat_map<K,V>` | 911 µs | 1.0× |
+| `std::vector<pair<K,V>>` + linear | ~920 µs | 1.0× |
+| `std::unordered_map<K,V>` | 2,309 µs | **2.5× slower** |
+| `std::map<K,V>` | ~32 ms | **~35× slower** |
+
+Structure (15 sections):
+
+1. Frontmatter (refined to name 2.5× / 35× outcomes)
+2. Learning objectives (5 bullets)
+3. Diagram include (06-stl-layout-flat-vs-node)
+4. The 2.5× hidden in your container choice — hook with verified
+   table; "the data structure didn't change, the layout did"
+5. Why contiguous wins — cache-line view — mechanism paragraph
+   explaining the 16-ints-per-line packing, hardware prefetcher
+   stride detection, and the node-based "any access stalls the
+   pipeline"
+6. The four containers in question — code shows std::unordered_map,
+   std::map, boost::container::flat_map, std::vector<pair> linear;
+   trade-off table; workload-shaped decision (read-heavy mostly-
+   built-once → flat_map; insert-heavy → unordered_map; tiny N
+   → vector<pair>; ordered+insert-heavy → map)
+7. Memory pressure makes the gap wider — pressure ratio story
+   from demo-02's --memory=128m run; ties to §11 noisy-neighbor
+   and §7 memory.high mechanism
+8. The default-to-vector rule — four cases where vector is
+   wrong (stable iterators, frequent middle-insert, lookup-by-
+   key, huge element + tiny container)
+9. C++23 std::flat_map (or boost::container::flat_map today) —
+   library-support status table; "header-only Boost component"
+   for portable today-shipping use; migration note
+10. The over-abstraction trap — std::function (48 bytes + indirect
+    call), std::shared_ptr (2 atomic ops per copy), std::any
+    (type-erased storage), virtual dispatch in containers; the
+    std::variant<...> alternative and Iglberger reference
+11. std::span and std::mdspan — non-owning views as API design,
+    not just performance; span as the API hygiene story; mdspan
+    when-to-use / when-not-to-use bullets
+12. Production diagnostic — `perf stat -e cache-misses`, flamegraph,
+    Google Benchmark isolation; references §10's perf workflow
+13. Why this is a C++ concern — Python/Java/Go have narrow opinions
+    on map types; C++ gives the spectrum and the cache cost is
+    yours to measure; pmr + flat_map interaction with §7
+14. Demo pointer — demo-02 verified r58/r59 numbers; the test
+    script's BM_Iterate_FlatMap ≥ 1.5× BM_Iterate_UnorderedMap
+    assertion at N=262144
+15. References (Andrist & Sehr ch.4-5, Iglberger ch.4 + 9,
+    cppreference flat_map page, Boost.Container docs)
+16. What's next → §7 (correctly fixed; old stub said
+    "§6 keeps the workload" misleadingly)
+
+**§8 io-latency — 66 → 448 lines (~2598 words, 15 sections, 4 xrefs)**
+
+Hook with the verified r67 numbers as the centerpiece:
+
+| Server | Throughput | p99 |
+|---|---|---|
+| gRPC callback API (`:50051`) | 4,850 req/s | 30.92 ms |
+| Direct liburing (`:9000`) | 274,000 req/s | 181 µs |
+| Asio io_uring (`:9001`) | 349,000 req/s | 110 µs |
+
+Structure (15 sections):
+
+1. Frontmatter (refined to name the 60×+ throughput gap)
+2. Learning objectives (5 bullets)
+3. Diagram include (08-io-uring-rings)
+4. The 60× throughput gap — hook with verified table; "same
+   kernel, same machine, same code path" framing; Asio io_uring
+   vs direct liburing 20% gap is "the userland-side bookkeeping
+   that differs"
+5. Where syscall overhead lives in 2026 — KPTI (~50-100 ns),
+   spectre v2 (~10-50 ns), dispatch bookkeeping (~100-200 ns) —
+   total 200-500 ns per syscall before the actual I/O; at 100k
+   req/s that's ~90 ms/sec of pure mode-switching
+6. io_uring — SQ/CQ rings explained — full liburing wrapper code
+   sample with RAII, system_error throwing on init failure, the
+   "one io_uring_enter submits N ops" framing
+7. SQPOLL — the zero-syscall path — when it's worth a kernel
+   thread (>500k req/s sustained); the IORING_SETUP_SQPOLL flag
+8. Container security gates for io_uring — G-32 — TWO independent
+   gates (seccomp + SELinux), the errno-1 vs errno-13 diagnosis,
+   liburing's return-value convention (negative ints, not -1
+   plus errno) — captures the half-dozen-rounds-cost gotcha as
+   teachable knowledge
+9. Async gRPC — completion queue per CPU — full callback API
+   code sample; three common pitfalls (single CQ contention,
+   blocking inside tag handler, RPCs leaking on shutdown)
+10. SO_REUSEPORT — kernel-side load-balanced accept — setsockopt
+    code; right tool when / wrong tool when
+11. Direct liburing vs Asio io_uring vs gRPC — what the gap means
+    — Asio's registered-buffer + coroutine-batching wins explain
+    the counterintuitive direct-vs-Asio 20% gap; the gRPC cost
+    is "HTTP/2 + protobuf + TLS + thread-pool dispatch"
+12. Production diagnostic — `strace -e io_uring_setup,io_uring_enter`,
+    SQPOLL kthread enumeration, `/proc/<PID>/io_uring/sqe`, bpftrace
+    one-liner — references §9 for the richer eBPF coverage
+13. Why this is a C++ concern — Go/Rust have async runtimes;
+    C++ has Asio + libcoro + stdexec as competing options; the
+    io_uring choice is yours, RAII patterns matter more
+14. Demo pointer — demo-03 verified r67 numbers; compose.production.yml
+    with custom seccomp + SELinux module; the dev compose.yml
+    uses unconfined + label=disable (don't ship that)
+15. References (Enberg ch.6-7 primary, Andrist & Sehr ch.11,
+    Ghosh ch.8-9, io_uring(7) man page, Axboe's design PDF,
+    gRPC C++ async docs)
+16. What's next → §9 (correctly fixed; old stub said
+    "§8 stays in the network" misleadingly)
+
+**G-32 fully captured in §8 prose:**
+
+The two-gate problem (seccomp errno 1 vs SELinux errno 13) and
+liburing's return-value convention nuance (negative ints from
+io_uring_queue_init, not the POSIX -1-and-set-errno pattern,
+which makes perror() useless) are now in the section text, not
+just in the reconciliation plan. Future readers hit those errno
+codes will see the diagnosis path in §8's "Container security
+gates" section directly.
+
+**Cross-reference graph (just r110):**
+
+- §6 → §7 (next, pmr), §3, §10 (perf), §11 (noisy neighbor
+  page reclaim), §14 (over-abstraction pitfalls)
+- §8 → §9 (next, eBPF), §10 (observability stack for grafana
+  + perf), §7 (allocator side)
+
+§8's xref count came in at 4, lower than §6's 12. The forward
+links to §9 + §10 are present; could be denser with explicit §3
+(RAII patterns) and §6 (buffer registration as data layout)
+links. **Flagged for r113 polish.**
+
+**Stub-text fix pattern continues:**
+
+Both old stubs had broken "What's next" lines:
+- §6 stub said "§6 keeps the workload but changes the allocator"
+  — but §6 IS the stl-layout section; the next reference should
+  be §7. Fixed.
+- §8 stub said "§8 stays in the network but moves down the stack"
+  — but §8 IS the io-latency section; the next reference should
+  be §9. Fixed.
+
+That's now 4-for-4 stub rewrites where the self-referencing
+"What's next" copy-paste bug was present (§4, §5, §6, §8). r113
+should audit §3 and §1, §2 for the same defect, and check §9,
+§12, §13, §14 as we rewrite them too.
+
+**Files changed in r110 (3):**
+
+- `_docs/06-stl-layout.md`: 63 → 408 lines (full rewrite)
+- `_docs/08-io-latency.md`: 66 → 448 lines (full rewrite)
+- `_plans/reconciliation-plan.md`: this r110 entry
+
+**No code changes. No image rebuild. Pure prose work.**
+
+**Section state after r110:**
+
+| Section | Lines | "Planned" heading | xrefs | State |
+|---|---|---|---|---|
+| §1 prerequisites | 533 | no | 4 | ✓ developed |
+| §2 introduction | 467 | no | 3 | ✓ developed |
+| §3 raii-discipline | 259 | no | 0 | ✓ but missing xrefs (r113) |
+| §4 image-strategy | 353 | no | 9 | ✓ developed (r109) |
+| §5 compile-time-wins | 359 | no | 9 | ✓ developed (r109) |
+| **§6 stl-layout** | **408** | **no** | **12** | **✓ developed (r110)** |
+| §7 memory-management | 302 | yes (residual!) | 5 | ✓ but stale heading (r113) |
+| **§8 io-latency** | **448** | **no** | **4** | **✓ developed (r110, xrefs sparse)** |
+| §9 networking-kernel | 67 | yes | 2 | stub — r111 |
+| §10 observability-profiling | 437 | no | 4 | ✓ developed (r104) |
+| §11 noisy-neighbors | 334 | no | 5 | ✓ developed (r103) |
+| §12 analysis-debugging | 170 | yes | 3 | partial — r112 |
+| §13 reproducibility-abi | 191 | yes | 2 | partial — r112 |
+| §14 pitfalls | 124 | yes | 1 | partial — r111 |
+| §15 where-to-go-next | 60 | no | 2 | closing |
+| §16 appendix | 339 | no | 1 | reference |
+
+Progress: 7 of 8 prose-work sections now publishable (was 5 after
+r109). 1 stub (§9) + 3 partials (§12, §13, §14) remain across
+r111-r112, then r113 polish.
+
 ---
 
 ## Known divergences from the PRD
