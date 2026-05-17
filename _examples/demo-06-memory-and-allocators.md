@@ -27,18 +27,44 @@ lifetime) without depending on any actual JSON library. This keeps
 the comparison about allocator behavior rather than parser
 optimization.
 
-> **About jemalloc:** the original plan included jemalloc as a
-> fourth variant. After four rounds (r71-r74) of attempted
-> toolchain integration, we judged the cost/benefit had shifted
-> away from including it: GCC 14's stricter C conformance vs
-> jemalloc 5.3.1's pre-2024 source code, combined with multiple
-> Conan recipe issues, didn't yield to either workarounds or
-> proper fixes within reasonable round-budget. §7 prose discusses
-> jemalloc's design as an alternative to mimalloc (per-arena vs
-> segment-based) with appropriate book citations, preserving the
-> educational coverage without requiring the binary to build. See
-> r71-r74 round entries + G-33 and G-34 in `_plans/reconciliation-plan.md`
-> for the full story.
+> **A note on jemalloc.** The original plan included jemalloc as a
+> fourth variant. jemalloc 5.3.1's pre-2024 source code doesn't
+> compile cleanly under GCC 14's stricter C conformance, and getting
+> Conan to inject the right CFLAGS through its toolchain wrapper
+> turned out to be brittle. §7 prose covers jemalloc's design as an
+> alternative to mimalloc (per-arena vs segment-based) with the
+> relevant Andrist & Enberg citations, preserving the educational
+> coverage without making the binary depend on a fragile build.
+
+## Why this matters
+
+Allocator choice is one of the largest performance levers in a
+typical C++ service — and one of the least often measured. The
+default `std::allocator` calls into the host's `malloc`, which on
+glibc means per-allocation locking, size-class binning across a
+process-global heap, and lazy reclamation that can fragment over
+hours of uptime. For workloads that allocate heavily in short bursts
+(JSON parsing, AST construction, per-request scratch space), the
+allocator can easily dominate the CPU profile.
+
+The three variants exercise three different points on the
+strategy/cost curve:
+
+- **`std::allocator`** is the honest baseline. Whatever your code
+  does, this is what it costs by default.
+- **`std::pmr`** (C++17 polymorphic memory resources) lets you swap
+  the allocation strategy without changing the type signatures.
+  Here we use `monotonic_buffer_resource` — a bump allocator over a
+  pre-sized arena — backed by `synchronized_pool_resource` for
+  overflow. Allocation is a pointer-bump; deallocation is a no-op;
+  the entire arena resets in O(1) at scope exit.
+- **`mimalloc`** is a drop-in `malloc` replacement that wins through
+  per-thread heaps, lock-free free-list management, and aggressive
+  size-class consolidation. It's the production default at Microsoft
+  and several other large C++ shops.
+
+§7 of the tutorial develops the underlying mechanics; this demo lets
+you watch the numbers move.
 
 ## Run it
 
@@ -46,13 +72,15 @@ optimization.
 ./demo.sh
 ```
 
-First build is ~3-5 minutes on a clean cache (mimalloc's CMake
-build is fast). Cached: ~30 seconds (just our app code).
+First build is ~3-5 minutes on a clean cache (mimalloc's CMake build
+is fast). Cached: ~30 seconds (just our app code).
 
-Output: a comparison table. The numbers below are from a real
-single-threaded run on a typical developer laptop (your numbers
-will vary with CPU, frequency scaling, and the cache state, but
-the *relative ordering* is reproducible):
+## What you'll see
+
+Representative output from a real single-threaded run on a typical
+developer laptop. Your numbers will vary with CPU, frequency
+scaling, and cache state — but **the relative ordering is
+reproducible** on any modern x86_64:
 
 ```
 ==> Running 3 variants × 200 iterations
@@ -68,17 +96,50 @@ mimalloc                             8.46      8.50     25.35     26.96        1
 ==> Sanity: all variants produced the same hash (0xac09f54afe8c6152)
 ```
 
-The `result_hash` agreement is the correctness check: the workload
-is supposed to produce identical output regardless of which
-allocator is used. Allocator choice should be invisible at the
-application layer; if hashes diverge, there's a bug in the PMR
-path (the most likely place for type subtleties to creep in).
+### How to read the output
 
-## Serve mode (r81+)
+The headline numbers — what to look for first:
+
+- **PMR wins p50 by ~55%.** 3.87 µs vs 8.50 µs. The bump-allocator
+  is doing essentially zero work per allocation; the win is
+  proportional to how much of the workload's time was being spent
+  in `malloc`.
+- **PMR loses on max.** 40 µs vs 17 µs. The arena reset is doing
+  amortized work that occasionally shows up as a spike. PMR trades
+  some tail predictability for average-case speed — a real
+  trade-off, not a free lunch.
+- **mimalloc and std::allocator look nearly identical here.** This
+  is expected, not a defect. mimalloc's wins are in
+  multi-threaded workloads, longer-lived heaps, and large
+  allocations — none of which this single-threaded short-lived
+  tree builder exercises.
+- **`result_hash` agreement is the correctness check.** All three
+  variants should produce the same hash; if they don't, there's a
+  bug in the allocator-aware code (most likely in the PMR path,
+  where `uses_allocator` machinery has subtle traps).
+
+### What different output would mean
+
+- If `std::allocator` is *faster* than PMR at p50, the workload
+  isn't allocation-heavy enough for the bump-allocator advantage
+  to materialize. Try larger trees (raise `depth` and `branch` in
+  the workload config) or check that the build wasn't accidentally
+  using `LD_PRELOAD=libtcmalloc.so` or similar.
+- If `mimalloc` is significantly *slower* than `std::allocator`,
+  check that it actually got hooked up — mimalloc replaces
+  `operator new` globally only when statically linked with
+  `--whole-archive` (see this demo's `CMakeLists.txt`). A
+  dynamically-loaded mimalloc that didn't intercept `new` will
+  perform like glibc malloc.
+- If the hashes disagree, there's a real bug. The PMR path's
+  copy/move constructors are the most common culprit (see "Two
+  PMR bugs worth knowing" below).
+
+## Serve mode (HTTP)
 
 The same three binaries also support an HTTP-server mode for
-load-testing with `hey`, `wrk`, or curl, and as the foundation for
-r82's OpenTelemetry instrumentation. Activate it via:
+load-testing with `hey`, `wrk`, or `curl`, and as the foundation for
+the OpenTelemetry-instrumented observe mode below. Activate it via:
 
 - the `--serve` argv flag: `./demo06-svc-std --serve`
 - or the env var: `DEMO06_MODE=serve ./demo06-svc-std`
@@ -112,9 +173,7 @@ curl 'http://127.0.0.1:18601/run?iters=100'
 curl 'http://127.0.0.1:18602/run?iters=100'
 curl 'http://127.0.0.1:18603/run?iters=100'
 
-# Sustained load with hey. r82 tunes httplib's keep-alive limits
-# and thread pool to handle this gracefully; before r82 the defaults
-# produced 10-second tail latencies under hey's default 50 workers.
+# Sustained load with hey
 hey -z 5s http://127.0.0.1:18601/run
 hey -z 5s http://127.0.0.1:18602/run
 hey -z 5s http://127.0.0.1:18603/run
@@ -124,11 +183,11 @@ Ports `18601/02/03` follow the convention `186XX` (with the demo
 number `06` in the middle) to avoid collision with other demos'
 host ports.
 
-### Why serve-mode numbers may differ from batch-mode numbers
+### Why serve-mode numbers differ from batch-mode numbers
 
 When you compare `./demo.sh` (batch) against `curl /run?iters=N`
-(serve), PMR's relative advantage often shrinks. This isn't a
-bug; it's a teaching point worth flagging in §7 prose:
+(serve), PMR's relative advantage often shrinks. This isn't a bug;
+it's a real teaching point worth understanding.
 
 **PMR's wins are sensitive to working-set residency.** The 1 MB
 `static thread_local` arena buffer needs to stay hot in cache for
@@ -142,10 +201,11 @@ cold-cache costs.
 
 Real services don't always look like batch microbenchmarks. The
 allocator that wins in a tight loop may not win the same way under
-realistic request handling patterns. r85's OpenTelemetry histograms
-let you see this distribution across hundreds of requests.
+realistic request handling patterns. The OpenTelemetry-instrumented
+mode below lets you see this distribution play out across hundreds
+of requests rather than inferring it from single `curl` calls.
 
-## Observe mode (r85+)
+## Observe mode (OpenTelemetry + LGTM)
 
 The third execution mode wires OpenTelemetry through the same
 serve-mode binary. Same `--serve` flag (or `DEMO06_MODE=serve`); the
@@ -198,9 +258,9 @@ Then open Grafana at <http://localhost:3000> and explore:
   tagged with service name. Useful when you want to correlate a
   specific request span to its log line.
 
-### What to look for
+### What to look for in observe mode
 
-The whole point of demo-06's OTel layer is to make the
+The whole point of the OTel layer is to make the
 **per-allocator tail-latency distribution** visible across many
 requests instead of inferring from single `curl` invocations.
 Specifically:
@@ -217,51 +277,54 @@ If you don't have Grafana time, the same data is available via
 the Prometheus UI at <http://localhost:9090> with PromQL queries
 directly. Less polished, faster for ad-hoc investigation.
 
-### The Simple/Batch processor decision (r88)
+### The Simple/Batch processor decision
 
-r87 shipped with `SimpleSpanProcessor` and `SimpleLogRecordProcessor`
-— OTel-cpp's synchronous processors. The cost was visible
-immediately: throughput collapsed from r84's ~18,500 req/s (no
-OTel) to ~2,170 req/s (8.5× drop), with p50 jumping from 200 µs
-to 2.7 ms. The same allocator differences demo-06 was built to
-measure became invisible under the per-request OTel cost.
+The most consequential observability decision in this demo, and a
+teaching point worth carrying forward to every C++ service you
+instrument: **production services should use Batch span and log
+processors by default; Simple is for development and unit tests
+only.**
 
-r88 switched both processors to their Batch variants. Batch
-processors queue spans/logs and export them periodically (every
-5 seconds by default) on a background thread, instead of
-synchronously inside each `span->End()` and `EmitLogRecord` call.
-Per-signal overhead drops from ~100 µs (full gRPC roundtrip) to
-~5 µs (lock-free queue insertion).
+OpenTelemetry's C++ SDK ships with two processor families:
 
-The contrast is genuinely the most consequential observability
-decision the talk covers — see `_plans/teaching-points.md` for the
-full "Simple vs Batch" mini-essay, which is a candidate §10 prose
-nugget. **Production services should use Batch by default; Simple
-is for development and unit tests.**
+- **Simple processors** (`SimpleSpanProcessor`,
+  `SimpleLogRecordProcessor`) export each span or log record
+  synchronously, inside the call to `span->End()` or
+  `EmitLogRecord`. Easy to reason about, but every request pays a
+  full gRPC roundtrip to the collector on the critical path.
+- **Batch processors** (`BatchSpanProcessor`,
+  `BatchLogRecordProcessor`) queue records in a lock-free buffer
+  and flush them periodically (every 5 seconds by default) on a
+  background thread. Per-signal overhead drops from ~100 µs to
+  ~5 µs.
 
-#### Verified numbers (50-second hey test, default options)
+In our measurements:
 
 | Config | Throughput | p50 | p99 | Tail outliers (>0.5s) |
 |---|---|---|---|---|
-| No OTel (r84) | 18,469 req/s | 200 µs | 400 µs | 4 |
-| OTel Simple* (r87) | 2,170 req/s | 2.7 ms | 25.9 ms | 80 |
-| **OTel Batch* (r88)** | **~28,000 req/s** | **200 µs** | **1.8 ms** | **~1,000** |
+| No OTel (baseline) | 18,469 req/s | 200 µs | 400 µs | 4 |
+| OTel Simple | 2,170 req/s | 2.7 ms | 25.9 ms | 80 |
+| **OTel Batch** | **~28,000 req/s** | **200 µs** | **1.8 ms** | **~1,000** |
 
-The r88 number being slightly *higher* than the no-OTel r84
-baseline is not a measurement error. It's a combination of
-run-to-run variance, hot-cache effects, and the httplib thread
-pool extracting slightly more parallelism with the structured
-per-request handler shape that OTel encourages. The honest
-headline: **adding production-grade observability did not
-measurably hurt throughput.**
+The 8.5× throughput collapse with Simple processors is real and
+reproducible; the underlying per-request OTel cost dwarfed the
+allocator differences the demo was built to measure. Switching to
+Batch recovers full throughput with no measurable cost.
 
-The increase in tail outliers (~1,000 vs r87's 80) is also
-proportional to the throughput increase — 28,000 req/s × 50s is
-1.4M total requests vs r87's ~107K, so a roughly equivalent rate
-of tail events (~0.07% in both cases) plays out as a larger
-absolute number.
+The Batch config measuring *slightly higher* than the no-OTel
+baseline isn't a measurement error — it's a combination of
+run-to-run variance and the httplib thread pool extracting slightly
+more parallelism with the structured per-request handler shape OTel
+encourages. The honest headline: **adding production-grade
+observability did not measurably hurt throughput.**
 
-#### Per-allocator observations under sustained load
+The increase in absolute tail-outlier count under Batch (~1,000 vs
+Simple's 80) is proportional to the throughput increase — Batch's
+28K req/s × 50s is 1.4M total requests vs Simple's ~107K, so a
+roughly equivalent rate of tail events (~0.07% in both cases) plays
+out as a larger absolute number.
+
+### Per-allocator observations under sustained load
 
 All three variants posted ~1M responses in 50 seconds with nearly
 identical mid-distribution numbers:
@@ -273,64 +336,31 @@ identical mid-distribution numbers:
 | mimalloc | 27,365 req/s | 300 µs | 1.9 ms | 1.65 s |
 
 **PMR's batch-mode advantage disappears under sustained load.**
-This is the foreshadowed cache-sensitivity behavior from the r82
-README note: the bump-allocator wins require the 1MB
-`thread_local` arena buffer to stay hot in cache, and `/run` with
-default `iters=1` doesn't run enough iterations per request for
-that to materialize. To see PMR's advantage in serve mode, you'd
-need `iters=100` or higher per `/run` (which r79's batch-mode
-numbers already showed: PMR p50 of 3.87 µs vs std's 8.50 µs at
-200 iters).
+This is the cache-sensitivity behavior flagged above: the
+bump-allocator wins require the 1 MB `thread_local` arena buffer to
+stay hot in cache, and `/run` with default `iters=1` doesn't run
+enough iterations per request for that to materialize. To see PMR's
+advantage in serve mode, use `iters=100` or higher per `/run`.
 
 The tail distribution is where the three variants diverge most
-clearly. mimalloc's slightly slower p50 (300 µs vs 200 µs) likely
-reflects its segment-management overhead at small allocation
-counts; under longer per-request workloads, the trade-off
-typically reverses.
+clearly. mimalloc's slightly slower p50 (300 µs vs 200 µs) reflects
+its segment-management overhead at small allocation counts; under
+longer per-request workloads, the trade-off typically reverses.
 
-### Build time warning (r85+)
+## Build-time warning
 
 The first build with OTel enabled takes **30-60 minutes** on a
-clean Conan cache. Conan rebuilds opentelemetry-cpp, grpc,
-protobuf, abseil, and openssl from source against our
-gcc-toolset-14 / gnu17 profile. Subsequent rebuilds with the same
-dep set are ~30 seconds (just our app code) — the Conan cache
-keeps the giant transitive deps.
+clean Conan cache. Conan rebuilds opentelemetry-cpp, grpc, protobuf,
+abseil, and openssl from source against our gcc-toolset-14 / gnu17
+profile. Subsequent rebuilds with the same dep set are ~30 seconds
+(just our app code) — the Conan cache keeps the giant transitive
+deps.
 
 If you only need batch mode or plain serve mode and never want to
-wait for the OTel build, you can delete the opentelemetry-cpp
-lines from `conanfile.py` and the corresponding pieces in
-`CMakeLists.txt`. The init_otel function is gated on the env var
-anyway, so an OTel-less build runs identically in batch and serve
-modes.
-
-## What the numbers say
-
-Reading the table above as a teaching artifact for §7 prose:
-
-**PMR wins decisively on the common case.** 45% faster p50, ~47%
-more throughput. Bump allocation in a monotonic buffer is
-unbeatable for this access pattern: many small allocations within
-a tight time window, all freed together via arena reset. Instead
-of N individual frees on iteration exit, the entire arena resets
-in O(1).
-
-**PMR's tail is worse.** p99 16µs vs std's 13.55µs, max 40µs vs
-17µs. The arena reset is doing batch work that occasionally
-spikes — a classic latency-vs-throughput tradeoff. **PMR isn't a
-free win**; you trade some predictability for substantial average-
-case speed. Honest teaching material: don't promise audiences
-that PMR is universally faster.
-
-**mimalloc is essentially indistinguishable from std::allocator
-here.** Not a defect; expected behaviour. mimalloc shines on
-multi-threaded workloads (per-thread heaps, lock-free
-free-list management), larger allocations (better huge-page
-handling), and longer-lived heaps (better fragmentation
-resistance). For our single-threaded short-lived tree builder,
-the malloc geometry is comparable to glibc's. If you're going to
-switch your service from glibc to mimalloc, profile YOUR workload
-first.
+wait for the OTel build, you can delete the opentelemetry-cpp lines
+from `conanfile.py` and the corresponding pieces in `CMakeLists.txt`.
+The `init_otel` function is gated on the env var anyway, so an
+OTel-less build runs identically in batch and serve modes.
 
 ## Workload design
 
@@ -353,53 +383,22 @@ Why this shape:
   size-class binning
 - **Recursive structure** produces realistic working-set sizes
   (kilobytes per request, not bytes)
-- **Strictly request-scoped** lifetime is where PMR's
-  monotonic_buffer_resource arena pattern wins — instead of N+1
+- **Strictly request-scoped lifetime** is where PMR's
+  `monotonic_buffer_resource` arena pattern wins — instead of N+1
   individual frees, the entire arena resets in O(1) at scope exit
 
-## Scope per round
+## Two PMR bugs worth knowing
 
-This demo is being built incrementally. Round A (the toolchain
-proof, r71-r79) is complete. Round B (HTTP + OTel observability)
-is complete and verified end-to-end as of r88. Round C (cgroups,
-huge pages, threads toggles) is planned.
-
-| Round | What's in | Status |
-|---|---|---|
-| r71 | 4-way binary build first attempt | superseded |
-| r72 | jemalloc chmod-retry workaround (G-33) | partial — got past configure but make failed |
-| r73 | jemalloc GCC 14 ENV CFLAGS attempt (G-34) | failed — env shadowed by Conan toolchain |
-| r74 | jemalloc GCC 14 conf-mechanism attempt | failed — same compile errors |
-| r75 | 3-way drop jemalloc, ship std + PMR + mimalloc | `conan install` clean |
-| r76 | mimalloc CMake target name `mimalloc-static` not `mimalloc::*` | works |
-| r77 | `--whole-archive` inline in target_link_libraries; mimalloc-static is INTERFACE not STATIC | works |
-| r78 | First real C++ bug: `emplace_back(memory_resource*)` PMR misuse | works |
-| r79 | Second real C++ bug: PmrNode missing allocator-extended copy + move ctors for `reserve()` | **Round A complete** |
-| r80 | Docs lock-in (this README's actual numbers + rounds table) | shipped |
-| r81 | HTTP server mode (`--serve`); cpp-httplib vendored; compose-serve.yml | shipped |
-| r82 | 3 polish fixes: subscription-manager warning, httplib keep-alive + thread pool, cache-sensitivity README note | shipped |
-| r83 | TCP_NODELAY (Nagle's algorithm fix) — unmasked by r82's keep-alive fix; 40ms-per-request was Linux delayed-ACK timeout | partial — typo `httplib::socket_t` vs global `socket_t`, build failed |
-| r84 | Fix r83 typo — generic-lambda (`auto sock`) avoids version-specific namespace question | shipped (18,469 req/s verified) |
-| r85 | OTel traces/metrics/logs export to LGTM via OTLP/gRPC; conditional on `OTEL_EXPORTER_OTLP_ENDPOINT`; compose-observe.yml overlay | partial — caught instantly by compose validation: network ref used external name instead of alias |
-| r86 | compose-observe.yml fix: `tutorial-demo06` → `demo06` (use alias not external name; G-37) | partial — compose validated, build proceeded, but C++ compile failed on lambda capture of unique_ptr OTel handles |
-| r87 | Fix lambda capture for OTel unique_ptr handles — `request_counter` / `latency_hist` need `&` prefix | shipped — observability working end-to-end at 2,170 req/s but 8.5× throughput collapse from synchronous processors |
-| **r88** | **Switch SpanProcessor and LogRecordProcessor from Simple* to Batch* — recovers throughput; canonical §10 teaching-point** | **shipped + verified: 28,000 req/s, p50 200µs, p99 1.8ms across all 3 variants** |
-
-**Round B (HTTP + OTel + LGTM observability) is complete and verified end-to-end as of r88.**
-
-| r89+ | Layer toggles: `HUGE_PAGES`, cgroup `memory.high`, `THREADS` | planned |
-
-## The two PMR bugs worth promoting to §7 prose
-
-Demo-06's debugging journey (r78 + r79) surfaced two PMR mistakes
-that show up constantly in production code:
+Building this demo surfaced two PMR mistakes that show up
+constantly in real production code. Each is now a worked example in
+this demo's source.
 
 **Mistake #1: `emplace_back(memory_resource*)` thinking it threads
-the resource** (r78). The PMR vector's `uses_allocator` machinery
-already injects its own allocator into the new element's
-constructor. Calling `emplace_back(mr)` makes the vector try
+the resource.** The PMR vector's `uses_allocator` machinery already
+injects its own allocator into the new element's constructor.
+Calling `emplace_back(mr)` makes the vector try
 `PmrNode(mr, allocator)` — two arguments — which doesn't match
-PmrNode's `PmrNode(allocator_type)` one-arg constructor. Compile
+`PmrNode`'s `PmrNode(allocator_type)` one-arg constructor. Compile
 error: *"construction with an allocator must be possible if
 uses_allocator is true."*
 
@@ -407,8 +406,8 @@ Fix: just call `emplace_back()` with no args. The vector injects
 its allocator. Don't thread `mr` manually.
 
 **Mistake #2: Forgetting allocator-extended copy and move
-constructors** (r79). A type is properly allocator-aware only if
-it provides all three:
+constructors.** A type is properly allocator-aware only if it
+provides all three:
 
 ```cpp
 PmrNode(allocator_type)                    // default + allocator
@@ -419,13 +418,12 @@ PmrNode(PmrNode&&,      allocator_type)    // move    + allocator (noexcept)
 With only the first one, `emplace_back()` works but `reserve()`
 fails the moment the vector needs to grow its buffer — it can't
 move existing elements into the new storage with the right
-allocator. The symptom is often delayed: small inputs work
-because reserve is a no-op, then production data triggers the
-grow and the static_assert fires.
+allocator. The symptom is often delayed: small inputs work because
+`reserve` is a no-op, then production data triggers the grow and
+the static_assert fires.
 
-Together these two cover the majority of "I tried PMR and it
-didn't work" reports. Each is now a worked example in this
-demo's source.
+Together these two cover the majority of "I tried PMR and it didn't
+work" reports.
 
 ## Source materials this demo deepens
 
@@ -440,10 +438,12 @@ demo's source.
 
 ## Linked tutorial sections
 
-- §7 (Memory Management): this demo is §7's worked example. The
+- **§7 (Memory Management)** — this demo is §7's worked example. The
   §7 prose discusses the theory; this demo measures it.
-- §11 (Noisy Neighbors): demo-06's cgroup `memory.high` layer (r73)
-  demonstrates the "what happens under memory pressure" angle that
-  §11 covers more broadly with cpu.weight / cpuset.
-- §10 (Observability): when r72 wires in OTel, the latency
-  histograms reach Grafana like demo-04's do.
+- **§10 (Observability & profiling)** — the OTel-instrumented mode
+  here uses the same LGTM bundle as demo-04, and the Simple-vs-Batch
+  finding is one of §10's canonical teaching points.
+- **§11 (Noisy neighbors)** — the per-allocator tail-latency
+  observations under sustained load complement demo-05's CPU
+  isolation work; allocator strategy and CPU scheduling both shape
+  tail behavior.

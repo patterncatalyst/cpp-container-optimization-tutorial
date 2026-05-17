@@ -114,5 +114,5 @@ pattern](../../_docs/12-analysis-debugging.md) in miniature.
   here are the minimum-viable version of the §13 "Reproducibility
   & ABI" toolkit. The §13 prose covers Konflux + Cachi2 for
   full hermetic CI, gcov/lcov + clang source-based coverage, and
-  the abidiff CI integration — Round B of this demo will add the
-  coverage and hermetic-comparison steps.
+  the abidiff CI integration — those further integrations are
+  documented in §13 but not exercised in this demo's scripts.

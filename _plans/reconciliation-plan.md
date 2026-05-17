@@ -20723,6 +20723,142 @@ recognized as part of the same opener family.
   affected line; add this r134.4 entry
 - `scripts/check-liquid.py` — fourth pattern detector
 
+### 2026-05-17 — r135: editorial pass — strip authoring artifacts from reader-facing content
+
+**Motivation.**
+
+User flagged demo-06's README as an example of a broader problem:
+sprinkled `(r##)` round annotations, an entire "Scope per round"
+section logging round-by-round development history, and various
+mentions of "Round A / Round B is complete" — none of which is
+useful to a reader of the tutorial. Quote: *"this type of
+information with the rounds is not relevant to the outcome"*. The
+fix is editorial, not infrastructural: rewrite reader-facing
+content to focus on what the demo demonstrates and how to read its
+output, with all internal-iteration meta-commentary removed.
+
+**Scope.**
+
+A repo-wide sweep for round-annotation patterns:
+
+    grep -rn -E '\(r[0-9]+\+?\)|scope per round|in round [0-9]|added in r[0-9]|round (a|b|c) of|round (a|b|c) (is|will)'
+
+against `_docs/`, `_reference/`, `_examples/`, and
+`examples/*/README.md`. The plan file itself (`_plans/`) is
+internal documentation by design and is left as-is.
+
+**Hits found and addressed:**
+
+| File | Hits | Treatment |
+|---|---:|---|
+| `examples/demo-06-memory-and-allocators/README.md` | 10 | Substantially rewritten — see below |
+| `examples/demo-07-quality-pipeline/README.md` | 1 | "Round B of this demo will add" → straightforward rephrasing |
+| `examples/demo-03-io-uring-grpc/README.md` | 1 | "see G-22..G-30 in the reconciliation plan" → dropped the parenthetical cross-ref |
+| `_docs/01-prerequisites.md` | 1 | "G-42 (r101)" prefix → dropped, kept the technical content |
+| `_docs/13-reproducibility-abi.md` | 1 | "one round at a time" → "one at a time" |
+| `_docs/14-pitfalls.md` | 1 | "gotcha G-32 from r66" → "gotcha G-32" |
+
+**Demo-06 README — the main rewrite (~2.6K words).**
+
+The file had the highest concentration of authoring artifacts and
+also a section ("Scope per round") that was pure development log.
+Restructured to a reader-first shape:
+
+1. Title + intro table of the three variants
+2. Note on jemalloc (rewritten to be about the technical decision
+   — GCC 14 strict C conformance vs jemalloc 5.3.1 pre-2024 source
+   — rather than about the r71-r74 attempts)
+3. **NEW: "Why this matters"** — three paragraphs framing
+   allocator choice as a production lever and what each variant
+   represents on the strategy/cost curve
+4. Run it
+5. **EXPANDED: "What you'll see"** — representative numbers +
+   "How to read the output" (4 bullet points on what the headline
+   numbers mean) + **NEW: "What different output would mean"**
+   (3 troubleshooting scenarios — if std beats PMR, if mimalloc
+   underperforms, if hashes disagree)
+6. Serve mode (HTTP) — unchanged except for dropped `(r81+)` and
+   the inline code-comment about r82 stripped
+7. Why serve-mode numbers differ from batch — kept; PMR cache-
+   sensitivity teaching point is genuinely useful
+8. Observe mode (OpenTelemetry + LGTM) — dropped `(r85+)`,
+   simplified intro paragraph
+9. What to look for in observe mode
+10. **REORGANIZED: "The Simple/Batch processor decision"** — was
+    "(r88)" in the title; now reads as a teaching nugget that
+    leads with the rule (Batch by default, Simple for dev/tests),
+    then explains WHY with the throughput table, then handles the
+    "wait, Batch is FASTER than the no-OTel baseline?" question.
+    The table columns (previously labeled `(r84)`, `(r87)`,
+    `(r88)`) now describe what the rows are: "No OTel (baseline)",
+    "OTel Simple", "OTel Batch".
+11. Per-allocator observations under sustained load
+12. Build-time warning (dropped `(r85+)`)
+13. Workload design
+14. Two PMR bugs worth knowing (dropped `(r78)` and `(r79)`
+    annotations from the headings; the bugs are now identified by
+    what they ARE rather than when they were found)
+15. Source materials
+16. Linked tutorial sections
+
+**Dropped entirely:** the "Scope per round" section (≈30 lines
+listing r71-r88 in a status table — pure development log) and the
+"r89+ planned" row. None of that survives in the new README.
+
+**Word count:** 2874 → 2630. The rewrite added substantive content
+("Why this matters", "What different output would mean") but
+dropped more than it added because the scope-per-round table and
+inline-(r##) repetitions are gone.
+
+**Other touches:**
+
+- The two demo-07 README changes: rephrased "Round B of this demo
+  will add" to describe what §13 covers but is not yet exercised
+  here. The future-iteration language is gone.
+- The demo-03 README: dropped "(see G-22..G-30 in the
+  reconciliation plan)" parenthetical. Readers don't need to know
+  the internal gotcha numbering to understand why the OTel build
+  takes 30-45 minutes.
+- `_docs/01-prerequisites.md`: dropped "G-42 (r101):" prefix to a
+  technical note about `--cpu-weight` not being a real podman
+  flag. The content is correct and useful; the prefix labeled it
+  as historical.
+- `_docs/14-pitfalls.md`: dropped "from r66" suffix on a gotcha
+  reference. The gotcha G-32 is a documented stable identifier in
+  the appendix gotcha catalog; the "from r66" was extra
+  iteration-history.
+
+**Out of scope / intentionally left alone:**
+
+The gotcha catalog itself (G-13 through G-50ish in
+`_docs/16-appendix-a-conan-ubi9-perl.md` and inline G-NN
+references in the tutorial body) — these are stable identifiers
+for documented known issues, not iteration history. The user's
+specific concern was round annotations (r##) and authoring
+meta-commentary; gotcha identifiers serve a different purpose
+(reader-actionable known-issue numbering) and stay.
+
+The published reconciliation plan itself — it's in the site nav,
+links to it are appropriate (the page exists, readers can use it);
+the plan as a development artifact remains internal-style.
+
+**Verification.**
+
+After the rewrite, the grep above returns zero hits in
+reader-facing content. The Liquid analyzer still reports clean.
+`_examples/` regenerated to pick up the upstream README changes.
+
+**Files changed:**
+
+- `examples/demo-06-memory-and-allocators/README.md` — substantial rewrite
+- `examples/demo-07-quality-pipeline/README.md` — one-paragraph edit
+- `examples/demo-03-io-uring-grpc/README.md` — one-line edit
+- `_docs/01-prerequisites.md` — one-paragraph edit
+- `_docs/13-reproducibility-abi.md` — one-line edit
+- `_docs/14-pitfalls.md` — one-line edit
+- 3 regenerated `_examples/*.md` files (demos 03, 06, 07)
+- `_plans/reconciliation-plan.md` — this entry
+
 ---
 
 ## Known divergences from the PRD

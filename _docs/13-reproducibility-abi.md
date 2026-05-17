@@ -66,7 +66,7 @@ Perl](appendix-a-conan-ubi9-perl.html)** has the full
 perl-module shopping list and the alternatives (skip the
 dep, use the system package, drop cppstd to hit pre-builts)
 so you can pick the right trade-off instead of chasing
-missing modules one round at a time the way demo-04 did.
+missing modules one at a time the way demo-04 did.
 
 ## What a version pin doesn't pin
 

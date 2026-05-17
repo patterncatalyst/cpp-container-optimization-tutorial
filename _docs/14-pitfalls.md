@@ -313,8 +313,7 @@ means EPERM debugging is "check each layer in turn". But
 you. On Fedora/RHEL with SELinux enforcing, that means the
 `container_t` policy doesn't permit the operation.
 
-A worked example, from demo-03's development history (gotcha
-G-32 from r66):
+A worked example from demo-03's development history (gotcha G-32):
 
 1. Initial run of the `io_uring` echo server failed with `EPERM`
    on `io_uring_setup`. Suspected seccomp; verified with

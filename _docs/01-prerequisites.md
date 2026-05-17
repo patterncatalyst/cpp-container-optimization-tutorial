@@ -266,9 +266,9 @@ sudo systemctl daemon-reload
 The most important controllers for our demos:
 
 - **`cpu`** — needed for `--cgroup-conf=cpu.weight=N` and `--cpus`
-  (demo 5 weighted scenario). G-42 (r101): `--cpu-weight` itself is
-  not a real podman flag, despite mirroring the cgroup file name —
-  use `--cgroup-conf=cpu.weight=N` to set the v2 weight directly.
+  (demo 5 weighted scenario). Note that `--cpu-weight` is not a real
+  podman flag, despite mirroring the cgroup file name — use
+  `--cgroup-conf=cpu.weight=N` to set the v2 weight directly.
 - **`cpuset`** — needed for `--cpuset-cpus` (demo 5 pinned scenario).
   An earlier version of this guide claimed cpuset worked without
   delegation; **that turned out to be wrong on Fedora 44** with

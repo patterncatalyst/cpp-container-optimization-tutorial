@@ -32,8 +32,7 @@ but the direct-liburing version pays less per call.**
 ```
 
 First build is ~30-45 minutes (the OTel/gRPC chain rebuilds from source
-under the override profile — see G-22..G-30 in the reconciliation plan).
-Subsequent runs are 2-3 minutes.
+under the override profile). Subsequent runs are 2-3 minutes.
 
 The script:
 1. Brings up the LGTM stack + demo-03-svc
