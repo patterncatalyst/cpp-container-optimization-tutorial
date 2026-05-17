@@ -33,55 +33,97 @@ talk itself.
 for visual continuity with the author's other talks. Calibri for body
 copy, Consolas for code blocks.
 
-## How the deck gets built
+## Rebuilding the deck locally
 
-The deck is driven programmatically from a content data model so it
-stays in sync with the rest of the tutorial:
-
-```
-tools/sections.py       # human-edited content: section/slide data + speaker scripts
-tools/build-pptx.py     # the renderer: design tokens + slide builders + dispatcher
-diagrams/*.svg          # source diagrams (also rendered on the site)
-/tmp/diagrams-png/*.jpg # PNG conversions for PPTX embedding
-```
-
-To rebuild from scratch:
+One command, from the project root:
 
 ```bash
-# 1. Convert SVGs to JPGs (one-time; the JPGs cache in /tmp)
-mkdir -p /tmp/diagrams-png
-for svg in diagrams/*.svg; do
-  cp "$svg" /tmp/diagrams-png/
-  soffice --headless --convert-to pdf:"draw_pdf_Export" \
-          --outdir /tmp/diagrams-png/ "/tmp/diagrams-png/$(basename "$svg")"
-  name=$(basename "$svg" .svg)
-  pdftoppm -jpeg -r 160 -singlefile \
-           "/tmp/diagrams-png/$name.pdf" "/tmp/diagrams-png/$name"
-  rm -f "/tmp/diagrams-png/$(basename "$svg")" "/tmp/diagrams-png/$name.pdf"
-done
-
-# 2. Run the build
-python3 tools/build-pptx.py
-
-# Output → presentation/cpp-container-tutorial.pptx
+./tools/build-deck.sh
 ```
 
-Requires `python-pptx` and `Pillow`.
+This handles both phases:
 
-## Visual-QA workflow
+1. **SVG → JPG conversion** of the diagrams under `diagrams/` via
+   `soffice` + `pdftoppm`. Cached in `/tmp/diagrams-png/` so
+   subsequent rebuilds skip unchanged SVGs.
 
-Convert to PDF and check the rendered output:
+2. **PPTX assembly** via `python3 tools/build-pptx.py`, which reads
+   slide content from `tools/sections.py` and writes the deck to
+   `presentation/cpp-container-tutorial.pptx`.
+
+Force a full re-conversion of the diagrams (e.g. after editing an SVG):
+
+```bash
+./tools/build-deck.sh --force
+```
+
+### Prerequisites
+
+| Dependency | Why | Install on Fedora 44 |
+|---|---|---|
+| `python3` ≥ 3.10 | runs the build script | (preinstalled) |
+| `python-pptx` | writes PPTX format | `pip install python-pptx` |
+| `Pillow` | reads PNG dimensions for aspect-ratio sizing | `pip install Pillow` |
+| `soffice` (LibreOffice) | SVG → PDF conversion | `dnf install libreoffice-impress` |
+| `pdftoppm` (poppler-utils) | PDF → JPG conversion | `dnf install poppler-utils` |
+
+The wrapper script checks each one and prints an install hint if
+anything is missing.
+
+### Visual QA
+
+After rebuilding, render every slide to a JPG and eyeball the
+output:
 
 ```bash
 soffice --headless --convert-to pdf --outdir /tmp \
         presentation/cpp-container-tutorial.pptx
 pdftoppm -jpeg -r 100 /tmp/cpp-container-tutorial.pdf /tmp/qa-slide
-# Then view /tmp/qa-slide-NN.jpg in any image viewer
+# then open /tmp/qa-slide-*.jpg in any image viewer
 ```
+
+The most common defects after content edits are (a) code blocks
+overflowing their dark background box and (b) diagrams extending
+past the slide bottom. Both have auto-shrink logic in
+`build-pptx.py`, but new content can still hit edge cases.
+
+## Editing the deck
+
+There are two files to edit, with a clear separation of concerns:
+
+| File | What lives here |
+|---|---|
+| `tools/sections.py` | Slide content + speaker scripts. Edit this to change what's said. |
+| `tools/build-pptx.py` | Design tokens (colors, fonts, layouts) + slide builders. Edit this to change how things look. |
+
+`sections.py` is structured as a list of section dicts, each
+containing a list of slide dicts. A slide dict has a `kind` field
+that picks the builder, plus the content fields that builder needs:
+
+```python
+{
+    "num": 4,
+    "label": "Section 04",
+    "title": "Container strategy",
+    "tagline": "UBI vs ubi-micro vs scratch + multi-stage builds = Demo 1",
+    "divider_notes": "Speaker script for the section opener...",
+    "slides": [
+        dict(kind="diagram",
+             title="Multi-stage build: separate builder from runtime",
+             diagram=f"{DG}/04-image-strategy-multistage.jpg",
+             caption="One Containerfile, two stages...",
+             notes="Speaker script for this slide..."),
+        # ... more slides
+    ],
+}
+```
+
+After editing, run `./tools/build-deck.sh` and the PPTX updates in
+place.
 
 ## Slide kinds
 
-The build script supports six slide kinds, each with its own layout:
+The build script supports nine slide kinds, each with its own layout:
 
 | Kind          | Use                                  | Example  |
 |---------------|--------------------------------------|----------|
@@ -94,6 +136,26 @@ The build script supports six slide kinds, each with its own layout:
 | `diagram`     | Full-width diagram, caption below    | Slide 9  |
 | `demo-cue`    | Dark slide with DEMO N badge + cmd   | Slide 18 |
 | `closing`     | Thank-you + three reference panels   | Slide 71 |
+
+## Why programmatic generation (not a hand-edited PPTX)
+
+The deck is driven from `tools/sections.py` rather than edited
+directly so it stays in sync with the rest of the tutorial:
+
+- **Content updates flow through one place.** Fix a stat in
+  `sections.py`, rebuild, and every slide that quoted that stat
+  updates together.
+
+- **Design tokens are centralized.** All colors, fonts, and slide
+  dimensions live in the `C`, `F`, and `FontFam` classes at the top
+  of `build-pptx.py`. Changing the accent color is one line.
+
+- **Reviewable diffs.** Git diff on a slide content change shows
+  exactly what text was edited. Diff on a hand-edited `.pptx` shows
+  binary noise.
+
+- **Reproducible.** Same input commit → byte-identical output PPTX,
+  on any host with the dependencies installed.
 
 ## Why PPTX, not reveal.js / Slidev / Marp
 
