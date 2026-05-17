@@ -42,8 +42,8 @@ pass code review, they pass CI, they fail in production.
 
 They all reward the same defense: *measure on something close
 to the real deployment target*. The remaining sections of this
-tutorial — particularly [§10's observability stack](10-observability-profiling.md)
-and [§11's noisy-neighbor isolation](11-noisy-neighbors.md) —
+tutorial — particularly [§10's observability stack](../10-observability-profiling/)
+and [§11's noisy-neighbor isolation](../11-noisy-neighbors/) —
 are what makes that measurement practical.
 
 ## AVX-512 / `-march=native` mismatch
@@ -121,7 +121,7 @@ exploding on hosts that don't. The cost is binary size (~3× for
 multi-versioned functions) and a one-time resolver dispatch.
 
 Write the chosen `-march` into the image as a `LABEL` (per
-[§4's image strategy](04-image-strategy.md)) so future-you can
+[§4's image strategy](../04-image-strategy/)) so future-you can
 inspect what was baked in without disassembling:
 
 ```dockerfile
@@ -133,7 +133,7 @@ LABEL ai.cpp-tutorial.multi-versioned-funcs="sum_of_squares,fft_radix2"
 
 The three abstractions that look free in the type system but
 cost real bytes and cycles on a hot path — already introduced
-in [§6's "over-abstraction trap" section](06-stl-layout.md) —
+in [§6's "over-abstraction trap" section](../06-stl-layout/) —
 deserve a second pass here because they're the most common
 *pitfall* category, not just a category of choice.
 
@@ -206,7 +206,7 @@ for (auto& s : shapes) total += s->area();
 ```
 
 Each iteration: one pointer chase to the Shape object (cache
-miss likely, see [§6](06-stl-layout.md)), one indirect call
+miss likely, see [§6](../06-stl-layout/)), one indirect call
 through the vtable (another small cost), and the vtable lookup
 itself loads from cold cache the first time. On 1M iterations,
 the overhead compounds to ~30-50 ms vs. a non-polymorphic
@@ -241,7 +241,7 @@ they bite:
 **Layer cache invalidation by source change**: every change to
 `src/*.cpp` invalidates the layer that ran `dnf install` if
 the `COPY . /src` line is *above* the `RUN dnf install`. [§4
-covers the ordering rule](04-image-strategy.md); the short
+covers the ordering rule](../04-image-strategy/); the short
 version is dependency installs go above source `COPY` lines.
 Symptom: every build re-downloads `gcc-toolset-14`. Easy 5-10
 minute fix per build, recurring.
@@ -278,7 +278,7 @@ resolution drops from "fetch and rebuild" (1-3 minutes) to
 **Network-pulled dependencies on every build**: if your build
 talks to a non-cached package registry on every build, network
 latency dominates wall-clock time. The lockfile pattern from
-[§13](13-reproducibility-abi.md) plus a mounted cache directory
+[§13](../13-reproducibility-abi/) plus a mounted cache directory
 addresses this: Conan downloads each package once, hashes it
 into the cache, and reuses across builds.
 
@@ -348,7 +348,7 @@ returning `EPERM` is usually capabilities (no `CAP_SYS_ADMIN`);
 opening `/proc/PID/mem` returning `EACCES` is SELinux blocking
 ptrace. The layer-by-layer mental model is the same regardless
 of which feature you're trying to enable. [§8's io_uring
-security gates section](08-io-latency.md) covers the specific
+security gates section](../08-io-latency/) covers the specific
 io_uring case in more depth, including the liburing
 return-value convention that makes the diagnosis trickier than
 it should be.
@@ -382,8 +382,8 @@ of step 3.
 
 For non-io_uring services, the tutorial default of `ubi9-micro`
 + no security-opt overrides is already production-appropriate.
-[§4's runtime base selection](04-image-strategy.md) and
-[§12's debug-sidecar pattern](12-analysis-debugging.md) compose
+[§4's runtime base selection](../04-image-strategy/) and
+[§12's debug-sidecar pattern](../12-analysis-debugging/) compose
 into "the prod image is minimal + locked-down; the diagnostic
 tooling lives in a separate ephemeral sidecar."
 
@@ -418,8 +418,8 @@ podman run --rm \
 # image is stripped.
 ```
 
-[§10 develops the perf workflow further](10-observability-profiling.md);
-[§12 covers the debug-sidecar pattern in full](12-analysis-debugging.md).
+[§10 develops the perf workflow further](../10-observability-profiling/);
+[§12 covers the debug-sidecar pattern in full](../12-analysis-debugging/).
 The pitfall is shipping a stripped-binary prod image without
 the corresponding debug-symbol artifact archived somewhere
 recoverable — when an incident demands a flame graph, the
@@ -486,7 +486,7 @@ illustrated by a demo elsewhere in the tutorial:
 
 ## What's next
 
-[§15 closes the loop](15-where-to-go-next.md) and points at
+[§15 closes the loop](../15-where-to-go-next/) and points at
 the books, papers, and resources you'll want once you've
 finished this tutorial — Enberg, Andrist & Sehr, Iglberger,
 the Brendan Gregg performance books, and the smaller set of

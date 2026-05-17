@@ -236,7 +236,7 @@ considerably — `std::vector`, much of `<algorithm>`, parts of
 
 The data structure consequences of constexpr-heavy designs
 (constant-time vs cache-friendly trade-offs) are
-[where §6 picks up](06-stl-layout.md).
+[where §6 picks up](../06-stl-layout/).
 
 ## Decision frame — which lever to pull when
 
@@ -285,7 +285,7 @@ podman inspect myservice:1.4.2 | jq '.[0].Config.Labels'
 ```
 
 The fourth check is the most reliable one if you remembered to
-write the labels in [§4's pattern](04-image-strategy.md). The
+write the labels in [§4's pattern](../04-image-strategy/). The
 binary-inspection commands tell you what *actually* happened
 even if the labels lie.
 
@@ -308,13 +308,13 @@ The build-time toolchain decisions also feed every other
 section forward:
 
 - The `-march` choice surfaces as the [AVX-512 SIGILL
-  pitfall in §14](14-pitfalls.md) when build host and runtime
+  pitfall in §14](../14-pitfalls/) when build host and runtime
   host disagree.
 - The `constexpr` choice interacts with [data-structure layout
-  in §6](06-stl-layout.md) — a compile-time-built lookup table
+  in §6](../06-stl-layout/) — a compile-time-built lookup table
   has different cache properties than a runtime-built one.
 - The PGO workload-collection step is itself an
-  [observability-and-load-test workflow](10-observability-profiling.md)
+  [observability-and-load-test workflow](../10-observability-profiling/)
   — you need a load generator that matches production.
 
 ## Demo
@@ -352,7 +352,7 @@ so you can inspect each with the production-diagnostic recipe above.
 ## What's next
 
 [§6 turns to the data structures the optimized binary operates
-on](06-stl-layout.md): once the compiler is doing its best,
+on](../06-stl-layout/): once the compiler is doing its best,
 the next big runtime lever is whether your data is laid out so
 the CPU's cache hierarchy can help. Flat vs node, AoS vs SoA,
 and where `std::pmr` actually moves the number — that's the

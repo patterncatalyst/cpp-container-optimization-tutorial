@@ -19848,15 +19848,46 @@ The 12-item list from the user, broken into rounds:
    Drops "Twelve" count + "(~42K words)" metric; keeps substance
    plus the framing sentence.
 
-**Verification observations:**
+**Verification observation — corrected after user reported sync gap:**
 
-- User said "verify-stacks.sh and pre-pull.sh have older copies in
-  root" — investigated thoroughly: NO copies in root. Only the
-  `scripts/` copies exist. The cleanup the user expected was
-  already done somewhere in earlier rounds, or never happened
-  (the user's recollection may have been from a different point in
-  history). Both scripts retained as the user confirmed they're
-  legit utilities.
+In r130 I claimed "verify-stacks.sh and pre-pull.sh have NO copies
+in root" based on inspecting my sandbox. The user later flagged that
+the GitHub repo (their working tree) DID have these files in root:
+
+  pre-pull.sh         (older copy; scripts/pre-pull.sh is the live one)
+  verify-stacks.sh    (older copy; scripts/verify-stacks.sh is the live one)
+
+What actually happened: my sandbox didn't have these files (lost or
+never had them), so each tarball I produced lacked them too. `tar xzf
+--strip-components=1` ADDS and OVERWRITES but does NOT DELETE files
+that exist in the target but not the archive. So these stale root
+files persisted on the user's host across every round, and continued
+to be pushed to GitHub via `git add -A && git commit && git push`
+(no deletion to capture because nothing on the host was deleted).
+
+The same gap means r130's own deletions (the legacy
+reference/statelessness.html, and the in-place root copies of the
+3 onboarding .md files that got "moved" to onboarding/) won't have
+been deleted from the user's host either. r130 effectively creates
+a new copy in onboarding/ while leaving the originals.
+
+**Required user-side cleanup after r130 push:**
+
+```bash
+git rm GETTING-STARTED.md PUSHING-TO-GITHUB.md STARTING-WITH-CLAUDE.md
+git rm pre-pull.sh verify-stacks.sh
+git rm reference/statelessness.html
+rmdir reference 2>/dev/null
+git commit -m "chore(repo): r130 follow-up — remove stale root duplicates"
+git push
+```
+
+**Procedural fix for future rounds:**
+
+Whenever a tarball removes files from the sandbox, the apply
+instructions must include explicit `git rm` commands so the user's
+working tree mirrors the sandbox. The sandbox is only a *proposed
+delta*; it's not authoritative for absence-of-file.
 
 **Files changed (count):**
 - 3 root .md files MOVED to `onboarding/`
@@ -19869,6 +19900,109 @@ The 12-item list from the user, broken into rounds:
 **Net:** root went from 6 .md files to 3. Site copy is now
 count-free where the user requested it, and accurate where it
 wasn't (the 6→7 demo count correction).
+
+### 2026-05-17 — r131: cross-reference fix + README repo-layout rewrite (re-scoped)
+
+**Why this round changed scope.**
+
+Original r131 was queued for items 8 (reading-time audit) and 10
+(diagram caption simplification). The user spot-checked the live
+site at patterncatalyst.github.io and reported 404s on cross-
+references in §8 (io-latency) and §9 (networking-kernel), with
+the comment "most cross links look broken". Same message also
+flagged the README repo-layout as out of date. Both are item-6
+work from the punch list. Re-scoped r131 to address these
+immediately since broken on-site links degrade the reading
+experience more than caption wording does. Items 8 and 10 roll
+to r132 (original r132 — the Statelessness diagrams — moves to r133;
+everything else shifts by one).
+
+**The bug.**
+
+Author wrote cross-references like:
+    [§3 develops resource discipline](03-raii-discipline.md)
+
+Inside `_docs/08-io-latency.md`, Jekyll renders this from a page
+whose URL is `/docs/08-io-latency/`. Relative-link resolution
+yields `/docs/08-io-latency/03-raii-discipline.md` — a path with
+the wrong directory AND the wrong extension (Jekyll-built site
+serves `/docs/03-raii-discipline/` not the .md file).
+
+The correct form is the Jekyll permalink-style relative path:
+    [§3 develops resource discipline](../03-raii-discipline/)
+
+The `00-outline.md` already uses this pattern; everything else
+drifted to the broken form.
+
+**The fix.**
+
+Regex sweep across all 17 `_docs/*.md` files:
+    s|\]\(([0-9]{2}-[a-z0-9-]+)\.md(#[a-zA-Z0-9-]+)?\)|](../\1/\2)|g
+
+Captures the optional `#anchor` fragment correctly. Applied with
+`sed -i -E` in a one-pass loop. Verified zero remaining bad
+patterns afterwards.
+
+**62 fixes across 9 files:**
+
+  _docs/04-image-strategy.md         7
+  _docs/05-compile-time-wins.md      6
+  _docs/06-stl-layout.md             7
+  _docs/07-memory-management.md      1
+  _docs/08-io-latency.md             7
+  _docs/09-networking-kernel.md      4
+  _docs/12-analysis-debugging.md     7
+  _docs/13-reproducibility-abi.md   10
+  _docs/14-pitfalls.md              13
+
+Files untouched (no bad patterns to begin with):
+  _docs/00-outline.md, 01-prerequisites.md, 02-introduction.md,
+  03-raii-discipline.md, 10-observability-profiling.md,
+  11-noisy-neighbors.md, 15-where-to-go-next.md,
+  16-appendix-a-conan-ubi9-perl.md
+
+Also verified `_reference/statelessness/*.md` had zero bad patterns
+(those docs were authored after the canonical pattern was established
+and use `[Doc 04](../04-process-scoped-state/)` correctly).
+
+**README repo-layout rewrite.**
+
+User flagged "the repository layout diagram on the top level
+README.md looks out of date too". Audit found four issues:
+
+1. `assets/diagrams/` was claimed nested inside assets/ but
+   actually `diagrams/` is a top-level directory (containing all
+   31 .excalidraw + .svg files).
+2. `_docs/` was labeled "00 … 14" but actually contains 17 files
+   (00 outline, 01-15 sections, 16 appendix).
+3. Missing entries: top-level Jekyll pages (index.html,
+   diagrams.html, examples.html), root config (Gemfile,
+   _config.yml), root MD files (LICENSE, CONTRIBUTING.md), the
+   `presentation/` placeholder for PPTX output.
+4. `_reference/statelessness/` substructure not detailed (just
+   mentioned as "e.g., Statelessness collection").
+
+Rewrote the layout block with: root files separately listed,
+onboarding/ contents enumerated, _docs labeled with accurate
+range, _reference/statelessness/ shown with substructure, top-level
+diagrams/ correctly separated from assets/, presentation/ listed.
+
+**Files changed (count):**
+- 9 _docs/ files (62 cross-references rewritten)
+- README.md (repository-layout block fully rewritten)
+- _plans/reconciliation-plan.md (this entry)
+
+**Round C sequence after r131 re-scope:**
+
+| Round | Items | What lands |
+|---|---|---|
+| r130 | 3, 4, 7, 9 | shipped + cleanup pushed |
+| **r131** | **6 (cross-refs) + README rewrite** | **THIS ROUND** |
+| r132 | 8, 10 | reading-time audit + diagram caption simplification |
+| r133 | 1 | 11 excalidraw+svg pairs for Statelessness sections 01-11 |
+| r134 | 2 | per-demo Jekyll wrapper pages + README augmentation |
+| r135 | 5, 12 | PRD.md update + bibliography link |
+| r136 | 11 (note only) | PPTX is 3-hour-only confirmed |
 
 ---
 

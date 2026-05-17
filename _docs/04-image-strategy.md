@@ -147,10 +147,10 @@ explicitly `COPY` them from the build stage.
 about the binary.** If the on-call playbook for "service is
 misbehaving" starts with `podman exec -it ... bash`, ship
 `ubi9-minimal`. If the playbook is "start an ephemeral
-[debug sidecar](12-analysis-debugging.md) with `--pid=container:main`
+[debug sidecar](../12-analysis-debugging/) with `--pid=container:main`
 that has gdb and the debug tools", ship `ubi9-micro`. The
 sidecar approach is what production deployments converge to and
-it's what [§12](12-analysis-debugging.md) walks through.
+it's what [§12](../12-analysis-debugging/) walks through.
 
 Distroless (Google) and Wolfi (Chainguard) are out of scope for
 this tutorial but exist in the same space as `ubi9-micro`: very
@@ -200,7 +200,7 @@ busy team this is the difference between fast feedback and the
 team turning the build cache off because it "doesn't help".
 
 The Conan lockfile reference ties into [§13's reproducibility
-story](13-reproducibility-abi.md) — pinning the lockfile is what
+story](../13-reproducibility-abi/) — pinning the lockfile is what
 makes the cached `conan install` layer trustworthy across CI runs.
 
 ## ABI labels — tell future-you what's inside
@@ -257,7 +257,7 @@ broken `ubi-micro-glibc-mismatch` variant (a 25.2 MB image built
 against newer glibc) so you can see this exact failure
 firsthand. The general "build host vs runtime host CPU"
 version of this problem — AVX-512 in the binary, an older CPU
-in production — is what [§14](14-pitfalls.md) covers; the
+in production — is what [§14](../14-pitfalls/) covers; the
 toolchain mismatch story is its sibling.
 
 ## Production diagnostic — what's actually inside this image?
@@ -290,7 +290,7 @@ podman run --rm \
 Steps 1-2 work on any image and are usually enough. Step 4 only
 works if you have a shell + `ldd` in the runtime base (so
 `ubi9-minimal` yes, `ubi9-micro` no). Step 5 is the
-[debug-sidecar pattern in miniature](12-analysis-debugging.md):
+[debug-sidecar pattern in miniature](../12-analysis-debugging/):
 join the prod container's PID namespace so you can see its
 filesystem at `/proc/1/root`, and run `ldd` from a heavier image
 that has the tool.
@@ -313,7 +313,7 @@ are not portable across CPU feature sets: a binary built with
 `-march=native` on a build host with AVX-512 will SIGILL on a
 runtime host without it. The labels above (`ai.cpp-tutorial.march`)
 make that decision visible. [§14 walks through the AVX-512
-pitfall in detail](14-pitfalls.md) — it's where this section's
+pitfall in detail](../14-pitfalls/) — it's where this section's
 "build base vs runtime base" theme meets "build host CPU vs
 runtime host CPU".
 
@@ -345,7 +345,7 @@ walks through the diagnostic recipe above on each variant.
 
 ## What's next
 
-[§5 turns the next knob over](05-compile-time-wins.md): now that
+[§5 turns the next knob over](../05-compile-time-wins/): now that
 you've decided what runtime base ships, decide what compiler
 output goes into it. LTO and PGO are the two big build-time
 levers; both produce smaller, faster binaries; both add

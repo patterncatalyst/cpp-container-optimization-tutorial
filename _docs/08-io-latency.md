@@ -174,7 +174,7 @@ enough sustained I/O pressure to justify the kernel thread — but
 for high-fan-in network proxies or storage workloads at >500k
 req/s it can shave another 30-50% off the latency floor. The
 SQPOLL kernel thread shows up as `[io_uring-sq]` in `ps`;
-[§11's cpuset isolation patterns](11-noisy-neighbors.md) apply
+[§11's cpuset isolation patterns](../11-noisy-neighbors/) apply
 to it the same way they apply to your service's worker threads
 — pin the SQPOLL thread to a dedicated core if you want to
 keep its work from contending with anything else.
@@ -341,8 +341,8 @@ fastest? Two reasons:
    buffer/fd lookup in the kernel. Registered buffers are a
    data-layout decision — you allocate the buffer pool *once*
    at setup and reuse it for every operation, which is the
-   same arena pattern [§6's `flat_map` discussion](06-stl-layout.md)
-   and [§7's PMR `monotonic_buffer_resource`](07-memory-management.md)
+   same arena pattern [§6's `flat_map` discussion](../06-stl-layout/)
+   and [§7's PMR `monotonic_buffer_resource`](../07-memory-management/)
    apply to general-purpose data. The direct liburing version
    in demo-03 doesn't (yet) use these features.
 2. **Asio's coroutine machinery batches submissions more
@@ -386,7 +386,7 @@ sudo bpftrace -e 'kprobe:io_uring_enter { @[comm] = count(); }' -c "sleep 10"
 
 For richer eBPF-based introspection of the kernel I/O paths
 (syscall histograms, request-latency distributions per fd, retransmits),
-see [§9's bcc-tools + bpftrace coverage](09-networking-kernel.md) —
+see [§9's bcc-tools + bpftrace coverage](../09-networking-kernel/) —
 this is exactly the territory those tools were built for.
 
 ## Why this is a C++ concern
@@ -411,7 +411,7 @@ kernel can't reclaim; a CQE not `cqe_seen`'d is a ring slot
 permanently consumed. The C++-shaped wrapper that pairs each
 of these with `unique_ptr`-style ownership semantics is what
 makes the code production-grade — the same pattern
-[§3 develops for resource discipline more broadly](03-raii-discipline.md),
+[§3 develops for resource discipline more broadly](../03-raii-discipline/),
 applied here to kernel-side resources where the leak symptoms
 are even harder to spot than the file-descriptor leaks §3
 walks through.
@@ -429,7 +429,7 @@ Run `./demo.sh` to bring everything up + drive load + print a
 side-by-side summary. The verified r67 numbers at the top of
 this section are from that run. Open
 `http://127.0.0.1:3000` to inspect the gRPC histograms and
-counters in Grafana ([§10's observability stack](10-observability-profiling.md)).
+counters in Grafana ([§10's observability stack](../10-observability-profiling/)).
 
 The `compose.production.yml` variant shows the custom seccomp
 + SELinux configuration that demo-03 actually requires in
@@ -455,7 +455,7 @@ production (rather than the development-friendly
 ## What's next
 
 [§9 moves down the stack to the kernel
-parameters](09-networking-kernel.md) that affect the data
+parameters](../09-networking-kernel/) that affect the data
 paths this section's I/O patterns ride on: TCP buffer sizes,
 `net.core.somaxconn`, the cost of `veth` pairs and bridges,
 and the eBPF tools (`bcc-tools`, `bpftrace`, `bpftool`) for

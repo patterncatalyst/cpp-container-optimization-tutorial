@@ -425,7 +425,7 @@ sudo bpftool prog show | grep -E 'run_cnt|run_time'
 ```
 
 The same eBPF tooling is what [§10 uses for service
-profiling](10-observability-profiling.md) — the difference is
+profiling](../10-observability-profiling/) — the difference is
 focus: §10's `runqlat` is about CPU scheduling latency
 *inside* your service; §9's `tcptracer` and `tcpretrans` are
 about kernel network state *underneath* your service. Both
@@ -457,7 +457,7 @@ wrapping pattern, e.g., [`folly::File`](https://github.com/facebook/folly/blob/m
 or hand-rolled) protect against the version of this problem
 that's C++-specific: a connection leak under exception leaves
 the kernel with stranded sockets in `CLOSE_WAIT`. The pattern
-in [§3 (RAII discipline)](03-raii-discipline.md) is the same
+in [§3 (RAII discipline)](../03-raii-discipline/) is the same
 shape applied to network resources.
 
 ## Demo
@@ -469,7 +469,7 @@ then with `--network=host`, and the demo prints the p50/p99
 delta. The `compose.production.yml` variant in that demo also
 shows the custom seccomp + SELinux configuration needed for
 io_uring under non-default network namespacing — see
-[§14 for the EPERM/EACCES rubric](14-pitfalls.md) that explains
+[§14 for the EPERM/EACCES rubric](../14-pitfalls/) that explains
 which security layer denied which syscall.
 
 **Optional `demo-08-ebpf-analysis`** — a future addition that
@@ -495,7 +495,7 @@ demos (01-07) stabilize.
 
 ## What's next
 
-[§10 turns the lights on](10-observability-profiling.md):
+[§10 turns the lights on](../10-observability-profiling/):
 with the network plumbing measurable, see what your service
 is doing on top of it. Tracing, metrics, logs, and the
 OpenTelemetry SDK choice that costs an 8.5× throughput

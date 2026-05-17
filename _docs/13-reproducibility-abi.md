@@ -39,7 +39,7 @@ the same inputs. *Same inputs*, in practice, means:
 
 1. **Same source tree** (a git SHA pins this).
 2. **Same toolchain** (compiler version, glibc version,
-   linker, archiver — pins via the build base image, see [§4](04-image-strategy.md)).
+   linker, archiver — pins via the build base image, see [§4](../04-image-strategy/)).
 3. **Same dependency graph** (Conan lockfile pins every
    transitive package with its revision hash — see below).
 4. **Same build environment** (no network reads during build,
@@ -253,14 +253,14 @@ on top; the PGO presets inherit `conan-release` and override
 just the profile flags).
 
 A fifth preset for sanitizer builds (`conan-asan`) was shown
-in [§12](12-analysis-debugging.md). Other presets you might
+in [§12](../12-analysis-debugging/). Other presets you might
 add: `conan-coverage` (covered below), `conan-arm64` for
 cross-compiling, `conan-release-musl` for the static-ish
 variant of the release build. Keep the set small enough that
 developers can name them all from memory.
 
 The `march=x86-64-v3` choice is from [§14's portable
-micro-architecture discussion](14-pitfalls.md) — pinning a
+micro-architecture discussion](../14-pitfalls/) — pinning a
 portable baseline that runs on Haswell+ Intel and Zen 2+ AMD,
 not the build host's `-march=native`.
 
@@ -312,8 +312,8 @@ podman build --network=none \
 
 The build *cannot* drift because it physically can't reach
 the upstream registries. Combined with [§4's
-image-strategy](04-image-strategy.md), [§5's compile-time
-labels](05-compile-time-wins.md), and a Conan lockfile, this
+image-strategy](../04-image-strategy/), [§5's compile-time
+labels](../05-compile-time-wins/), and a Conan lockfile, this
 produces a build that's reproducible across CI runs, across
 contributor machines, and across time.
 
@@ -433,7 +433,7 @@ first prevents drift, the second catches it when prevention fails.
 
 ## Tests as a build-stage quality gate — GoogleTest in hermetic CI
 
-GoogleTest was introduced in [§12](12-analysis-debugging.md);
+GoogleTest was introduced in [§12](../12-analysis-debugging/);
 the relevant Konflux/hermetic-build wrinkle is that the test
 run is a build-stage gate — the build fails if `ctest`
 returns nonzero, and the failing test output is in the build
@@ -467,7 +467,7 @@ same pattern: a separate `bench` target, run as a build
 stage, comparing against a baseline; the build fails if
 performance regresses past a threshold. This is the same
 pattern demo-02 uses for the flat_map / unordered_map
-comparison from [§6](06-stl-layout.md), but turned into a
+comparison from [§6](../06-stl-layout/), but turned into a
 gate.
 
 ## Coverage — gcov/lcov for GCC builds
@@ -543,7 +543,7 @@ reflect what the source actually looks like rather than what
 optimization produced. The full reference is at
 [clang.llvm.org/docs/SourceBasedCodeCoverage.html](https://clang.llvm.org/docs/SourceBasedCodeCoverage.html).
 
-The flow looks similar to PGO from [§5](05-compile-time-wins.md)
+The flow looks similar to PGO from [§5](../05-compile-time-wins/)
 because it uses the same `.profraw` / `llvm-profdata`
 machinery:
 
@@ -626,7 +626,7 @@ same code-review tooling.
 Reproducibility produces a binary that's bit-identical given
 the same inputs. The *next* question — "what toolchain was
 this binary built with?" — is the one [§4 covered with the
-`LABEL` pattern](04-image-strategy.md). The labels worth
+`LABEL` pattern](../04-image-strategy/). The labels worth
 encoding for a hermetic build:
 
 ```dockerfile
@@ -821,7 +821,7 @@ recipe-revision drift is concretely visible).
 
 ## What's next
 
-[§14 collects the most common things that go wrong](14-pitfalls.md),
+[§14 collects the most common things that go wrong](../14-pitfalls/),
 in one place, with the diagnosis for each. AVX-512 mismatches
 that SIGILL on production hosts, abstraction overhead invisible
 in the type system, container builds that take seven minutes

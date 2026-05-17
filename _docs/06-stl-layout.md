@@ -97,7 +97,7 @@ values per line while the node-based version is paying the
 miss cost regardless of payload size.
 
 The cache mechanism is the same one [§7 develops for the
-allocator stack](07-memory-management.md): malloc costs are
+allocator stack](../07-memory-management/): malloc costs are
 small; the *first write to the page* that allocated memory
 points to is what costs the time. STL container choice
 determines both how many writes happen and how spatially
@@ -159,7 +159,7 @@ The choice is workload-shaped:
 Demo-02 runs the same benchmarks twice: once unconstrained, once
 under `podman run --memory=128m --memory-swap=128m`. The
 memory.high pressure forces the kernel to reclaim pages
-aggressively (the [§7 cgroup memory.high mechanism](07-memory-management.md)
+aggressively (the [§7 cgroup memory.high mechanism](../07-memory-management/)
 in action).
 
 Under pressure, **node-based containers degrade faster than
@@ -172,7 +172,7 @@ slowdown under pressure; `unordered_map` shows 2-5×; `map`
 can be 10-50× worse depending on N.
 
 This is the same mechanism that makes [§11's noisy-neighbor
-scenario costly](11-noisy-neighbors.md) — once the system is
+scenario costly](../11-noisy-neighbors/) — once the system is
 reclaiming pages, latency-sensitive containers with scattered
 working sets pay the most.
 
@@ -338,8 +338,8 @@ perf script | stackcollapse-perf.pl | flamegraph.pl > out.svg
 ./bench --benchmark_filter='BM_Iterate_.*' --benchmark_repetitions=5
 ```
 
-[§10 develops the perf + flamegraph workflow further](10-observability-profiling.md);
-[§7 covers the allocator-side numbers](07-memory-management.md)
+[§10 develops the perf + flamegraph workflow further](../10-observability-profiling/);
+[§7 covers the allocator-side numbers](../07-memory-management/)
 the container choice influences.
 
 ## Why this is a C++ concern
@@ -361,7 +361,7 @@ means the wrong choice silently costs 2.5× on iterations and
 always the right answer; the right answer is the one that
 matches your access pattern, and you have to measure to know.
 
-The interaction with [§7's allocator stack](07-memory-management.md)
+The interaction with [§7's allocator stack](../07-memory-management/)
 is direct: `flat_map`'s contiguous storage benefits from
 `std::pmr::monotonic_buffer_resource` (bump-allocate from a
 hot arena); `unordered_map`'s scattered nodes benefit much
@@ -400,7 +400,7 @@ are from this demo's r58/r59 run.
 ## What's next
 
 [§7 keeps the workload but changes the allocator under
-it](07-memory-management.md): now that the data layout is
+it](../07-memory-management/): now that the data layout is
 decided, the next lever is where the memory those structures
 sit on comes from. `std::pmr::monotonic_buffer_resource` and
 `std::pmr::unsynchronized_pool_resource` are the two arenas

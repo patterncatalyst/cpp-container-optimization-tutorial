@@ -45,19 +45,36 @@ See [PRD.md](PRD.md) §3 for the complete non-goals list.
 
 ```
 .
-├── PRD.md                   ← the project's source-of-intent
-├── onboarding/              ← getting-started + repo workflow docs
+├── README.md                    ← this file
+├── PRD.md                       ← the project's source-of-intent
+├── CONTRIBUTING.md              ← contribution + iteration conventions
+├── LICENSE                      ← Apache 2.0
+├── Gemfile                      ← Jekyll deps
+├── _config.yml                  ← Jekyll site config
+│
+├── index.html                   ← Jekyll homepage
+├── examples.html                ← demos gallery page
+├── diagrams.html                ← diagrams gallery page
+│
+├── onboarding/                  ← read-once setup + workflow docs
+│   ├── GETTING-STARTED.md
+│   ├── PUSHING-TO-GITHUB.md
+│   └── STARTING-WITH-CLAUDE.md
+│
+├── _docs/                       ← tutorial sections (00 outline, 01-15, 16 appendix)
+├── _reference/                  ← reference docs
+│   └── statelessness/           ← Statelessness companion (00 index + 01-11 docs)
 ├── _plans/
-│   └── reconciliation-plan.md  ← what's verified vs. claimed
-├── _docs/                   ← tutorial sections (00 … 14)
-├── _reference/              ← reference docs (e.g., Statelessness collection)
-├── _layouts/                ← Jekyll wrappers (default, tutorial, plan)
-├── _includes/               ← header, footer, excalidraw embed
+│   └── reconciliation-plan.md   ← what's verified vs. claimed
+│
+├── _layouts/                    ← Jekyll wrappers (default, tutorial, plan)
+├── _includes/                   ← shared HTML partials (header, footer, embed)
 ├── assets/
-│   ├── css/                 ← site styles (one file)
-│   ├── diagrams/            ← paired .svg + .excalidraw per section
-│   └── images/              ← screenshots, hero
-├── examples/                ← runnable demos (excluded from site build)
+│   ├── css/                     ← site styles
+│   └── images/                  ← screenshots, hero
+├── diagrams/                    ← paired .svg + .excalidraw per section
+│
+├── examples/                    ← runnable demos (excluded from site build)
 │   ├── demo-01-image-strategy/
 │   ├── demo-02-stl-layout/
 │   ├── demo-03-io-uring-grpc/
@@ -65,9 +82,11 @@ See [PRD.md](PRD.md) §3 for the complete non-goals list.
 │   ├── demo-05-isolation/
 │   ├── demo-06-memory-and-allocators/
 │   └── demo-07-quality-pipeline/
-├── observability/           ← compose stack: Grafana/Prom/Tempo/Loki/Mimir
-├── scripts/                 ← test-template + per-demo + aggregator
-└── .github/workflows/       ← Pages build + demo CI
+│
+├── observability/               ← shared compose stack: grafana/otel-lgtm
+├── presentation/                ← PPTX output (when rendered)
+├── scripts/                     ← test-template + per-demo + aggregator + utilities
+└── .github/workflows/           ← Pages build + demo CI
 ```
 
 ## The seven demos

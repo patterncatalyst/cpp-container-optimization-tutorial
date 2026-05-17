@@ -295,6 +295,6 @@ combination — useful for seeing how the *layout* decisions from
 
 ## What's next
 
-[§8 leaves memory and goes to the network](08-io-latency.md):
+[§8 leaves memory and goes to the network](../08-io-latency/):
 `io_uring` and async gRPC, where the ratio of useful CPU to
 syscall overhead is the fight.

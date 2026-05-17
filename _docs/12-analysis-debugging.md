@@ -241,7 +241,7 @@ never reaches the runtime image. Test discovery is automatic
 via `gtest_discover_tests` — adding a `TEST(MyFixture, ...)`
 makes it run on the next CMake configure.
 
-[§13 covers the coverage measurement workflow](13-reproducibility-abi.md)
+[§13 covers the coverage measurement workflow](../13-reproducibility-abi/)
 that pairs with GoogleTest — gcov/lcov for GCC builds and
 clang source-based coverage for LLVM builds.
 
@@ -604,14 +604,14 @@ the probe. Worth it when:
 - You need to compare two related runtimes (different load
   shapes, different versions).
 
-[§7 covers the allocator-side of the same investigation](07-memory-management.md);
+[§7 covers the allocator-side of the same investigation](../07-memory-management/);
 OI is the tool for the data-structure side.
 
 ## The debug sidecar pattern — gdb without rebuilding the image
 
 The single most useful pattern for debugging a containerized
 C++ service. The runtime image stays small (`ubi9-micro` from
-[§4](04-image-strategy.md), no gdb, no debug symbols). When
+[§4](../04-image-strategy/), no gdb, no debug symbols). When
 diagnosis demands gdb, spawn an *ephemeral sidecar container*
 that:
 
@@ -652,9 +652,9 @@ changes that survive past the debug session.
 
 Demo-07's `compose.debug.yml` ships a working version of this
 pattern. The same pattern surfaces in [§4's image-strategy
-production diagnostic](04-image-strategy.md) (running `ldd`
+production diagnostic](../04-image-strategy/) (running `ldd`
 from a sidecar against a stripped runtime image) and [§14's
-profiling-perf-in-containers discussion](14-pitfalls.md) (the
+profiling-perf-in-containers discussion](../14-pitfalls/) (the
 symbol-resolution trap).
 
 ## `gdbserver` — the alternative when sidecar isn't enough
@@ -765,7 +765,7 @@ know:
     → bpftrace runqlat (see §10)
 ```
 
-[§10 covers the perf and bpftrace tools](10-observability-profiling.md)
+[§10 covers the perf and bpftrace tools](../10-observability-profiling/)
 that pair with this section's analysis pipeline; the diagnostic
 ladder goes from "I have static suspicion" through "I have
 runtime evidence" to "I have a specific question and need a
@@ -831,7 +831,7 @@ been wired up with each.
 
 ## What's next
 
-[§13 turns to the longer-lived question](13-reproducibility-abi.md):
+[§13 turns to the longer-lived question](../13-reproducibility-abi/):
 how do you build the same binary again next month? Lockfiles,
 hermetic builds with Konflux and Cachi2, coverage measurement
 with gcov/lcov (GCC) and clang's source-based coverage (LLVM),
