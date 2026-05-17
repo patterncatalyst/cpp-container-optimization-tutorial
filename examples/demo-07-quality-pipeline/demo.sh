@@ -53,50 +53,24 @@ mkdir -p reports
 # placeholder revision. This keeps first-run friction low while still
 # pinning everything once the lockfile is regenerated.
 #
-# G-44 (r115): we explicitly DON'T use `conan profile detect --force` here
-# because it auto-picks the host compiler version, which may be newer than
-# conan 2.x's settings.yml knows about (e.g., gcc 16 on Fedora 44 isn't
-# in conan's compiler.version list as of conan 2.x). Instead, we pin
-# explicit settings that match the Containerfile's gcc-toolset-14.
+# G-48 (r118): the checked-in conan.lock is a placeholder stub. On first
+# run we truncate it to zero bytes so:
+#   (a) the Containerfile's `COPY conan.lock` still finds a file to copy
+#       (deletion would break that step), and
+#   (b) the container's `[ -s conan.lock ]` test routes to the
+#       fresh-resolve branch.
+# G-50 (r120) handles the in-container companion: rm the empty file
+# before `conan install` so conan's auto-discovery doesn't trip on it.
 #
-# G-48 (r118): if regen fails, TRUNCATE the lockfile to zero bytes
-# (don't delete it). Two reasons:
-#   (a) the Containerfile's `COPY conan.lock ./conan.lock` needs the
-#       file to EXIST on the host. Deleting it makes podman build fail
-#       at the COPY step.
-#   (b) the Containerfile's `if [ -s conan.lock ]` check tests for
-#       NON-EMPTY. A zero-byte file passes the COPY but routes to the
-#       fresh-resolve branch inside the container.
-# Truncate satisfies both invariants.
+# We deliberately do NOT try to regenerate the lockfile on the host —
+# the host's conan profile is unreliable (gcc version drift, stale
+# profiles from prior `conan profile detect` runs, etc.). The container
+# is the source of truth for the build environment, so let IT decide
+# what versions to pin. After a successful build, the user can extract
+# the real lockfile from the container layer and commit it.
 if grep -q '%1700000000.0' conan.lock 2>/dev/null; then
-  log_warn "conan.lock contains placeholder revisions; regenerating"
-  regen_succeeded=0
-  if command -v conan >/dev/null 2>&1; then
-    if conan lock create . \
-        --lockfile-out=conan.lock \
-        -s build_type=RelWithDebInfo \
-        -s compiler=gcc \
-        -s compiler.version=14 \
-        -s compiler.libcxx=libstdc++11 \
-        -s compiler.cppstd=23 \
-        -s arch=x86_64 \
-        -s os=Linux 2>&1; then
-      log_ok "lockfile regenerated"
-      regen_succeeded=1
-    else
-      log_warn "host-side lockfile regen failed"
-      log_warn "(this is usually because conan's profile validation runs"
-      log_warn " before the -s overrides, and the profile has an unsupported"
-      log_warn " compiler version from a prior 'conan profile detect')"
-    fi
-  else
-    log_warn "conan not on host"
-  fi
-  if [[ $regen_succeeded -eq 0 ]]; then
-    log_warn "truncating placeholder lockfile to zero bytes"
-    log_warn "the build container will resolve dependencies fresh on first run"
-    > conan.lock
-  fi
+  log_warn "conan.lock is a placeholder; container will resolve dependencies fresh"
+  > conan.lock
 fi
 
 run_phase() {

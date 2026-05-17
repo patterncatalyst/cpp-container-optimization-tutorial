@@ -46,7 +46,9 @@ std::size_t StaticMemoryChannel::recv_impl(std::span<std::byte> out) {
 
 // ---- ABI sample ----
 std::string_view greet(const Greeting& g) {
-    return {g.text};
+    // .data() yields const char* and string_view's const-char-pointer
+    // constructor uses strlen to find the null terminator.
+    return {g.text.data()};
 }
 
 }  // namespace demo07

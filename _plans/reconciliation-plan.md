@@ -17894,6 +17894,342 @@ corresponding to Ninja", "CMAKE_CXX_COMPILER not set") is a misleading
 cascade — the real cause is the missing toolchain file from a few
 lines earlier in the output.
 
+### 2026-05-17 — r122: Round A verification — quality pipeline catches real findings
+
+User ran r121. **Major milestone reached.** The build completed end-to-end:
+
+```
+[1/7] Building CXX object CMakeFiles/demo07_channel.dir/src/lib/channel.cpp.o
+[2/7] Linking CXX shared library libdemo07_channel.so.1.0.0
+[3/7] Creating library symlink libdemo07_channel.so.1 libdemo07_channel.so
+[4/7] Building CXX object CMakeFiles/demo07-svc.dir/src/svc/main.cpp.o
+[5/7] Linking CXX executable demo07-svc
+[6/7] Building CXX object CMakeFiles/demo07_tests.dir/tests/test_channel.cpp.o
+[7/7] Linking CXX executable demo07_tests
+```
+
+Then the analyzer stage fired:
+
+```
+[4/4] STEP 4/5: RUN cppcheck --enable=warning,style,performance,portability ...
+Checking src/lib/channel.cpp ...
+1/2 files checked 54% done
+Checking src/svc/main.cpp ...
+2/2 files checked 100% done
+```
+
+✓ cppcheck ran clean — no findings against the demo source.
+
+Then clang-tidy fired and produced **real findings**:
+
+- `channel.hpp:22` — `VirtualChannel` defines a default destructor but
+  not the other special members (cppcoreguidelines-special-member-functions)
+- `channel.hpp:34, 58` — `size()` should be `[[nodiscard]]`
+  (modernize-use-nodiscard)
+- `channel.hpp:43` — CRTP base has publicly accessible implicit default
+  constructor (bugprone-crtp-constructor-accessibility)
+- `channel.hpp:70` — `char text[64]` should be `std::array`
+  (cppcoreguidelines-avoid-c-arrays, modernize-avoid-c-arrays)
+- `main.cpp:16` — `g_stop` non-const global
+  (cppcoreguidelines-avoid-non-const-global-variables)
+- `main.cpp:17` — `on_sig(int)` unnamed parameter
+  (readability-named-parameter)
+- `main.cpp:20` — `main()` may throw exceptions
+  (bugprone-exception-escape)
+- `main.cpp:21, 22` — `std::signal()` return value ignored (cert-err33-c)
+- `main.cpp:29, 30` — `64 * 1024` int-multiplication widened to size_t
+  (bugprone-implicit-widening-of-multiplication-result)
+- `main.cpp:34` — `payload[i]` non-const-index on std::array
+  (cppcoreguidelines-pro-bounds-constant-array-index)
+
+**This is the quality pipeline doing exactly what it should.** These
+aren't infrastructure problems — they're real code-quality findings
+from a strict clang-tidy preset (`bugprone-*`, `cppcoreguidelines-*`,
+`modernize-*`, `performance-*`, `portability-*`, `readability-*` with
+`WarningsAsErrors=*`).
+
+**Two pedagogical paths considered:**
+
+1. **Suppress with NOLINT.** Quick but pedagogically weak — teaches
+   the reader to silence the tool rather than understand it.
+2. **Fix the source.** Demonstrates "here's idiomatic code that passes
+   a strict quality pipeline." The lesson the demo is supposed to teach.
+
+Chose option 2 except where there's a legitimate exception
+(the signal-handler global — there's no clean alternative for
+signal-safe state without a global, so we add `NOLINTNEXTLINE` with
+an explanatory comment).
+
+**channel.hpp fixes (5):**
+
+```cpp
+class VirtualChannel {
+public:
+    VirtualChannel() = default;
+    VirtualChannel(const VirtualChannel&) = delete;
+    VirtualChannel(VirtualChannel&&) = delete;
+    VirtualChannel& operator=(const VirtualChannel&) = delete;
+    VirtualChannel& operator=(VirtualChannel&&) = delete;
+    virtual ~VirtualChannel() = default;
+    // ... interface methods ...
+};
+```
+
+Rule of five: interface base, explicitly delete copy/move.
+
+```cpp
+[[nodiscard]] std::size_t size() const noexcept { return write_ - read_; }
+```
+
+Applied to both `MemoryChannel::size()` and `StaticMemoryChannel::size()`.
+
+```cpp
+template <class Derived>
+class StaticChannel {
+public:
+    std::size_t send(...);  // CRTP interface
+    std::size_t recv(...);
+private:
+    StaticChannel() = default;
+    friend Derived;  // Only the legitimate subclass can construct
+};
+```
+
+CRTP constructor private + befriend Derived. Prevents the
+"accidentally instantiate the wrong Derived" mistake that public
+default constructors invite.
+
+```cpp
+struct Greeting {
+    std::uint32_t version;
+    std::array<char, 64> text;  // was: char text[64]
+};
+```
+
+`std::array<char, 64>` has identical memory layout to `char[64]`
+(it's a struct containing the C array), so the ABI is preserved.
+Future abi-break demonstrations (Round B) can still break it by
+changing the size or adding fields.
+
+Also cleaned up the stale header guard `DEMO06_CHANNEL_HPP` →
+`DEMO07_CHANNEL_HPP`.
+
+**channel.cpp adjustment (1):**
+
+```cpp
+std::string_view greet(const Greeting& g) {
+    return {g.text.data()};  // was: return {g.text};
+}
+```
+
+`g.text` is now `std::array<char, 64>`, so `.data()` gets the
+`const char*` that string_view's strlen-using constructor wants.
+
+**main.cpp fixes (6+1 NOLINT):**
+
+```cpp
+namespace {
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+std::atomic<bool> g_stop{false};
+
+void on_sig(int /*signum*/) { g_stop = true; }
+}  // namespace
+```
+
+NOLINT on g_stop (signal-handler globals are unavoidable; documented
+inline). Named the parameter on on_sig.
+
+```cpp
+constexpr std::size_t kBufferBytes  = 64UZ * 1024;
+constexpr std::size_t kPayloadBytes = 1024;
+constexpr auto        kTickDelay    = std::chrono::milliseconds{250};
+```
+
+`64UZ` is the C++23 size_t literal — multiplication stays in size_t
+throughout, no widening. Magic numbers replaced with named constants.
+
+```cpp
+(void)std::signal(SIGTERM, on_sig);
+(void)std::signal(SIGINT,  on_sig);
+```
+
+Explicit void-cast acknowledges we don't care what the previous
+handler was.
+
+```cpp
+{
+    std::size_t i = 0;
+    for (auto& b : payload) {
+        b = static_cast<std::byte>(i++ & 0xFFU);
+    }
+}
+```
+
+Range-based for with external index counter — passes
+`cppcoreguidelines-pro-bounds-constant-array-index` (no subscript
+operator at all). The block-scope keeps `i` from leaking.
+
+```cpp
+int main() {
+    try {
+        return run();
+    } catch (const std::exception& e) {
+        std::cerr << "fatal: " << e.what() << '\n';
+        return 1;
+    } catch (...) {
+        std::cerr << "fatal: unknown exception\n";
+        return 1;
+    }
+}
+```
+
+main() catches all exceptions — satisfies bugprone-exception-escape.
+The actual body moved into a namespace-private `run()` for clarity.
+
+**demo.sh lockfile cleanup:**
+
+User correctly noted that the host-side conan regen output is "ugly".
+Every invocation prints:
+
+```
+[warn]  conan.lock contains placeholder revisions; regenerating
+Using lockfile: '...'
+ERROR: Invalid setting '16' is not a valid 'settings.compiler.version' value.
+Possible values are ['4.1', ..., '15.2']
+Read "http://docs.conan.io/2/knowledge/faq.html#error-invalid-setting"
+[warn]  host-side lockfile regen failed
+[warn]  (this is usually because conan's profile validation runs
+[warn]   before the -s overrides, ...)
+[warn]  truncating placeholder lockfile to zero bytes
+[warn]  the build container will resolve dependencies fresh on first run
+```
+
+The host-side regen has never worked for this user (gcc 16 on Fedora 44
+isn't in conan 2.x's settings.yml), and the fallback always fires.
+Dropped the regen attempt entirely:
+
+```bash
+if grep -q '%1700000000.0' conan.lock 2>/dev/null; then
+  log_warn "conan.lock is a placeholder; container will resolve dependencies fresh"
+  > conan.lock
+fi
+```
+
+One warning line instead of eight, and no embedded conan error.
+The container is the source of truth for the build environment anyway —
+the host's conan profile doesn't need to participate.
+
+**Round A verification status after r122:**
+
+| Step | r120 | r121 | r122 |
+|---|---|---|---|
+| host-side lockfile UX | ugly | ugly | ✓ clean one-liner |
+| Stream 9 libabigail-builder | ✓ | ✓ | ✓ |
+| toolchain installs | ✓ | ✓ | ✓ |
+| conan install in container | ✓ (G-50) | ✓ | ✓ |
+| conan resolves gtest | ✓ | ✓ | ✓ |
+| cmake --preset (toolchain) | ✗ G-51 | ✓ (G-51 fix) | ✓ |
+| **cmake build (compile demo)** | not reached | **✓** | ✓ |
+| **cppcheck on demo source** | not reached | **✓ clean** | ✓ clean |
+| **clang-tidy on demo source** | not reached | **✗ real findings** | **next to verify** |
+| tests + asan + abi | not reached | not reached | after analyzer |
+
+**Files changed in r122 (5):**
+
+- `examples/demo-07-quality-pipeline/src/include/demo07/channel.hpp`:
+  rule of five on VirtualChannel, [[nodiscard]] on size(), private CRTP
+  constructor + friend Derived, std::array<char, 64>, header guard rename
+- `examples/demo-07-quality-pipeline/src/lib/channel.cpp`: `g.text.data()`
+- `examples/demo-07-quality-pipeline/src/svc/main.cpp`: NOLINT g_stop,
+  named on_sig param, named constants, void-cast signal returns,
+  range-for with index, try/catch in main
+- `examples/demo-07-quality-pipeline/demo.sh`: drop host-side conan
+  regen; truncate placeholder directly
+- `_plans/reconciliation-plan.md`: this r122 entry + G-52 catalog
+
+---
+
+## Gotchas (running catalog) — continued
+
+### G-52 · Strict clang-tidy + WarningsAsErrors=* surfaces many findings on first run (r122)
+
+**Symptom.** First time you turn on a comprehensive .clang-tidy preset
+covering `bugprone-*`, `cppcoreguidelines-*`, `modernize-*`,
+`performance-*`, `portability-*`, `readability-*`, with
+`WarningsAsErrors=*`, against idiomatic-but-not-tidied C++ code, you
+get a wall of "errors" that all look something like:
+
+```
+src/include/demo07/channel.hpp:22:7: error: class 'VirtualChannel'
+  defines a default destructor but does not define a copy constructor,
+  a copy assignment operator, a move constructor or a move assignment
+  operator [cppcoreguidelines-special-member-functions,
+  -warnings-as-errors]
+```
+
+The build fails on the first clang-tidy run because of "errors that
+weren't errors before."
+
+**Cause.** clang-tidy's check suite has grown to several hundred checks
+across many categories, and the cppcoreguidelines and modernize ones in
+particular are opinionated. Code that compiles cleanly under
+`-Wall -Wextra` typically still has:
+
+- Missing `[[nodiscard]]` on accessors and pure functions
+- Implicit type-widening multiplication (`64 * 1024` → size_t)
+- C-style arrays where std::array would do
+- Public CRTP base constructors (subtle pitfall)
+- Rule-of-five gaps on interface base classes
+- Signal-handler globals (`cppcoreguidelines-avoid-non-const-global-
+  variables` doesn't know they're forced by the signal-handler safe set)
+- `signal()`/`fopen()`-class return values silently dropped (cert-err33-c)
+- Bounds-related concerns (`cppcoreguidelines-pro-bounds-*`)
+
+None of these are bugs in the usual sense. They are
+"could-be-tighter" findings. With `WarningsAsErrors=*` they fail the
+build; without it they print noise that gets ignored.
+
+**Fix.** Three reasonable strategies:
+
+1. **Fix the source (recommended for new code).** Most findings have
+   clean rewrites that are objectively better:
+
+   | Finding | Fix |
+   |---|---|
+   | `modernize-use-nodiscard` on accessor | Add `[[nodiscard]]` |
+   | `bugprone-implicit-widening-of-multiplication-result` | Use size_t literal: `64UZ * 1024` |
+   | `cppcoreguidelines-avoid-c-arrays` | `std::array<T, N>` |
+   | `cppcoreguidelines-special-member-functions` | Explicit `= delete` or `= default` |
+   | `bugprone-crtp-constructor-accessibility` | Private ctor + `friend Derived` |
+   | `readability-named-parameter` | Name params even if unused: `int /*signum*/` |
+   | `bugprone-exception-escape` on main() | Wrap in try/catch |
+   | `cert-err33-c` on signal()/fopen()/etc. | `(void)` cast or use return value |
+   | `cppcoreguidelines-pro-bounds-constant-array-index` | Range-based for, or use iterators |
+
+2. **NOLINT specific cases (where a finding is legitimately unavoidable).**
+   E.g., signal-handler globals genuinely need to be at namespace scope
+   for signal-safety. Use `// NOLINTNEXTLINE(check-name)` with an
+   explanatory comment.
+
+3. **Relax the check selection (last resort).** Edit `.clang-tidy` to
+   drop checks that produce too much noise for your codebase. Disabling
+   `WarningsAsErrors=*` would turn the strict mode off entirely; better
+   to remove specific checks while keeping the rest strict.
+
+**Where else this applies.** Any project adopting a comprehensive
+clang-tidy preset for the first time. Budget time for a "tidy pass"
+the first time you enable it — typically several hours of file-by-file
+cleanup. After that, CI keeps you tidy as you go.
+
+**Best practice.** Add clang-tidy to CI from day one. Don't try to
+"clean up later" — every PR after the initial enablement is a chance
+to keep the cleanup small.
+
+The demo's `.clang-tidy` settings are a good starting point for a real
+project. Audit each check you've enabled; understand why you want it;
+write team-level guidance for the harder ones (CRTP, rule of five,
+signal-handler globals).
+
 ---
 
 ## Known divergences from the PRD
