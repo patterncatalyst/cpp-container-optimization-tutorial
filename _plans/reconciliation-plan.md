@@ -15653,6 +15653,210 @@ Progress: 7 of 8 prose-work sections now publishable (was 5 after
 r109). 1 stub (§9) + 3 partials (§12, §13, §14) remain across
 r111-r112, then r113 polish.
 
+### 2026-05-16 — r111: Path D — §9 + §14 prose, batch 3 of 4
+
+The system-tuning pair. §9 networking-kernel and §14 pitfalls.
+The user-requested additions for §9 (bcc-tools, bpftrace, bpftool
+with network-diagnosis angle) are now in §9 prose; §14 fully
+develops the EPERM/EACCES rubric content that was already in
+partial form.
+
+**§9 networking-kernel — 67 → 502 lines (~2780 words, 16 sections, 8 xrefs)**
+
+Hook with the latency profile across networking modes:
+
+| Mode | Per-request latency | Throughput cap |
+|---|---|---|
+| `--network=host` | ≈ bare-metal | line-rate |
+| `--network=bridge` | +5-15 µs | ~30 Gbps |
+| `--network=slirp4netns` | +100-1000 µs | ~1 Gbps |
+| `--network=pasta` | +20-50 µs | ~10 Gbps |
+
+Structure:
+
+1. Frontmatter (refined description names the 4 networking modes
+   + the eBPF tooling additions)
+2. Learning objectives (5 bullets including eBPF tooling)
+3. Diagram include (09-networking-veth-vs-host)
+4. Where container networking latency comes from — hook table
+5. The packet path under rootless networking — slirp4netns
+   userspace TCP/IP stack mechanism; pasta as the upgrade path
+6. veth + bridge — the kernel-level path; ~5-15 µs overhead
+7. --network=host — escape hatch; when to use / when not to
+8. The sysctls that move tail latency — the small set of four
+   (somaxconn, netdev_max_backlog, tcp_tw_reuse, tcp_no_metrics_save)
+   with mechanism + when-to-touch + verification commands;
+   the "sysctls that look productive but don't" callout
+9. Per-namespace vs host-only sysctls — the rule of thumb
+   table for net.ipv4.* (per-ns) vs net.core.* (mixed); how to
+   verify; --sysctl flag for podman run
+10. **bcc-tools — network diagnostics suite** — table of 7 tools
+    (tcpconnect, tcpaccept, tcpretrans, tcptop, tcplife,
+    tcptracer, tcpdrop); 3 worked examples; install command
+11. **bpftrace — ad-hoc kernel queries** — 4 working one-liners
+    (per-process connect count, retransmit latency histogram,
+    netdev_max_backlog bursts, tcp_recvmsg latency)
+12. **bpftool — introspecting BPF programs** — when to use it
+    (diagnosing perf regressions from loaded BPF programs;
+    verifying expected programs are attached); 4 commands
+13. Production diagnostic — combined recipe — 6-step ladder
+    from netmode check through softnet_stat drops to bpftool
+    run-time inspection; ties to §10's eBPF coverage with the
+    distinction "§10 = profile your service; §9 = network
+    plumbing under it"
+14. Why this is a C++ concern — C++ writes to sockets directly
+    (no runtime smoothing layer), C++ services are the canary
+    for kernel-network problems; RAII for socket fds (folly::File
+    or hand-rolled unique_fd)
+15. Demo pointer — demo-03 with the --network=host comparison;
+    mentions the **optional demo-08-ebpf-analysis** as future
+    addition
+16. References — Enberg ch.5, BCC tutorial, bpftrace one-liner
+    tutorial, Brendan Gregg's *BPF Performance Tools* book, bpftool man
+17. What's next → §10 (correctly named; old stub said
+    "§9 turns the lights on" — the original §9 stub did NOT
+    have the self-reference bug seen in §4-§8 stubs)
+
+User-requested content additions all delivered:
+- bcc-tools dedicated section with table + worked examples
+- bpftrace dedicated section with 4 idiomatic one-liners
+- bpftool dedicated section with usage patterns
+- All framed around network diagnosis angle (complementary to
+  §10's service-profiling angle)
+- Optional demo-08-ebpf-analysis explicitly mentioned in §9's
+  demo pointer as a future addition
+
+**§14 pitfalls — 124 → 493 lines (~2801 words, 13 sections, 17 xrefs)**
+
+§14 was already partial (124 lines of dense bullets including
+a really good EPERM/EACCES rubric). The buildout preserved
+every existing concept and expanded each into proper prose
+with worked examples and code samples.
+
+Structure:
+
+1. Frontmatter (refined to name the four pitfall categories)
+2. Learning objectives (5 bullets)
+3. Diagram include (14-pitfalls-avx512-mismatch)
+4. The shape of a pitfall — framing section: pitfalls aren't
+   bugs; they pass code review and CI and fail in production;
+   defense is "measure on something close to the deployment
+   target"
+5. AVX-512 / -march=native mismatch — the SIGILL story with
+   code sample (objdump showing AVX-512 instruction count);
+   x86-64-v2/v3/v4 micro-architecture levels table (v3 is the
+   sane default for 2026); function multi-versioning with
+   __attribute__((target_clones("avx512f", "avx2", "default")));
+   the LABEL pattern from §4 to make the choice visible
+6. Silent abstraction overhead — three sub-sections:
+   a. std::function (SBO check, indirect call, cache miss on
+      captured state; 20-50 ms overhead on 100k iterations;
+      template the callable as fix)
+   b. std::shared_ptr (atomic ops on every copy; 12 ms/sec
+      pure refcount overhead; pass by const ref as fix)
+   c. virtual dispatch (pointer chase + vtable indirect; 30-50
+      ms on 1M iterations; std::variant + std::visit as fix
+      with Iglberger reference)
+7. Container build slowness — three causes:
+   a. layer cache invalidation by source change (cite §4 for
+      ordering rule)
+   b. missing BuildKit-style cache mounts
+      (--mount=type=cache,target=/root/.conan2,sharing=locked);
+      Conan dependency cost drops from "fetch and rebuild" to
+      "link against cached binary" — 5-10× speedup typical
+   c. network-pulled dependencies on every build (cite §13
+      lockfile pattern)
+8. Container security layers and the EPERM/EACCES rubric —
+   PRESERVED FROM PARTIAL, expanded into prose:
+   - 4-layer table (capabilities/seccomp = EPERM, SELinux =
+     EACCES, io_uring_disabled sysctl = EPERM)
+   - The "EPERM ambiguity" framing — 3 of 4 return EPERM, so
+     check each in turn; EACCES is unambiguous (SELinux only)
+   - Worked example from demo-03 G-32 development history
+     (the 3 steps where each errno change proved a different
+     gate was the real culprit)
+   - General principle: don't blanket-disable; grant exactly
+     what's needed
+   - Mounts other deny scenarios (mount=EPERM=capabilities,
+     bind low port=EACCES=SELinux, /proc/PID/mem=EACCES=ptrace)
+9. Tutorial-default security vs production security —
+   compose.yml vs compose.production.yml as the side-by-side
+   "step 1 vs step 3" pattern; don't ship development security
+10. Profiling perf inside containers — the symbol resolution
+    trap; three fixes (capture in container + symfs outside,
+    debug-sidecar pattern, separate .debug file artifact)
+11. Why these are pitfalls and not bugs — closing framing;
+    measure against deployment target
+12. Demo pointer — recap, not new demo; table of which pitfall
+    is illustrated by which demo (01 = build slowness +
+    cross-host; 02 = abstraction; 03 = security; 04+06 = perf
+    symbol resolution)
+13. References — Andrist & Sehr ch.6, Iglberger ch.4 + 9,
+    GCC function-multiversioning docs, Podman BuildKit mount
+    docs, Red Hat container security overview
+14. What's next → §15 (correctly named)
+
+The 17 cross-references in §14 are the highest count in any
+section — natural for a recap section that calls back to every
+demo and previous prose.
+
+**Stub-text fix tracker update:**
+
+§9 and §14 did NOT have the self-reference bug in their
+original stubs/partials. The previous "what's next" line in §9
+correctly pointed forward to §10 ("§9 turns the lights on...");
+§14's pointed correctly to §15. **Pattern**: the self-reference
+bug was in §4, §5, §6, §8 stubs only — sections that started
+from the same template variant. §1, §2, §3, §9, §10, §11, §14
+do not have it. r113 should still confirm §12, §13 since
+those haven't been audited.
+
+**Section state after r111:**
+
+| Section | Lines | "Planned" heading | xrefs | State |
+|---|---|---|---|---|
+| §1 prerequisites | 533 | no | 4 | ✓ developed |
+| §2 introduction | 467 | no | 3 | ✓ developed |
+| §3 raii-discipline | 259 | no | 0 | ✓ but missing xrefs (r113) |
+| §4 image-strategy | 353 | no | 9 | ✓ developed (r109) |
+| §5 compile-time-wins | 359 | no | 9 | ✓ developed (r109) |
+| §6 stl-layout | 408 | no | 12 | ✓ developed (r110) |
+| §7 memory-management | 302 | yes (residual!) | 5 | ✓ but stale heading (r113) |
+| §8 io-latency | 448 | no | 4 | ✓ developed (r110, xrefs sparse) |
+| **§9 networking-kernel** | **502** | **no** | **8** | **✓ developed (r111)** |
+| §10 observability-profiling | 437 | no | 4 | ✓ developed (r104) |
+| §11 noisy-neighbors | 334 | no | 5 | ✓ developed (r103) |
+| §12 analysis-debugging | 170 | yes | 3 | partial — r112 |
+| §13 reproducibility-abi | 191 | yes | 2 | partial — r112 |
+| **§14 pitfalls** | **493** | **no** | **17** | **✓ developed (r111)** |
+| §15 where-to-go-next | 60 | no | 2 | closing |
+| §16 appendix | 339 | no | 1 | reference |
+
+**Files changed in r111 (3):**
+
+- `_docs/09-networking-kernel.md`: 67 → 502 lines (full rewrite)
+- `_docs/14-pitfalls.md`: 124 → 493 lines (full rewrite,
+  preserving EPERM/EACCES content)
+- `_plans/reconciliation-plan.md`: this r111 entry
+
+**No code changes. No image rebuild. Pure prose work.**
+
+Progress: 9 of 8 prose-work sections now publishable (the count
+counts §1-§14 ignoring §15 closing and §16 appendix; the +1
+over-count is because §14 transitioned from "partial" to
+"developed" which moved the denominator).
+
+**Next round: r112 = §12 + §13 (final prose batch).**
+
+§13 will get the user-requested additions: Konflux, Cachi2,
+GoogleTest, gcov/lcov for GCC-based coverage, and clang
+source-based coverage via llvm-profdata + llvm-cov.
+
+After r112: r113 polish (§3 xref additions, §7 stale "Planned
+content" heading removal, sweep all sections for the stub
+self-reference bug, audit cross-reference density in §8 which
+came in low at 4).
+
 ---
 
 ## Known divergences from the PRD
