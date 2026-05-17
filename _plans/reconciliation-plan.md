@@ -20260,6 +20260,59 @@ recreated). The collection itself doesn't auto-generate one. The
 r130 mistake was conflating "the legacy page is obsolete" with
 "the collection makes a landing page". It doesn't.
 
+### 2026-05-17 — r133.2: Statelessness diagrams part 2 (07-11), completing item 1
+
+**Item 1 completed.** The Statelessness reference set now has an
+inline diagram in each of its 11 numbered docs.
+
+#### What ships
+
+For each of sections 07-11, a paired set of files in
+`diagrams/statelessness/`:
+
+| Section | Diagram | Concept |
+|---|---|---|
+| 07 | 07-state-externalization | Process-scoped pool + per-request ScopedConnection RAII + 4 backing services (Postgres / Redis / Kafka / S3) |
+| 08 | 08-ephemeral-filesystem | overlayfs layers + tmpfs + image read-only + PVC; what survives a restart; the C++ defaults that trip |
+| 09 | 09-health-checks | Service lifecycle timeline (boot → ready → drain → stopped) + three probes + graceful shutdown sequence |
+| 10 | 10-grpc-microservices | Capstone: complete OrderPricingService composing process-scope (TracerProvider, channel, pool, stop_source), request-scope (RequestContext code shown literally), and 3 external services |
+| 11 | 11-build-tooling | Two-column parallel flow: dev profile (ASan, -O0 -g3) vs release profile (-O3 -flto, hardening) → same conan.lock, two binaries |
+
+Sizes: 7.7KB - 9.1KB per SVG. Same magnitude as r133.1 batch and
+the existing tutorial diagrams.
+
+#### Style consistency
+
+All 5 use the same SVG header (defs, styles, grid pattern, arrow
+markers) generated via the helper at `/tmp/diagram_lib.py`
+introduced in r133.1. Color coding remains consistent:
+
+- blue panels for acquire/process-scope concepts
+- green panels for ok/release/request-scope concepts
+- red panels for bad/leak/teardown concepts
+- tan panels for external state
+
+Captions kept under 15 words each.
+
+#### Embedding
+
+Same placement strategy as r133.1: each diagram inserted via the
+`_includes/excalidraw.html` template right before the second `##`
+heading (i.e., after the Thesis section, before the deep content
+starts).
+
+**Verification:** all 11 docs (01-11) have exactly one
+`{% include excalidraw.html %}` invocation pointing at the
+matching `statelessness/NN-...` filename. None of the diagram
+filenames reference a file that doesn't exist on disk.
+
+#### Files changed
+
+- 10 new files in `diagrams/statelessness/` (5 svg + 5 excalidraw)
+- 5 modified files in `_reference/statelessness/` (each got one
+  diagram embed inserted)
+- `_plans/reconciliation-plan.md` (this entry)
+
 ---
 
 ## Known divergences from the PRD

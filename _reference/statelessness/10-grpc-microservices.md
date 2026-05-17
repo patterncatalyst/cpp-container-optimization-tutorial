@@ -16,6 +16,8 @@ The shape: a service proto, a `Config` struct, a `RequestContext` type, a proces
 
 This document is heavier on code than the others by design. The point is to make the integration concrete, not to develop new ideas. Each block points back to the document that develops its pattern in detail.
 
+{% include excalidraw.html name="statelessness/10-grpc-microservices" caption="gRPC capstone: a complete order-pricing service composing process-, request-, and external-scope state." %}
+
 ## The example service
 
 Take an order-pricing service. It accepts an order specification — customer ID and a list of line items — looks up customer metadata from PostgreSQL, fetches product prices from Redis (with cache-miss falling through to PostgreSQL), calls a tax-calculation service via gRPC, and returns a fully priced order. It supports idempotency via a client-supplied key, propagates deadlines through every downstream call, and exposes the standard gRPC health protocol.

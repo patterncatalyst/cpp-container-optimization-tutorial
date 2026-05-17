@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 485" role="img"
+     aria-label="The ephemeral filesystem trap: layered overlayfs with writable upperdir, tmpfs, read-only image layers, and persistent volumes — what survives a restart and what doesn't">
+  <defs>
+    <style><![CDATA[
+      .bg       { fill: #fdfbf7; }
+      .grid     { stroke: #e8e1d3; stroke-width: 0.5; fill: none; }
+
+      .panel    { fill: #ffffff; stroke: #2d2d2d; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-bad{ fill: #fef3f0; stroke: #b86742; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-ok { fill: #eef5ed; stroke: #5a8870; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-acc{ fill: #f0f5fc; stroke: #4a73b8; stroke-width: 1.5; rx: 8; ry: 8; }
+
+      .scope    { fill: #fbfaf6; stroke: #888; stroke-dasharray: 4 3; stroke-width: 1; rx: 4; ry: 4; }
+
+      .step     { fill: #ffffff; stroke: #2d2d2d; stroke-width: 1; rx: 4; ry: 4; }
+      .step-acq { fill: #e8f0fb; stroke: #4a73b8; }
+      .step-use { fill: #fdfbf7; stroke: #2d2d2d; }
+      .step-rel { fill: #d8e8df; stroke: #5a8870; }
+      .step-leak{ fill: #fef3f0; stroke: #c0392b; }
+      .step-ext { fill: #faf0e6; stroke: #a06030; }
+
+      .ttl      { font: 700 18px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .pttl     { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .pttl-bad { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #b86742; }
+      .pttl-ok  { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #5a8870; }
+      .pttl-acc { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #4a73b8; }
+      .step-t   { font: 12px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .step-tm  { font: 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .cap      { font: 13px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .lbl      { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #555; }
+      .lbl-bd   { font: italic 700 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #444; }
+      .ok-l     { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #5a8870; }
+      .bad-l    { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+      .acc-l    { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #4a73b8; }
+
+      .arrow    { stroke: #2d2d2d; stroke-width: 1.3; fill: none; }
+      .arrow-ok { stroke: #5a8870; stroke-width: 1.6; fill: none; }
+      .arrow-bad{ stroke: #c0392b; stroke-width: 1.6; fill: none; stroke-dasharray: 5 3; }
+      .arrow-acc{ stroke: #4a73b8; stroke-width: 1.6; fill: none; }
+    ]]></style>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" class="grid"/>
+    </pattern>
+    <marker id="ah-blk" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+    <marker id="ah-ok" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a8870"/>
+    </marker>
+    <marker id="ah-bad" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
+    <marker id="ah-acc" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4a73b8"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="920" height="485"/>
+  <rect width="920" height="485" fill="url(#grid)"/>
+
+  <text x="460" y="34" text-anchor="middle" class="ttl">The ephemeral filesystem: what survives a restart, what doesn't</text>
+  <text x="460" y="54" text-anchor="middle" class="cap">Container fs is layered · upperdir + tmpfs vanish · only volumes persist · logs to stdout</text>
+
+  <!-- LEFT panel: container filesystem at runtime -->
+  <rect class="panel" x="30" y="80" width="540" height="385"/>
+  <text x="300" y="106" text-anchor="middle" class="pttl">Container filesystem at runtime (overlayfs)</text>
+
+  <!-- ephemeral upperdir at top -->
+  <rect class="step step-leak" x="50" y="125" width="500" height="58"/>
+  <text x="300" y="146" text-anchor="middle" class="pttl-bad">upperdir (writable scratch · ephemeral)</text>
+  <text x="300" y="164" text-anchor="middle" class="step-tm">/var/log/app.log · /var/tmp/* · spdlog file sink</text>
+  <text x="300" y="178" text-anchor="middle" class="lbl">gone on container destroy, on restart, on eviction</text>
+
+  <!-- tmpfs in the middle -->
+  <rect class="step step-leak" x="50" y="190" width="500" height="42"/>
+  <text x="300" y="210" text-anchor="middle" class="pttl-bad">/tmp · tmpfs (RAM-backed · ephemeral)</text>
+  <text x="300" y="226" text-anchor="middle" class="step-tm">core dumps · LLVM profraw · prometheus_cpp textfiles</text>
+
+  <!-- read-only image layers -->
+  <rect class="step" x="50" y="240" width="500" height="58"/>
+  <text x="300" y="261" text-anchor="middle" class="pttl">Image layers (read-only · baked at build)</text>
+  <text x="300" y="279" text-anchor="middle" class="step-tm">/app/svc · /usr/lib/* · libstdc++.so.6</text>
+  <text x="300" y="293" text-anchor="middle" class="lbl">identical across every replica · cached on the node</text>
+
+  <!-- persistent volume -->
+  <rect class="step step-rel" x="50" y="305" width="500" height="58"/>
+  <text x="300" y="326" text-anchor="middle" class="pttl-ok">/data · PVC (persistent volume · survives)</text>
+  <text x="300" y="344" text-anchor="middle" class="step-tm">SQLite cache · model weights · authoritative DB</text>
+  <text x="300" y="358" text-anchor="middle" class="ok-l">only mount if a single replica owns this state</text>
+
+  <!-- logs out to stdout/orchestrator -->
+  <rect class="step step-acq" x="50" y="370" width="500" height="62"/>
+  <text x="300" y="390" text-anchor="middle" class="pttl-acc">stdout / stderr → orchestrator</text>
+  <text x="300" y="408" text-anchor="middle" class="step-tm">spdlog → stdout · captured by Loki / journald</text>
+  <text x="300" y="422" text-anchor="middle" class="lbl">survives container · queryable across replicas</text>
+
+  <!-- RIGHT panel: C++ traps -->
+  <rect class="panel-bad" x="590" y="80" width="300" height="385"/>
+  <text x="740" y="106" text-anchor="middle" class="pttl-bad">C++ defaults that trip</text>
+
+  <rect class="step step-leak" x="610" y="130" width="260" height="50"/>
+  <text x="740" y="148" text-anchor="middle" class="pttl-bad">spdlog file sink</text>
+  <text x="740" y="166" text-anchor="middle" class="lbl">writes /var/log/app.log → gone</text>
+
+  <rect class="step step-leak" x="610" y="188" width="260" height="50"/>
+  <text x="740" y="206" text-anchor="middle" class="pttl-bad">core dumps in /tmp</text>
+  <text x="740" y="224" text-anchor="middle" class="lbl">gone before debugger sees them</text>
+
+  <rect class="step step-leak" x="610" y="246" width="260" height="50"/>
+  <text x="740" y="264" text-anchor="middle" class="pttl-bad">PGO profile output</text>
+  <text x="740" y="282" text-anchor="middle" class="lbl">default writes lost on container exit</text>
+
+  <rect class="step step-leak" x="610" y="304" width="260" height="50"/>
+  <text x="740" y="322" text-anchor="middle" class="pttl-bad">prometheus_cpp textfile</text>
+  <text x="740" y="340" text-anchor="middle" class="lbl">file-based exporter — wrong model</text>
+
+  <rect class="step step-leak" x="610" y="362" width="260" height="50"/>
+  <text x="740" y="380" text-anchor="middle" class="pttl-bad">ML model cache</text>
+  <text x="740" y="398" text-anchor="middle" class="lbl">re-downloaded on every restart</text>
+
+  <text x="740" y="442" text-anchor="middle" class="lbl-bd">Set read_only: true · forces these to surface early.</text>
+</svg>

@@ -16,6 +16,8 @@ The health-check semantics are more subtle than "is the service up." There are a
 
 This document covers the health-check model: the three probes and what each means, the gRPC standard health protocol that's become the canonical answer, the same-port-vs-separate-port trade-off, what "alive" and "ready" actually mean for a C++ service, and the graceful-shutdown sequence that ties Doc 05's `std::stop_token`, Doc 07's pool draining, and Doc 06's destruction order into a single coherent flow.
 
+{% include excalidraw.html name="statelessness/09-health-checks" caption="Three probes (startup, liveness, readiness) and the graceful-shutdown sequence that ties scope destructors together." %}
+
 ## The three probes
 
 Kubernetes distinguishes three probes per container. Podman has a single `healthcheck`. The semantic distinctions are worth understanding even when only one of them is configurable, because they translate to the questions any orchestrator needs answered.

@@ -16,6 +16,8 @@ The right framing is that ephemerality is a feature, not a bug. It is the operat
 
 This document covers the C++ patterns for getting that right: the container layer model that produces the ephemerality, the read-only-rootfs enforcement pattern, the specific C++ libraries that quietly write files in ways that will not survive a restart, the ephemeral-storage budget in Kubernetes, and the rootless Podman quirks that affect development workflows.
 
+{% include excalidraw.html name="statelessness/08-ephemeral-filesystem" caption="The ephemeral filesystem: overlayfs scratch + tmpfs vanish on restart, only PVCs persist, logs to stdout." %}
+
 ## The container layer model
 
 A container image is built as a stack of read-only layers. At runtime, the container runtime — runc, crun, or similar — adds a writable layer on top, implemented via overlayfs. Reads come from the topmost layer that contains the file; writes go to the writable layer. When the container exits, the writable layer is removed. Image layers persist (they belong to the image, not the container instance); the writable layer does not.

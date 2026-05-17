@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 480" role="img"
+     aria-label="State externalization: process-scoped connection pool, per-request ScopedConnection RAII, authoritative state in Postgres/Redis/Kafka/S3">
+  <defs>
+    <style><![CDATA[
+      .bg       { fill: #fdfbf7; }
+      .grid     { stroke: #e8e1d3; stroke-width: 0.5; fill: none; }
+
+      .panel    { fill: #ffffff; stroke: #2d2d2d; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-bad{ fill: #fef3f0; stroke: #b86742; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-ok { fill: #eef5ed; stroke: #5a8870; stroke-width: 1.5; rx: 8; ry: 8; }
+      .panel-acc{ fill: #f0f5fc; stroke: #4a73b8; stroke-width: 1.5; rx: 8; ry: 8; }
+
+      .scope    { fill: #fbfaf6; stroke: #888; stroke-dasharray: 4 3; stroke-width: 1; rx: 4; ry: 4; }
+
+      .step     { fill: #ffffff; stroke: #2d2d2d; stroke-width: 1; rx: 4; ry: 4; }
+      .step-acq { fill: #e8f0fb; stroke: #4a73b8; }
+      .step-use { fill: #fdfbf7; stroke: #2d2d2d; }
+      .step-rel { fill: #d8e8df; stroke: #5a8870; }
+      .step-leak{ fill: #fef3f0; stroke: #c0392b; }
+      .step-ext { fill: #faf0e6; stroke: #a06030; }
+
+      .ttl      { font: 700 18px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .pttl     { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .pttl-bad { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #b86742; }
+      .pttl-ok  { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #5a8870; }
+      .pttl-acc { font: 700 14px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #4a73b8; }
+      .step-t   { font: 12px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .step-tm  { font: 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #1a1a1a; }
+      .cap      { font: 13px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #1a1a1a; }
+      .lbl      { font: italic 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #555; }
+      .lbl-bd   { font: italic 700 11px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #444; }
+      .ok-l     { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #5a8870; }
+      .bad-l    { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #c0392b; }
+      .acc-l    { font: italic 700 12px -apple-system, system-ui, "Segoe UI", sans-serif; fill: #4a73b8; }
+
+      .arrow    { stroke: #2d2d2d; stroke-width: 1.3; fill: none; }
+      .arrow-ok { stroke: #5a8870; stroke-width: 1.6; fill: none; }
+      .arrow-bad{ stroke: #c0392b; stroke-width: 1.6; fill: none; stroke-dasharray: 5 3; }
+      .arrow-acc{ stroke: #4a73b8; stroke-width: 1.6; fill: none; }
+    ]]></style>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" class="grid"/>
+    </pattern>
+    <marker id="ah-blk" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+    <marker id="ah-ok" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a8870"/>
+    </marker>
+    <marker id="ah-bad" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
+    <marker id="ah-acc" viewBox="0 0 10 10" refX="9" refY="5"
+            markerUnits="strokeWidth" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4a73b8"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="920" height="480"/>
+  <rect width="920" height="480" fill="url(#grid)"/>
+
+  <text x="460" y="34" text-anchor="middle" class="ttl">State externalization: the process holds infrastructure, not authority</text>
+  <text x="460" y="54" text-anchor="middle" class="cap">Process-scoped pool · per-request ScopedConnection RAII · authoritative state lives outside</text>
+
+  <!-- Service process box -->
+  <rect class="panel-acc" x="200" y="85" width="520" height="240"/>
+  <text x="460" y="106" text-anchor="middle" class="pttl-acc">C++ service process</text>
+  <text x="460" y="121" text-anchor="middle" class="lbl">main() owns lifetimes · destruction in reverse order on shutdown</text>
+
+  <!-- inbound RPC bar -->
+  <rect class="step step-acq" x="220" y="138" width="480" height="32"/>
+  <text x="460" y="158" text-anchor="middle" class="step-t">inbound RPC · idempotency_key in metadata · deadline</text>
+
+  <!-- Process-scoped: Connection pool -->
+  <rect class="step" x="220" y="180" width="480" height="62"/>
+  <text x="460" y="200" text-anchor="middle" class="pttl">Process-scoped: ConnectionPool&lt;PgConn&gt;</text>
+  <text x="460" y="218" text-anchor="middle" class="step-tm">size: 16 · idle: 4 · created at startup</text>
+  <text x="460" y="234" text-anchor="middle" class="lbl">Construction is expensive · keep them, don't churn them</text>
+
+  <!-- Request-scoped: ScopedConnection (RAII) -->
+  <rect class="step step-rel" x="220" y="250" width="480" height="62"/>
+  <text x="460" y="270" text-anchor="middle" class="pttl-ok">Request-scoped: ScopedConnection conn{pool}</text>
+  <text x="460" y="288" text-anchor="middle" class="step-tm">ctor: checkout · uses · dtor: pool.release(conn)</text>
+  <text x="460" y="304" text-anchor="middle" class="lbl">invalidate() on broken — pool grows a fresh one next checkout</text>
+
+  <!-- External services (downstream) -->
+  <text x="460" y="350" text-anchor="middle" class="lbl-bd">Authoritative state — survives replica restart, shared across replicas</text>
+
+  <rect class="step step-ext" x="30" y="370" width="200" height="92"/>
+  <text x="130" y="392" text-anchor="middle" class="pttl">Postgres</text>
+  <text x="130" y="412" text-anchor="middle" class="lbl">business data</text>
+  <text x="130" y="430" text-anchor="middle" class="lbl">transactions · outbox</text>
+  <text x="130" y="448" text-anchor="middle" class="step-tm">deadline-aware queries</text>
+
+  <rect class="step step-ext" x="245" y="370" width="200" height="92"/>
+  <text x="345" y="392" text-anchor="middle" class="pttl">Redis</text>
+  <text x="345" y="412" text-anchor="middle" class="lbl">session state</text>
+  <text x="345" y="430" text-anchor="middle" class="lbl">counters · quotas · cache</text>
+  <text x="345" y="448" text-anchor="middle" class="step-tm">SET with EXPIRE</text>
+
+  <rect class="step step-ext" x="460" y="370" width="200" height="92"/>
+  <text x="560" y="392" text-anchor="middle" class="pttl">Kafka / NATS</text>
+  <text x="560" y="412" text-anchor="middle" class="lbl">durable workflows</text>
+  <text x="560" y="430" text-anchor="middle" class="lbl">events · outbox publish</text>
+  <text x="560" y="448" text-anchor="middle" class="step-tm">at-least-once delivery</text>
+
+  <rect class="step step-ext" x="675" y="370" width="200" height="92"/>
+  <text x="775" y="392" text-anchor="middle" class="pttl">S3</text>
+  <text x="775" y="412" text-anchor="middle" class="lbl">object storage</text>
+  <text x="775" y="430" text-anchor="middle" class="lbl">artifacts · models · blobs</text>
+  <text x="775" y="448" text-anchor="middle" class="step-tm">presigned URLs</text>
+
+  <!-- arrows from process to externals -->
+  <path d="M 350 312 L 130 370" class="arrow" marker-end="url(#ah-blk)"/>
+  <path d="M 410 312 L 345 370" class="arrow" marker-end="url(#ah-blk)"/>
+  <path d="M 510 312 L 560 370" class="arrow" marker-end="url(#ah-blk)"/>
+  <path d="M 570 312 L 775 370" class="arrow" marker-end="url(#ah-blk)"/>
+</svg>

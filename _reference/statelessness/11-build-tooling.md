@@ -14,6 +14,8 @@ The earlier documents assumed a Conan + CMake + Ninja + GCC-or-Clang build envir
 
 The toolchain landscape moves quickly. C++23 features that were partial a year ago are landed; features that just landed need newer compiler versions than long-term-support distributions ship. This document calls out specific GCC and Clang versions where the feature dependency matters. Beyond that, the patterns are stable: Conan 2.x for dependencies, CMake 3.27+ for build configuration, Ninja as the generator, multi-stage Dockerfile or Containerfile for the image build, GCC 14+ for libstdc++'s C++23 support.
 
+{% include excalidraw.html name="statelessness/11-build-tooling" caption="Conan dev vs release profiles: same sources, same lockfile, two parallel build flows producing two binaries." %}
+
 ## Conan 2.x setup
 
 A typical `conanfile.py` for a service in this stack:

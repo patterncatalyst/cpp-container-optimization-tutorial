@@ -16,6 +16,8 @@ The two main backing-service families are key-value stores (Redis, etcd, memcach
 
 The C++-specific concerns are: every network call may throw or hang, connection state may be unusable after failure, deadlines need to propagate from the inbound gRPC request through to the backing service, and exception safety has to span the network boundary. RAII handles most of this; the rest is discipline.
 
+{% include excalidraw.html name="statelessness/07-state-externalization" caption="State externalization: process-scoped pool, ScopedConnection RAII, authoritative state outside the process." %}
+
 ## What externalizes, and what doesn't
 
 The State Architecture Table from Doc 04 has a third column — "external" — that this document develops. The state categories that belong there:
