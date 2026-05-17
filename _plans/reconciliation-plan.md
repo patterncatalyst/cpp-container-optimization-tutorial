@@ -14749,6 +14749,142 @@ quality-pipeline). All three §-anchors will follow the same
 Three sections, three mechanisms, one shape of argument. The
 tutorial's spine.
 
+### 2026-05-16 — r105: §7 memory-management prose augmentation (third of three)
+
+`_docs/07-memory-management.md` was substantively different from
+§10 and §11 going in: 179 lines of already-developed prose
+covering allocators, glibc tuning, cgroup memory.high/max, the
+LinuxMemoryChecker pattern, and RSS-vs-working-set
+distinctions. §7 needed **augmentation**, not rewrite, unlike
+§11 and §10 which were stub-to-prose transformations.
+
+The augmentation strategy was surgical:
+
+1. **Replace the 5-line "C++17/20 PMR, briefly" subsection with
+   a ~100-line "PMR, and where its advantage actually lives"
+   subsection.** This promotes the PMR-batch-vs-serve mini-
+   essay from teaching-points to the section prose, with the
+   verified r96 (batch) and r89 (serve) numbers as the data
+   spine. The hook contrast — PMR is 2.12× faster in batch mode
+   and indistinguishable in serve mode, on the same C++ code —
+   gets the same first-page treatment that the 8.5× number got
+   in §10 and the 10.7× number got in §11.
+2. **Update the Demo section** from a single demo-02 pointer to
+   a two-demo block: demo-06 (the canonical PMR comparison) as
+   the primary reference, demo-02 as the data-layout-meets-
+   allocator complement. This corrects a stale pointer (demo-06
+   didn't exist when the §7 stub was written; now it does and
+   it owns the PMR story).
+3. **Weave §10 and §11 cross-references** into the new PMR
+   subsection. The "where you measure matters" framing gets a
+   one-paragraph closer that calls out the §10 and §11
+   instances of the same pattern; the demo block references the
+   LGTM observability stack from §10; the data layout decisions
+   from §6 are referenced as the upstream context.
+
+**Final §7 structure (13 sections):**
+
+1. Frontmatter — unchanged from existing
+2. Learning objectives — unchanged (6 bullets already covered
+   PMR, allocator swap, huge pages, cgroup memory.max/high,
+   reading own limits, RSS vs working set; these still hold)
+3. Diagram — unchanged
+4. **Where the cost lives** — unchanged (page-fault cost model)
+5. **PMR, and where its advantage actually lives** — NEW
+   (replaces "C++17/20 PMR, briefly"):
+   - Conceptual model: monotonic_buffer_resource +
+     unsynchronized_pool_resource
+   - **Batch-mode table** (r96 verified): PMR 4.08 µs p50 vs
+     std 8.66 µs p50 — 2.12× advantage
+   - **Serve-mode table** (r89 verified): all three
+     indistinguishable
+   - Cache-residency mechanism explanation
+   - "Where you measure matters" closing with §10/§11 cross-
+     references
+   - When to reach for PMR / when it won't help
+6. **Allocators: what changes when you swap** — unchanged
+7. **Why allocators hold onto memory** — unchanged
+8. **cgroups v2: memory.max, memory.high** — unchanged
+9. **RSS, working set, memory.current** — unchanged
+10. **The LinuxMemoryChecker pattern** — unchanged (this IS the
+    production diagnostic content, integrated rather than
+    called out)
+11. **Demo** — UPDATED (now two-demo block: demo-06 primary,
+    demo-02 complementary)
+12. **For deeper coverage** — unchanged
+13. **What's next** — unchanged (forward to §8 io_uring + async
+    gRPC)
+
+**§7 has a different shape than §10/§11.** No separate "Why
+this is a C++ concern" section — the whole section IS C++. No
+separate "Production diagnostic" section — that's the
+LinuxMemoryChecker pattern integrated into the prose. The
+§-anchor template (which provided the spine for §10 and §11) is
+appropriate but not mechanically applicable to a section that's
+already structured around its own internal logic.
+
+**Cross-reference verification:**
+
+- §6 (stl-layout) → data-layout decisions interact with
+  allocator decisions under memory pressure
+- §10 (observability) → LGTM observability stack used in
+  demo-06's serve mode; "measurement frame can dominate" as the
+  shared pattern
+- §11 (noisy-neighbors) → "scheduler defaults can dominate
+  latency" as the third instance of the shared pattern
+- §8 (forward pointer to io-latency / io_uring / async gRPC) —
+  unchanged from existing
+
+**Voice match:** the existing §7 prose was already in the same
+direct, opinionated, mechanism-focused voice as §10 and §11
+(unsurprising — §7 had been used as the voice reference earlier
+in the round). The new PMR subsection matches naturally; no
+voice-discontinuity issues to fix.
+
+**Mini-essay → prose transformation:**
+
+The teaching-points PMR mini-essay (~80 lines) became roughly
+the structural backbone of the new subsection. New content
+added in r105:
+
+- Conceptual intro for PMR
+  (`monotonic_buffer_resource` + `unsynchronized_pool_resource`)
+- "When to reach for PMR / when it won't help" trade-off
+  bullets — explicit decision content
+- The §10/§11 cross-references with the "performance is not a
+  scalar" framing tying all three §-anchors together
+
+**Files changed in r105 (2):**
+
+- `_docs/07-memory-management.md`: 179 → 302 lines, +123 lines
+  (5-line stub → ~100-line PMR subsection + demo expansion)
+- `_plans/reconciliation-plan.md`: this r105 entry
+
+**No code changes. No image rebuild. Pure prose lock-in.**
+
+**§-anchor progress:** §11 ✓; §10 ✓; **§7 ✓**.
+
+**All three publishable §-anchors are now complete.** The
+"performance is not a scalar" spine of the tutorial is
+established with three sections that each present the same shape
+of argument with a different mechanism:
+
+| § | Mechanism | Verified ratio |
+|---|---|---|
+| §7 | Measurement frame dominates allocator | PMR 2.12× in batch / 1.0× in serve |
+| §10 | Instrumentation dominates workload | OTel Simple 8.5× throughput collapse |
+| §11 | Scheduler defaults dominate latency | Unisolated 10.7× p99 degradation |
+
+Cross-references run all three directions: each §-anchor names
+the others as sibling instances; readers can pick any one and
+encounter the same insight from different angles.
+
+**Next: option-1 plan path C — build out demo-07
+quality-pipeline.** Currently a stub. This is the cppcheck +
+static analysis + CI lesson. New Round A/B sequence expected,
+likely with new gotchas (G-43+). Then path E — PPTX slides
+referencing all the verified work.
+
 ---
 
 ## Known divergences from the PRD
