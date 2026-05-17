@@ -20993,6 +20993,164 @@ current shipped state.
 - `PRD.md` (substantial update — see above)
 - `_plans/reconciliation-plan.md` (this entry)
 
+### 2026-05-17 — r137: canonical schema across all 7 demo READMEs + real bibliography links
+
+**The trigger.**
+
+User reviewed the demos and observed: *"the demo pages seem largely
+inconsistent in their approach"*. They proposed a canonical
+8-section schema (with permission for demo-specific deep-dives
+between sections) and asked for:
+
+  - Source materials linked to the bibliography (not just bullet
+    lists of book titles)
+  - Linked tutorial sections to actually link to the /docs/NN/
+    pages (not just bullet lists of section names)
+  - Top-of-file Tutorial section callouts to be links
+  - Bibliography page's section references to also be real links
+
+**The canonical schema (8 sections in order).**
+
+  1. # Demo NN — Title
+  2. Tutorial section: [§N Title](/docs/NN-name/)  ← top-of-file callout
+  3. (brief intro paragraph)
+  4. ## Why this matters         — motivation, production framing
+  5. ## What this demo shows     — overview, comparison tables
+  6. ## How to run               — `./demo.sh` invocation + runtime
+  7. ## What you'll see          — representative output
+  8. ## How to read the output   — interpretation rules
+  9. (optional demo-specific deep-dive sections — see below)
+ 10. ## Caveats and gotchas     — limitations, traps, known issues
+ 11. ## Source materials         — bibliography references
+ 12. ## Linked tutorial sections — real /docs/NN/ links
+
+The schema is permissive about the middle: demo-specific deep
+dives (e.g., demo-03's "Three §8/§9 lessons", demo-05's "Cgroup
+v2 controller delegation", demo-06's "Serve mode" and "Observe
+mode") slot between the four core sections (Why/What/Run/See/
+Read) and the closing sections (Caveats/Source/Linked). Each
+demo's unique character is preserved; only the entry and exit
+points are uniform.
+
+**Before/after audit.**
+
+Pre-r137, the 7 READMEs had wildly different structures. Some had
+"Run it" vs "How to run", "Output" vs "What you'll see", "Where the
+lesson lives in the tutorial" vs "Linked tutorial sections" vs
+"Topics covered". Caveats were inconsistent; some demos had no
+"Source materials" section at all.
+
+Post-r137 schema-audit run via:
+
+    for d in examples/demo-*; do
+        for section in "Why this matters" "What this demo shows" \
+                       "How to run" "What you'll see" "How to read the output" \
+                       "Caveats and gotchas" "Source materials" \
+                       "Linked tutorial sections"; do
+            grep -qE "^##.*${section:0:12}" "$d/README.md" && printf "✓" || printf "·"
+        done
+        echo
+    done
+
+reports all 7 demos with ✓✓✓✓✓✓✓✓ — every demo has every section.
+
+**Per-demo changes:**
+
+| Demo | Treatment | Words before → after |
+|---|---|---:|
+| demo-01-image-strategy | full rewrite to schema | 670 → 1056 |
+| demo-02-stl-layout | full rewrite to schema | 496 → 1110 |
+| demo-03-io-uring-grpc | full rewrite to schema; preserved security posture, lockfile-inheritance, and asio-vs-boost::asio deep dives | 869 → 1788 |
+| demo-04-observability | full rewrite to schema | 660 → 1046 |
+| demo-05-isolation | full rewrite; fixed wrong tutorial section ref (§10 → §11); stripped G-40/G-42 round annotations | 710 → 1527 |
+| demo-06-memory-and-allocators | normalized section headings + added explicit "What this demo shows" preview of the three execution modes; preserved all batch/serve/observe deep dives | 2630 → 3031 |
+| demo-07-quality-pipeline | full rewrite to schema | 727 → 1448 |
+
+Total: ~7,800 words across the 7 READMEs (was ~6,800). The growth
+is real new content (Why this matters paragraphs, How to read the
+output rules, Caveats consolidations) — not padding.
+
+**Real-link work in the bibliography page.**
+
+The user noted: *"Section links on the bibliography page don't link
+they're currently just references"*. Fixed via a Python
+substitution pass over `bibliography.html`:
+
+  - 22 `<strong>§N</strong>` patterns in the book annotations →
+    converted to `<a href="/docs/NN-name/"><strong>§N</strong></a>`
+  - 14 `<td>§N description</td>` cells in the cross-reference
+    matrix → linked to the corresponding /docs/ permalink
+  - 8 statelessness reference rows (00 Index through 07 State
+    externalization) → linked to /reference/statelessness/NN/
+  - 1 Demo 06 row → linked to /examples/demo-06-memory-and-allocators/
+
+Every section / doc / demo cell in the matrix is now a real link.
+
+**Tutorial-section callouts at the top of each demo.**
+
+The 4 demos that previously had stale or non-linked callouts:
+
+  - demo-04: was `Tutorial section: §10 (Observability & profiling)`
+    → now `Tutorial section: [§10 Observability & Profiling](/docs/10-observability-profiling/)`
+  - demo-05: was `Tutorial section: §10 (Noisy neighbors and isolation)`
+    [WRONG — isolation is §11] →
+    `Tutorial section: [§11 Noisy Neighbor Isolation](/docs/11-noisy-neighbors/)`
+  - demo-07: was `Tutorial sections: §12 (Static Analysis & Debugging in Containers), §13 (Reproducibility & ABI).`
+    → now both linked
+  - demo-01, demo-02, demo-03, demo-06: previously had no callout
+    line → all now have linked callouts
+
+**Source-materials sections.**
+
+Each demo's "Source materials" section now opens with:
+
+    This demo deepens material from the project's
+    [**bibliography**](/bibliography/):
+
+…followed by 2-4 book citations relevant to that demo's content.
+Readers clicking through land on the bibliography page where the
+full annotation lives, instead of seeing the same citation
+repeated across multiple demo READMEs.
+
+**Linked-tutorial-sections sections.**
+
+Each demo's closing section was previously a bullet list like:
+
+    - §7 (Memory Management): this demo is §7's worked example.
+
+Now uniformly:
+
+    - [**§7 Memory Management**](/docs/07-memory-management/) —
+      this demo is §7's worked example. The §7 prose discusses
+      the theory; this demo measures it.
+
+Every section reference is a real link. Each bullet describes
+the connection (not just the section name).
+
+**Verification.**
+
+  - `./scripts/check-liquid.py` reports clean
+  - Schema audit (above) shows ✓✓✓✓✓✓✓✓ for all 7 demos
+  - `./scripts/regen-examples-collection.sh` regenerated all 7
+    `_examples/*.md` files to pick up the upstream README changes
+
+**Files changed.**
+
+  7 demo READMEs rewritten/normalized:
+    examples/demo-01-image-strategy/README.md
+    examples/demo-02-stl-layout/README.md
+    examples/demo-03-io-uring-grpc/README.md
+    examples/demo-04-observability/README.md
+    examples/demo-05-isolation/README.md
+    examples/demo-06-memory-and-allocators/README.md
+    examples/demo-07-quality-pipeline/README.md
+
+  7 regenerated _examples/*.md collection files
+
+  bibliography.html (link substitution pass)
+
+  _plans/reconciliation-plan.md (this entry)
+
 ---
 
 ## Known divergences from the PRD

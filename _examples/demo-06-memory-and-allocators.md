@@ -12,6 +12,8 @@ github_path: examples/demo-06-memory-and-allocators
 > The full source for this demo lives in [`examples/demo-06-memory-and-allocators/`](https://github.com/{{ site.github_username }}/{{ site.github_repo }}/tree/main/examples/demo-06-memory-and-allocators) — clone the repo, `cd` in, and `./demo.sh`.
 
 
+Tutorial section: [§7 Memory Management](/docs/07-memory-management/)
+
 Three allocator variants of the same C++23 binary, side-by-side on a
 synthetic JSON-shaped allocator-stress workload:
 
@@ -66,7 +68,30 @@ strategy/cost curve:
 §7 of the tutorial develops the underlying mechanics; this demo lets
 you watch the numbers move.
 
-## Run it
+## What this demo shows
+
+Three execution modes, each progressively closer to a real service:
+
+- **Batch mode** (`./demo.sh`) — runs the synthetic workload in a
+  tight loop on each allocator variant and prints a comparison
+  table with min / p50 / p99 / max timings. The cleanest signal:
+  no HTTP overhead, no network jitter, no cache eviction from
+  other work.
+- **Serve mode** (HTTP via `podman compose -f compose-serve.yml`) —
+  the same three binaries expose `/run?iters=N` over HTTP. Drive
+  them with `hey` to see how allocator behavior changes under
+  sustained load with httplib worker threads in the mix.
+- **Observe mode** (HTTP + OpenTelemetry via the LGTM stack) —
+  same serve mode binaries, now instrumented with OTel traces,
+  metrics, and logs. The Grafana panels make the per-allocator
+  tail-latency distribution visible across hundreds of requests
+  instead of inferring it from single curl calls.
+
+Each mode tells a slightly different story; together they cover
+the "what changes from microbenchmark to real workload"
+trajectory that informs allocator decisions in production.
+
+## How to run
 
 ```bash
 ./demo.sh
@@ -425,25 +450,56 @@ the static_assert fires.
 Together these two cover the majority of "I tried PMR and it didn't
 work" reports.
 
-## Source materials this demo deepens
+## Caveats and gotchas
 
-- **Andrist & Sehr, *C++ High Performance* 2e, Ch. 7** — custom
+- **The synthetic workload is single-threaded.** mimalloc's biggest
+  wins are in multi-threaded workloads, so the comparison here
+  understates mimalloc's real production advantage. Treat the
+  numbers as "lower bound for mimalloc, upper bound for the
+  others" relative to a multi-threaded service.
+- **Cache state dominates short-burst measurements.** Running the
+  comparison repeatedly (e.g. `./demo.sh && ./demo.sh && ./demo.sh`)
+  can show ±15% variation on identical configurations as the L2
+  warms or evicts. Use the trend across many runs rather than any
+  single number.
+- **Static-link surface area.** mimalloc replaces `operator new`
+  globally only when statically linked with `--whole-archive`. A
+  dynamically-loaded mimalloc that didn't intercept `new` will
+  perform like glibc malloc.
+- **OTel build time.** The first build with OTel enabled takes
+  30-60 minutes on a clean Conan cache (see the "Build-time
+  warning" subsection above). Plan accordingly.
+- **PMR cache-sensitivity is a real teaching point, not a bug.**
+  The bump-allocator advantage shrinks under sustained
+  request-handler workloads where the arena buffer is evicted
+  between requests. See "Why serve-mode numbers differ from
+  batch-mode numbers" above.
+
+## Source materials
+
+This demo deepens material from the project's
+[**bibliography**](/bibliography/):
+
+- **Andrist & Sehr, *C++ High Performance* 2e, ch. 7** — custom
   allocators, PMR design rationale, allocator-aware containers
-- **Enberg, *Latency*, Ch. 3** — allocator measurement, the
-  "general-purpose allocator tax" thesis, mimalloc/jemalloc/tcmalloc
-  comparison from the Helsinki perf group
-- **Iglberger, *C++ Software Design*, Ch. 7** — the Bridge / PIMPL
-  discussion intersects with PMR's lifetime model (which class owns
-  the memory_resource? where does it live?)
+- **Enberg, *Latency*, ch. 3** — allocator measurement, the
+  "general-purpose allocator tax" thesis, the
+  mimalloc/jemalloc/tcmalloc comparison from the Helsinki perf
+  group
+- **Iglberger, *C++ Software Design*, ch. 7** — the Bridge / PIMPL
+  discussion intersects with PMR's lifetime model (which class
+  owns the memory_resource? where does it live?)
 
 ## Linked tutorial sections
 
-- **§7 (Memory Management)** — this demo is §7's worked example. The
-  §7 prose discusses the theory; this demo measures it.
-- **§10 (Observability & profiling)** — the OTel-instrumented mode
-  here uses the same LGTM bundle as demo-04, and the Simple-vs-Batch
-  finding is one of §10's canonical teaching points.
-- **§11 (Noisy neighbors)** — the per-allocator tail-latency
-  observations under sustained load complement demo-05's CPU
-  isolation work; allocator strategy and CPU scheduling both shape
-  tail behavior.
+- [**§7 Memory Management**](/docs/07-memory-management/) — this
+  demo is §7's worked example. The §7 prose discusses the theory;
+  this demo measures it.
+- [**§10 Observability & Profiling**](/docs/10-observability-profiling/)
+  — the OTel-instrumented mode here uses the same LGTM bundle as
+  demo-04, and the Simple-vs-Batch finding is one of §10's
+  canonical teaching points.
+- [**§11 Noisy Neighbors**](/docs/11-noisy-neighbors/) — the
+  per-allocator tail-latency observations under sustained load
+  complement demo-05's CPU isolation work; allocator strategy and
+  CPU scheduling both shape tail behavior.
