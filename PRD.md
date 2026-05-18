@@ -272,9 +272,12 @@ tutorial sections it deepens.
   `set -euo pipefail`, EXIT trap for cleanup, distinct ports)
 - [x] Aggregator script `scripts/test-all-demos.sh` that runs each
   test in sequence and prints a summary; does NOT fail-fast
-- [ ] CI integration via GitHub Actions in `.github/workflows/`
-  using a self-hosted runner or a Fedora 44 container, since the
-  cgroup and `io_uring` demos need a real Linux host
+- [x] CI integration via GitHub Actions in `.github/workflows/`
+  — `demos.yml` runs smoke tests for the demos whose runtime
+  expectations match `ubuntu-latest` (demo-01, demo-02). The
+  io_uring / observability / isolation demos are gated for a
+  self-hosted Fedora 44 runner per `CONTRIBUTING.md`. `pages.yml`
+  builds and deploys the Jekyll site to GitHub Pages.
 - [x] Manual verification on at least one fresh Fedora 44 VM
   before any section is marked verified in the reconciliation plan
 
@@ -504,7 +507,7 @@ substitution.
 | PPTX deck built programmatically from `_docs/` + diagrams       | 4-6 hours        | [x]   |
 | Reconciliation plan reflects shipped state                      | 1-2 hours        | [x]   |
 | PRD reconciled with shipped reality (this update)               | 1-2 hours        | [x]   |
-| LESSONS-LEARNED.md captures the multi-round retrospective       | 2-3 hours        | [ ]   |
+| LESSONS-LEARNED.md captures the multi-round retrospective       | 2-3 hours        | [x]   |
 | Public announce                                                 | -                | [ ]   |
 
 **Hard deadline:** TBD by author.

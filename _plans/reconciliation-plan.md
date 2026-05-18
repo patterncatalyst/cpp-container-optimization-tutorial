@@ -71,9 +71,9 @@ on a clean Fedora 44 host; that's what the verification pass turns
 | 2  | stl-layout          | [x]              | [x]                      | 2026-05-10 (r59)             | `boost::container::flat_map` vs `std::unordered_map` vs `std::vector` linear scan; cache-locality win at N=262K: contiguous 911µs vs node-based 2,309µs (2.5×); renamed from memory-and-stl in r55 — PMR/huge pages moved to §7 prose |
 | 3  | io-uring-grpc       | [x]              | [x]                      | 2026-05-10 (r67)             | 3 servers in one binary (gRPC callback API + direct liburing + Asio io_uring); load: gRPC 4.85K RPS p99=30.92ms, io_uring 274K req/s p99=181µs, Asio 349K req/s p99=110µs; ships compose.production.yml with custom seccomp + custom SELinux module |
 | 4  | observability       | [x]              | [x]                      | 2026-05-10 (r52)             | Full LGTM stack (Grafana+Loki+Tempo+Mimir bundled in otel-lgtm:0.8.1); OTel-cpp traces+metrics+logs all reach the stack; Conan lockfile pinned in r53-r54 for reproducibility |
-| 5  | isolation           | [ ]              | [ ]                      | —                            | 2-tenant noisy neighbor; cgroup weights                 |
-| 6  | memory-and-allocators | [ ]            | [ ]                      | —                            | std::allocator vs std::pmr vs mimalloc, +MAP_HUGETLB, +cgroup pressure (added in r70; §7 demo) |
-| 7  | quality-pipeline    | [ ]              | [ ]                      | —                            | cppcheck + clang-tidy + gtest + abidiff + gdbserver (moved from slot 6 in r70) |
+| 5  | isolation           | [x]              | [x]                      | 2026-05-16 (r102)            | 2-tenant noisy neighbor; tenant-a p99 across four scenarios: baseline=2.3ms, unisolated=24.7ms (10.7× degradation), weighted=9.0ms (3.9×), pinned=1.8ms (FASTER than baseline — cache stays hot under dedicated cpuset); requires cgroup v2 controller delegation (G-40); `compose.yml` + `--scenario` flag |
+| 6  | memory-and-allocators | [x]            | [x]                      | 2026-05-16 (r96)             | std::allocator vs std::pmr (monotonic + sync_pool) vs mimalloc; batch mode: PMR p50=4.08µs vs default p50=8.66µs (2.12× faster), p99 5.61µs vs 15.29µs; three modes — batch / serve / observe (with OTel + LGTM); jemalloc dropped r136 (GCC 14 build conformance) |
+| 7  | quality-pipeline    | [x]              | [x]                      | 2026-05-17 (r128)            | cppcheck + clang-tidy + gtest + ASan+UBSan + abidiff + hermetic Conan lockfile + ephemeral gdbserver sidecar; `--demo-findings` flag temporarily appends bad code to channel.cpp to show what analyzers report (production code is clean, so default cppcheck.txt is empty) |
 
 `scripts/test-all-demos.sh` aggregates the six per-demo test
 scripts; it does **not** fail-fast (per skeleton convention),
@@ -91,21 +91,21 @@ just look "filled in" don't count.
 
 | Diagram (basename)                    | placeholder | drawn  | Embedded in §  | Notes                                              |
 |---------------------------------------|-------------|--------|----------------|----------------------------------------------------|
-| 01-prerequisites-toolchain            | [x]         | [ ]    | §1 (gallery)   | Toolchain → Conan cache → Podman storage           |
+| 01-prerequisites-toolchain            | [x]         | [x]    | §1 (gallery)   | Build-time / runtime / host layers on Fedora 44; cgroup v2 delegation called out as the prereq most setups miss (G-40) |
 | 02-introduction-four-layers           | [x]         | [x]    | §2             | Four-layer mental model with demo-01 trace overlay |
 | 02-threading-models                   | [x]         | [x]    | §2             | Stack vs scheduler quadrant; M:N at top, 1:1 bottom|
-| 03-raii-discipline                    | [x]         | [x]    | §3             | RAII vs manual cleanup leak paths (SVG hand-authored; .excalidraw stub) |
-| 04-image-strategy-multistage          | [x]         | [ ]    | §4             | Trade-off matrix: size, debug, attack surface       |
-| 05-compile-time-pgo-flow              | [x]         | [ ]    | §5             | Instrumented build → workload → optimized build    |
-| 06-stl-layout-flat-vs-node            | [x]         | [ ]    | §6             | Cache-line footprint: set / flat_set / vector       |
-| 07-allocator-stack                    | [x]         | [ ]    | §7             | App → PMR → glibc/jemalloc/mimalloc → cgroup        |
-| 08-io-uring-rings                     | [x]         | [ ]    | §8             | SQ/CQ mental model + multishot recv                 |
-| 09-networking-veth-vs-host            | [x]         | [ ]    | §9             | Packet path under each networking mode              |
-| 10-observability-otel-stack           | [x]         | [ ]    | §10            | OTel collector fan-out to Prom/Mimir/Tempo/Loki     |
-| 11-isolation-cgroup-tree              | [x]         | [ ]    | §11            | cgroup hierarchy: weight + cpuset + NUMA            |
-| 12-debug-sidecar-pattern              | [x]         | [ ]    | §12            | Ephemeral sidecar sharing PID namespace             |
-| 13-reproducibility-conan-flow         | [x]         | [ ]    | §13            | Conan lockfile + preset → image with ABI labels     |
-| 14-pitfalls-avx512-mismatch           | [x]         | [ ]    | §14            | The SIGILL trap visualized                          |
+| 03-raii-discipline                    | [x]         | [x]    | §3             | RAII vs manual cleanup — destructor fires on every exit path; leak paths in side-by-side comparison |
+| 04-image-strategy-multistage          | [x]         | [x]    | §4             | Single-stage / ubi-multistage / ubi-micro stages with Demo-01 verified result (26× image size reduction) |
+| 05-compile-time-pgo-flow              | [x]         | [x]    | §5             | Instrument → train → optimize PGO pipeline       |
+| 06-stl-layout-flat-vs-node            | [x]         | [x]    | §6             | Cache-line footprint: flat_map / unordered_map / std::map / vector linear scan |
+| 07-allocator-stack                    | [x]         | [x]    | §7             | App → PMR resource → allocator → kernel page cache → cgroup memory.high/.max with Demo-06 verified PMR result |
+| 08-io-uring-rings                     | [x]         | [x]    | §8             | SQ/CQ mental model; multishot accept + recv + provided-buffer rings |
+| 09-networking-veth-vs-host            | [x]         | [x]    | §9             | Packet path: rootless slirp4netns vs --network=host |
+| 10-observability-otel-stack           | [x]         | [x]    | §10            | OTel-cpp → otel-lgtm → Tempo/Mimir/Loki/Grafana with the Simple-vs-Batch processor decision called out |
+| 11-isolation-cgroup-tree              | [x]         | [x]    | §11            | cgroup hierarchy with two tenants under demo-05; weight + cpuset + verified tenant-a p99 results |
+| 12-debug-sidecar-pattern              | [x]         | [x]    | §12            | Ephemeral gdbserver sidecar sharing PID namespace with the service container |
+| 13-reproducibility-conan-flow         | [x]         | [x]    | §13            | Conan lockfile + CMake preset + Containerfile → deterministic labeled image |
+| 14-pitfalls-avx512-mismatch           | [x]         | [x]    | §14            | The SIGILL trap visualized: AVX-512 builder host → runtime host without AVX-512 |
 
 ---
 
@@ -22101,6 +22101,88 @@ surfaced while editing:
 The retrospective is the project's last major artifact. Remaining
 on the §11 timeline: cross-distro verification (Fedora 43, low
 priority) and public announce. Everything else is shipped.
+
+### 2026-05-17 — r145: status-table sync — demos 5/6/7 + diagrams + CI
+
+**The trigger.**
+
+The user spotted that the plan's top-of-document status tables
+still showed pre-r70 state: demos 5/6/7 unchecked, 12 of 15
+diagrams marked "[ ] drawn" when they're real diagrams now (we
+saw them rendered in r142's PPTX QA), and PRD §6 still listed CI
+integration as unstarted when `.github/workflows/demos.yml` has
+been live since r25 or so.
+
+This is exactly the editorial-debt-compounds pattern from
+LESSONS-LEARNED §2.4 — checkbox state needs a lint, not author
+discipline.
+
+**Three tables fixed.**
+
+**1. Plan demo table (`_plans/reconciliation-plan.md` lines 70-78).**
+
+Marked demos 5, 6, 7 as `[x] [x]` for build + tests-pass, with
+real measurement summaries pulled from the section prose and
+demo READMEs:
+
+  Demo 5  isolation             p99 across four scenarios: 2.3 / 24.7 /
+                                9.0 / 1.8 ms (pinned FASTER than baseline)
+  Demo 6  memory-and-allocators PMR p50 4.08µs vs default 8.66µs (2.12×);
+                                three modes: batch / serve / observe
+  Demo 7  quality-pipeline      cppcheck + clang-tidy + gtest + ASan+UBSan
+                                + abidiff + gdbserver sidecar; --demo-findings
+
+Last-verified dates pulled from the rounds where each demo's
+results were captured (r102 / r96 / r128).
+
+**2. Plan diagram table (`_plans/reconciliation-plan.md` lines 94-108).**
+
+The "drawn" column had 12 of 15 marked `[ ]`. All 15 are now
+real hand-drawn diagrams (we saw them rendered cleanly in the
+r142 PPTX QA pass; r142 also stripped round annotations from four
+of them). Marked all 15 as `[x] [x]` and updated the "Notes"
+column to reflect what each diagram actually shows now rather
+than the original placeholder description:
+
+  before: "Toolchain → Conan cache → Podman storage"
+  after:  "Build-time / runtime / host layers on Fedora 44;
+           cgroup v2 delegation called out as the prereq most
+           setups miss (G-40)"
+
+**3. PRD §6 Test strategy line 275 + §11 timeline line 507.**
+
+  - §6 CI integration: `[ ]` → `[x]` with a one-paragraph
+    note explaining what `demos.yml` covers (smoke tests for
+    demo-01 + demo-02 on ubuntu-latest; the rest gated to a
+    self-hosted Fedora 44 runner per CONTRIBUTING.md), and
+    that `pages.yml` builds + deploys the site
+  - §11 LESSONS-LEARNED: `[ ]` → `[x]` (shipped at r144)
+
+**Verification.**
+
+Final audit of `[ ]` across docs:
+
+  PRD.md:504  Fedora 43 best-effort verification  — legitimately TBD
+  PRD.md:511  Public announce                     — legitimately TBD
+  _plans/...  C++ lambda captures in code blocks   — false positive
+  LESSONS-LEARNED.md  Day-1 checklist (9 items)   — INTENTIONAL
+                                                    (template for next
+                                                    project; reader is
+                                                    meant to tick these)
+
+Two intentional items + two genuinely-TBD items + false positives
+inside code blocks. Clean.
+
+**Files changed.**
+
+  PRD.md                            §6 CI line + §11 LESSONS-LEARNED line
+  _plans/reconciliation-plan.md     demo table (3 rows) + diagram table
+                                    (12 of 15 rows) + this entry
+
+This is the kind of cleanup that should have been a lint. Adding
+"checkbox-state staleness" as a candidate for future projects'
+pre-publish lints — file an entry under the LESSONS-LEARNED §2.4
+'Editorial debt compounds' pattern.
 
 ---
 
