@@ -47,6 +47,7 @@ See [PRD.md](PRD.md) §3 for the complete non-goals list.
 .
 ├── README.md                    ← this file
 ├── PRD.md                       ← the project's source-of-intent
+├── LESSONS-LEARNED.md           ← project retrospective (for the next similar project)
 ├── CONTRIBUTING.md              ← contribution + iteration conventions
 ├── LICENSE                      ← Apache 2.0
 ├── Gemfile                      ← Jekyll deps
@@ -55,6 +56,7 @@ See [PRD.md](PRD.md) §3 for the complete non-goals list.
 ├── index.html                   ← Jekyll homepage
 ├── examples.html                ← demos gallery page
 ├── diagrams.html                ← diagrams gallery page
+├── bibliography.html            ← annotated reference books page
 │
 ├── onboarding/                  ← read-once setup + workflow docs
 │   ├── GETTING-STARTED.md
@@ -62,10 +64,11 @@ See [PRD.md](PRD.md) §3 for the complete non-goals list.
 │   └── STARTING-WITH-CLAUDE.md
 │
 ├── _docs/                       ← tutorial sections (00 outline, 01-15, 16 appendix)
+├── _examples/                   ← per-demo Jekyll pages, generated from READMEs
 ├── _reference/                  ← reference docs
 │   └── statelessness/           ← Statelessness companion (00 index + 01-11 docs)
 ├── _plans/
-│   └── reconciliation-plan.md   ← what's verified vs. claimed
+│   └── reconciliation-plan.md   ← what's verified vs. claimed (~22k lines, append-only)
 │
 ├── _layouts/                    ← Jekyll wrappers (default, tutorial, plan)
 ├── _includes/                   ← shared HTML partials (header, footer, embed)
@@ -84,7 +87,10 @@ See [PRD.md](PRD.md) §3 for the complete non-goals list.
 │   └── demo-07-quality-pipeline/
 │
 ├── observability/               ← shared compose stack: grafana/otel-lgtm
-├── presentation/                ← PPTX output (when rendered)
+├── presentation/                ← PPTX deck + build notes
+│   ├── cpp-container-tutorial.pptx
+│   └── README.md                ← deck rebuild + editing instructions
+├── tools/                       ← deck build tools (build-pptx.py + sections.py + build-deck.sh)
 ├── scripts/                     ← test-template + per-demo + aggregator + utilities
 └── .github/workflows/           ← Pages build + demo CI
 ```

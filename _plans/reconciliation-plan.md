@@ -21975,6 +21975,133 @@ The PRD now reflects shipped reality. Remaining items per §11:
 cross-distro verification (Fedora 43), LESSONS-LEARNED.md (r144),
 and public announce.
 
+### 2026-05-17 — r144: LESSONS-LEARNED.md — the retrospective
+
+**The trigger.**
+
+The reconciliation plan captures every round but doesn't synthesize.
+Post-r143 (PRD reconciled), the natural next artifact is the
+retrospective — the lessons that generalize beyond this project.
+Audience is the author on their next similar project; cross-team
+readers welcome but the framing is single-author retrospective.
+
+**Approach: four-bucket structure with a consistent lesson shape.**
+
+Every lesson follows the same shape:
+
+  Symptom    — how the problem first appeared
+  Root cause — what was actually broken
+  Resolution — how we fixed it (with round number where relevant)
+  Next time  — what to do differently from day one
+
+The four buckets:
+
+  1. Site engineering (Jekyll on GitHub Pages)
+     - Liquid renders prose literally (the analyzer, r131)
+     - Absolute /path/ links bypass baseurl (G-63, r138)
+     - configure-pages@v5 empty base_path (G-64, r139)
+     - Demo cross-references should stay internal (Tier 1/Tier 2, r140)
+
+  2. Content engineering (writing, editing, restructuring)
+     - Round annotations are sticky (three cleanup passes)
+     - Reading times drift as content grows (r141)
+     - Demo renumbering cascades silently (r141)
+     - Editorial debt compounds; schedule it explicitly
+
+  3. Deck engineering (PPTX from a content data model)
+     - Programmatic generation beats template editing above ~30 slides
+     - Design tokens transfer cheaply via extraction
+     - SVG pipeline depends on what's actually installed
+     - Aspect-ratio sizing + auto-shrink prevent ~80% of slide overflow
+     - Speaker scripts != bullet expansions
+
+  4. Process lessons (project shape, decisions, retrospectives)
+     - Some dependencies should be dropped, not worked around (jemalloc)
+     - The reconciliation plan was the right artifact
+     - PRD reconciliation belongs at end-of-project, not mid-flight
+     - Multi-round work needs draft/shipped separation
+     - Build wrappers earn their complexity instantly
+
+Plus three trailing sections:
+
+  - 'What earned its complexity (keep doing)' — the disciplines
+    worth carrying to the next project
+  - 'What didn't earn its complexity (skip or restructure)' — the
+    parts that looked like good ideas but produced more friction
+    than value
+  - 'Day-1 setup checklist for a similar project' — actionable
+    next-project starting kit
+  - 'Project numbers (for calibration)' — rounds completed, gotcha
+    count, file counts, etc.
+
+**Lesson selection criteria.**
+
+Not every gotcha became a lesson. Inclusion criteria:
+
+  - Generalizes beyond this specific project (e.g. 'Liquid parses
+    prose literally' applies to any Jekyll project; the specific
+    Trivy-vs-Grype CVE flag confusion does not)
+  - Has a clear 'next time' action (e.g. 'install the lint on day
+    one' is actionable; 'be more careful' is not)
+  - Cost us at least one round of work to learn (filters out the
+    one-off mistakes that wouldn't repeat)
+
+Most G-numbers from the gotcha catalog stayed in the catalog. ~10
+of the 64 gotchas graduated into LESSONS-LEARNED because they
+satisfied all three criteria.
+
+**Tone choice.**
+
+Project-retrospective tone, not blog-post tone. First person plural
+('we') reserved for places where the team genuinely acted; second
+person ('you') for the day-1 checklist and the 'next time'
+recommendations. No hedging language ('we might consider'); the
+retrospective records what we'd actually do.
+
+**Length: 611 lines, 3,579 words.**
+
+Aimed for short enough to be re-read at the start of the next
+similar project (~15 minutes), long enough to capture the
+specific 'next time' actions without losing them in
+abstraction. Each lesson is 15-40 lines; each bucket is 80-130
+lines.
+
+**README updated to link the new doc.**
+
+The repository layout in `README.md` was updated to add
+`LESSONS-LEARNED.md` and to fix two other staleness issues that
+surfaced while editing:
+  - Added `bibliography.html` to the top-level files (was missing
+    since r136 even though the file shipped)
+  - Added `_examples/` for the per-demo Jekyll pages (was missing
+    since r70 / r137)
+  - Added `tools/` directory line with the deck build tools
+  - Replaced 'presentation/ ← PPTX output (when rendered)' with the
+    concrete contents
+
+**Verification.**
+
+  - scripts/check-liquid.py: clean
+  - Section count: 4 numbered buckets + 4 trailing sections =
+    8 H2 sections + 1 H1
+  - Internal references to G-numbers: 2 (G-63, G-64; the rest
+    of the catalog stayed in the catalog per the selection criteria)
+  - Internal round references: 11 (r131, r135, r136, r138, r139,
+    r140, r141, r142, r142.1, r143, r144); all match plan entries
+
+**Files changed.**
+
+  LESSONS-LEARNED.md                new (611 lines, 3,579 words)
+  README.md                         repository-layout block updated
+                                    (4 additions: LESSONS-LEARNED,
+                                    bibliography.html, _examples/,
+                                    tools/; presentation/ expanded)
+  _plans/reconciliation-plan.md     this entry
+
+The retrospective is the project's last major artifact. Remaining
+on the §11 timeline: cross-distro verification (Fedora 43, low
+priority) and public announce. Everything else is shipped.
+
 ---
 
 ## Known divergences from the PRD
