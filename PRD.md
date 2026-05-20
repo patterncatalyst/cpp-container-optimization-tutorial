@@ -223,6 +223,28 @@ parameter cheat-sheet, C: ABI break worked example); their
 material landed inline in §9 and §13 respectively rather than
 needing dedicated appendices.
 
+### The statelessness compendium (sub-project)
+
+A parallel body of opinionated reference work covering stateless
+C++ service design for containerized deployment ships under
+[`_reference/statelessness/`](_reference/statelessness/). 13
+reader documents (~52,000 words) plus 11 paired SVG +
+Excalidraw diagrams covering the request-scope / process-scope /
+external-state vocabulary, RAII discipline for request scope, PMR
+allocator strategy, CFS-quota-aware threading, 12-Factor adapted
+to C++, state externalization, the ephemeral-filesystem trap,
+health checks, and a gRPC capstone.
+
+The compendium is opinionated reference-style; the main tutorial
+is walking-tutorial-style. The two are peer deliverables with
+bidirectional cross-references where they overlap (RAII, PMR,
+CFS, build tooling). A separate sub-project PRD at
+[`_plans/statelessness-compendium-prd.md`](_plans/statelessness-compendium-prd.md)
+covers the compendium's integration with the main tutorial, its
+terminology normalization, and its examples roadmap (8 new
+runnable Podman projects under
+`examples/statelessness/NN-slug/`).
+
 ---
 
 ## 6. Runnable examples

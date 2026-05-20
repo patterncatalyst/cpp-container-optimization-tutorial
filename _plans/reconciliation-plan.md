@@ -22184,6 +22184,115 @@ This is the kind of cleanup that should have been a lint. Adding
 pre-publish lints — file an entry under the LESSONS-LEARNED §2.4
 'Editorial debt compounds' pattern.
 
+### 2026-05-17 — r146: statelessness compendium sub-project PRD
+
+**The trigger.**
+
+User asked for a review of the imported `_reference/statelessness/`
+collection. The review (response in-chat, not committed) surfaced
+six findings (R1-R6) and a recommendation to add 8 runnable
+examples paired with the compendium docs. User confirmed they
+want to act on the review AND build the examples, but first
+wanted the work captured in a project document so future rounds
+can reference it.
+
+**The deliverable: a sub-project PRD modeled on the main PRD.**
+
+Created `_plans/statelessness-compendium-prd.md` (400 lines,
+2,552 words). Structure parallel to the main `PRD.md`:
+
+  §1   Summary
+  §2   Problem statement
+  §3   Goals and non-goals
+  §4   Audience
+  §5   Scope (Phase 1 R1-R5, Phase 2 examples, Phase 3 cross-refs, Phase 4 tests)
+  §6   Examples directory layout
+  §7   Diagrams
+  §8   Success metrics
+  §9   Constraints and dependencies
+  §10  Risks and mitigations
+  §11  Timeline and milestones
+  §12  Open questions (5 listed)
+  §13  Decision log (5 initial entries)
+  §14  Stakeholders
+  §15  How this PRD relates to the main project PRD
+  §16  References
+
+**Key scoping decisions captured.**
+
+1. **"Compendium" as the normalized term** for the body of work.
+   "Document set", "reference collection", and bare "reference"
+   are demoted to URL-only contexts. User preference; signals the
+   opinionated reference-work nature better.
+
+2. **8 examples, not 11.** Compendium docs 01 (deployment posture),
+   06 (12-Factor), 10 (gRPC capstone), 11 (build tooling) don't get
+   dedicated examples — 01 is vocabulary, 06 is woven through every
+   other example, 10 is itself the integration, 11 is referenced
+   by every example's build config.
+
+3. **Examples live under `examples/statelessness/NN-slug/`.** Not
+   flat with the main demos. Visual grouping, no numbering conflict,
+   supports per-collection test orchestration.
+
+4. **`research-notes.md` reframed (option B), not deleted (option A).**
+   The authoring narrative has value for extenders; the fix is
+   reframing it as such, not hiding it.
+
+5. **Per-example Jekyll wrapper pages under `_examples/`** matching
+   the main demos' pattern, so statelessness examples appear in
+   the gallery.
+
+**Example set scoped: 8 examples mapped to compendium docs.**
+
+  1  request-context-raii     → Doc 02 (RAII + RequestContext)
+  2  pmr-monotonic-arena      → Doc 03 (per-request arena + lifetime trap)
+  3  process-scoped-wiring    → Doc 04 (main()-owned wiring; State Arch Table)
+  4  cgroup-thread-sizing     → Doc 05 (CFS quota; thread pool sized to cpu.max)
+  5  scoped-connection-pool   → Doc 07 (ScopedConnection RAII; idempotency)
+  6  ephemeral-fs-traps       → Doc 08 (--read-only; spdlog default fails)
+  7  grpc-health-shutdown     → Doc 09 (3 probes; graceful shutdown sequence)
+  8  outbox-pattern           → Doc 07 (atomic DB write + event emit)
+
+Each example is self-contained Podman project with `./demo.sh`,
+matching main tutorial demo conventions. Estimated 50-70 hours
+total effort for the examples set, comparable to one of the
+larger main demos × 8.
+
+**Main PRD updated with a forward-pointer.**
+
+Added a short subsection to `PRD.md` §5 ('The statelessness
+compendium (sub-project)') describing the compendium as a peer
+body of work and pointing at the sub-project PRD. Two-paragraph
+treatment with a permalink to `_plans/statelessness-compendium-prd.md`.
+
+**No content changes to the compendium itself this round.**
+
+R1-R5 implementations + the 8 examples will happen in subsequent
+rounds. This round is *just* the planning artifact, so future
+rounds have a document to reference for scope decisions, open
+questions, and the decision log.
+
+**Verification.**
+
+  scripts/check-liquid.py: clean
+  _plans/statelessness-compendium-prd.md: 400 lines, 2552 words,
+    16 H2 sections
+  PRD.md forward-pointer: in place under §5
+
+**Files changed.**
+
+  _plans/statelessness-compendium-prd.md    new (400 lines, 2,552 words)
+  PRD.md                                    §5 forward-pointer added
+  _plans/reconciliation-plan.md             this entry
+
+The compendium sub-project now has a captured scope. Next round
+candidates per the new PRD:
+
+  - r147: Phase 1 — Integration & discoverability (R1-R5)
+          1-2 hours, low risk
+  - r148+: Phase 2 — Examples, one or two per round
+
 ---
 
 ## Known divergences from the PRD
