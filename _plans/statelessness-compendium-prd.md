@@ -339,7 +339,7 @@ diagram for that doc is often sufficient.
 | Phase | Milestone | Est. effort | Done? |
 |---|---|---|---|
 | 1 | Integration & discoverability (R1-R5) | 1-2 hours, one round | [x]   |
-| 2 | `02-raii` example | 4-6 hours | [ ] |
+| 2 | `02-raii` example | 4-6 hours | [x] (authored r149; needs host build) |
 | 2 | `03-pmr` example | 4-6 hours | [ ] |
 | 2 | `04-process-scoped-state` example | 6-8 hours | [ ] |
 | 2 | `05-threading` example | 6-8 hours | [ ] |

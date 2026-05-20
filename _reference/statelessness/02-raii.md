@@ -20,6 +20,14 @@ This document covers the RAII discipline for a stateless service: how to model r
 
 {% include excalidraw.html name="statelessness/02-raii" caption="RequestContext as RAII per-request scope: ctor acquires, dtor releases on every exit." %}
 
+> **Run this pattern.** A runnable companion to this document lives at
+> [`examples/statelessness/02-raii/`]({{ '/examples/statelessness-02-raii/' | relative_url }}).
+> It's a small gRPC service whose handler builds a `RequestContext` on
+> entry and takes one of three exit paths — normal return, early
+> return, and throw — with logging that proves the destructor fires on
+> all three (acquire/release pairs balance; outstanding leases return
+> to zero at shutdown). Clone the repo, `cd` in, and `./demo.sh`.
+
 ## A refresher on the three guarantees
 
 The C++ exception-safety vocabulary distinguishes three levels.

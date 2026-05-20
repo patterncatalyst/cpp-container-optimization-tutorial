@@ -22548,6 +22548,119 @@ build's own include/exclude rules, not a hardcoded list.
 
 ---
 
+### 2026-05-17 — r149: compendium Phase 2, example 1 — 02-raii
+
+**The trigger.**
+
+Phase 1 (r147) made the compendium discoverable; r148 fixed the
+Pages build. Phase 2 is the examples set. This round authors the
+first one: examples/statelessness/02-raii/, the runnable companion
+to compendium Doc 02 (RequestContext RAII).
+
+**Design decision: leaner than the observability demos.**
+
+02-raii uses gRPC + protobuf + abseil ONLY — no OpenTelemetry, asio,
+or liburing. The teaching point is the RAII request-scope lifecycle,
+not observability or I/O, so the lighter dependency graph keeps the
+first compendium example approachable and its cold build meaningfully
+faster than demo-03/demo-04 (the OTel half of the chain is the
+expensive part). The RequestContext's "span" is represented as a
+scoped log line, with a prose note that in production it's an OTel
+span.
+
+**What the example does.**
+
+A gRPC service whose Process handler builds a RequestContext on entry
+and takes one of three exit paths chosen by the request's mode field:
+  ok     → normal return,        grpc OK
+  reject → early return,         grpc INVALID_ARGUMENT
+  throw  → throws mid-handler,   grpc INTERNAL
+The RequestContext destructor fires on all three. The service logs
+one acquire and one matching release per request; the LeasePool's
+outstanding-lease counter returns to zero at shutdown. That balance
+is the machine-checkable proof that RAII cleaned up on every path.
+
+**Files authored (examples/statelessness/02-raii/).**
+
+  proto/processor.proto    RequestProcessor; mode drives the exit path
+  src/request_context.hpp  the RAII centerpiece — ctor acquires, dtor
+                           releases (noexcept), move-only w/ noexcept
+                           moves, 8KiB pmr arena, leased resource
+  src/main.cpp             gRPC callback server + 3-path handler +
+                           rc_log + minimal :8080 healthz + graceful
+                           shutdown (signal → server Shutdown → join)
+  src/client.cpp           one-shot client; exit code encodes the
+                           predicted grpc status per mode
+  CMakeLists.txt           gRPC codegen + raii-svc + raii-client;
+                           G-23 link-group override; C++23 app layer
+  conanfile.py             grpc/1.54.3 + protobuf/3.21.12 + abseil
+                           20230125.3 override; no OTel
+  conan.lock               empty placeholder (resolves fresh)
+  Containerfile            multi-stage UBI 9.5 → ubi-minimal; gRPC
+                           perl set; no OTel
+  compose.yml              single service; read_only rootfs + tmpfs +
+                           no-new-privileges; :50051 + :18402 healthz
+  demo.sh                  build + up + drive 3 modes + acquire/release
+                           balance summary
+  README.md                what it demonstrates + layout + cross-refs
+
+**Supporting files.**
+
+  scripts/test-stateless-demo-02-raii.sh   per-example CI test (Q1
+        naming): healthz wait, 3 modes asserted via client exit code,
+        acquire/release balance assertion, graceful-shutdown leases=0
+  scripts/test-all-stateless-demos.sh      NEW aggregator (Q1): runs
+        every test-stateless-demo-*.sh, non-fail-fast, separate from
+        test-all-demos.sh
+  _examples/statelessness-02-raii.md       Jekyll page (Q2/Q3),
+        permalink /examples/statelessness-02-raii/, order 202
+
+**Integration.**
+
+  examples.html            new "Compendium examples" section with the
+                           02-raii card + a test-all-stateless-demos.sh
+                           line in the run block
+  _reference/statelessness/02-raii.md  "Run this pattern" callout after
+                           the diagram, linking to the example
+                           (bidirectional cross-ref, Phase 3)
+  _plans/statelessness-compendium-prd.md  §11 timeline: example 1 [x]
+
+**Verification done in-sandbox.**
+
+  - scripts/check-liquid.py: clean (incl. the new Jekyll page)
+  - bash -n on demo.sh, both test scripts, the aggregator: clean
+  - aggregator dry-run discovers + invokes the test script correctly
+  - STANDALONE COMPILE of the RAII core (request_context.hpp logic,
+    grpc stubbed) under g++ -std=c++23 -Wall -Wextra: clean, and a
+    runtime check confirms lease balance across construct + move +
+    scope-exit (acquire once, release exactly once, zero outstanding).
+
+**NOT verified in-sandbox (network disabled — needs host build).**
+
+The full container build (gRPC chain from source under UBI 9) and the
+end-to-end demo/test run require a real Fedora 44 host with Podman.
+The gRPC-dependent code (main.cpp's reactor wiring, client.cpp)
+follows demo-03's verified callback-API pattern closely but has not
+been compiled against real gRPC headers here. First host build will
+take a few minutes on a cold Conan cache; expect possible small
+fix-ups on first real compile (the usual gRPC/Conan surface).
+
+**Files changed.**
+
+  examples/statelessness/02-raii/*          new (11 files)
+  scripts/test-stateless-demo-02-raii.sh    new
+  scripts/test-all-stateless-demos.sh       new
+  _examples/statelessness-02-raii.md        new
+  examples.html                             compendium gallery section
+  _reference/statelessness/02-raii.md       run-this-pattern callout
+  _plans/statelessness-compendium-prd.md    timeline example 1 [x]
+  _plans/reconciliation-plan.md             this entry
+
+Next: r150+ continues Phase 2 with 03-pmr (the monotonic arena +
+lifetime trap), then 04 / 05 / 07 / 07-outbox / 08 / 09.
+
+---
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from

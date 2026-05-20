@@ -122,6 +122,32 @@ permalink: /examples/
     </div>
 </section>
 
+<section class="section">
+    <div class="container">
+        <h2 class="section-heading">Compendium examples</h2>
+        <p class="section-lead">
+            Runnable companions to the
+            <a href="{{ '/reference/statelessness/00-index/' | relative_url }}">statelessness compendium</a>.
+            Each one makes a single pattern from the compendium concrete
+            and runnable; they share the main demos' one-command
+            <code>./demo.sh</code> shape.
+        </p>
+        <div class="cards">
+            <a class="card" href="{{ '/examples/statelessness-02-raii/' | relative_url }}">
+                <div class="card__eyebrow">Compendium · <strong>Doc 02</strong></div>
+                <h3 class="card__title">RequestContext RAII</h3>
+                <p class="card__desc">
+                    A gRPC handler builds a RequestContext on entry and
+                    takes one of three exit paths — normal return, early
+                    return, and throw — proving the destructor fires on
+                    all three. RAII cleanup made visible.
+                </p>
+                <div class="card__meta"><span>Read page →</span></div>
+            </a>
+        </div>
+    </div>
+</section>
+
 <section class="section" style="background: var(--bg-soft);">
     <div class="container container-prose">
         <h2 class="section-heading">Running every demo</h2>
@@ -138,6 +164,8 @@ cd {{ site.github_repo }}/examples/demo-01-image-strategy
 # ... or run them all in sequence:
 cd {{ site.github_repo }}
 ./scripts/test-all-demos.sh
+# ... or just the statelessness compendium examples:
+./scripts/test-all-stateless-demos.sh
 </code></pre>
 
         <h2 class="section-heading">If a demo fails</h2>
