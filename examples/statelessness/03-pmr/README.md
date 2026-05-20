@@ -63,6 +63,12 @@ cache on the host makes it fast.
 
 ## A note on AddressSanitizer in containers
 
+For what shadow memory actually *is* — how ASan keeps one shadow byte
+per eight bytes of your memory, why it needs a large contiguous mapping,
+and the full set of container failure modes and fixes — see
+[§12 Analysis & debugging](../../../docs/12-analysis-debugging/). The
+short operational version for this example:
+
 On newer kernels (6.x), ASan can fail to map its shadow memory because
 of high ASLR entropy — the symptom is `Shadow memory range interleaves`
 or `failed to allocate` at startup, *before* the bug is reached. The

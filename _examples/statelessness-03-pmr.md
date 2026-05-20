@@ -65,7 +65,8 @@ A note on ASan in containers: on newer kernels ASan can fail to map its
 shadow memory under high ASLR entropy. The demo runs `pmr-trap` via
 `setarch -R` to sidestep it; if you still hit it, set
 `sudo sysctl vm.mmap_rnd_bits=28` on the host. The trap itself is real
-either way.
+either way. For what shadow memory is and the full set of failure modes,
+see [§12 Analysis & debugging]({{ '/docs/12-analysis-debugging/' | relative_url }}).
 
 ## Where it sits in the compendium
 

@@ -497,24 +497,64 @@ metal**: you get the same runtime environment as production
 allocator, same fork-exec patterns). ASan findings are
 representative of what production would hit.
 
-A subtle gotcha: ASan's shadow memory mapping requires a
-contiguous virtual address space, and some kernel hardening
-features (specifically `vm.mmap_min_addr` and SELinux's
-`mmap_zero` boolean) can interfere. If ASan startup fails
-with `==<PID>==Shadow memory range interleaves with an
-existing memory mapping`, the fix is usually one of:
+**How ASan catches these — and why the container sometimes
+fights it.** AddressSanitizer works by keeping a *shadow* of
+your process's memory. For every 8 bytes of application
+memory it reserves 1 byte of shadow, at a fixed address
+offset, encoding how many of those 8 bytes are currently
+legal to touch: `0` means all eight are addressable, `1`–`7`
+means only the first N are, and a negative marker means the
+region is poisoned — a redzone planted around an allocation,
+freed memory, or a stack slot that's gone out of scope. The
+compiler instruments every load and store to first compute
+the shadow address (`shadow = (addr >> 3) + offset`), read
+that one byte, and report immediately if the access lands on
+poisoned memory. That shadow is why ASan reserves a large,
+contiguous slice of the virtual address space (roughly an
+eighth of it) at startup — and why a use-after-free is caught
+the instant the freed memory is *read*, rather than whenever
+it happens to be reused. Without the sanitizer, the same bug
+is silent until the freed bytes get overwritten by something
+else, which is exactly why it surfaces as "random" corruption
+under load.
+
+That contiguous reservation is also what occasionally collides
+with the container's memory layout. Two distinct failure modes
+produce a near-identical startup error
+(`==<PID>==Shadow memory range interleaves with an existing
+memory mapping` or `failed to allocate`), and they have
+different fixes — knowing which you're looking at saves a lot
+of flailing:
+
+- **High ASLR entropy (newer kernels).** When
+  `vm.mmap_rnd_bits` is large (32 on many 6.x configurations),
+  the loader can place an ordinary library mapping inside the
+  range ASan wants for its shadow, and ASan aborts before your
+  code ever runs. Reduce randomization for just that process
+  with `setarch -R <binary>` (this is what the `03-pmr`
+  compendium example does for its sanitizer binary), or lower
+  it host-wide:
 
 ```bash
-# Option 1: relax the kernel config (host-side)
+sudo sysctl vm.mmap_rnd_bits=28
+```
+
+- **Kernel hardening / seccomp.** `vm.mmap_min_addr`, SELinux's
+  `mmap_zero` boolean, or a seccomp profile blocking ASan's
+  `mprotect` patterns can interfere instead. The fixes there
+  are host-side config or relaxing the container's seccomp:
+
+```bash
+# relax the low-address guard (host-side)
 sudo sysctl vm.mmap_min_addr=4096
 
-# Option 2: run with a less aggressive ASan mapping
-podman run -e ASAN_OPTIONS="abort_on_error=1:disable_coredump=1" ...
-
-# Option 3: run with --security-opt=seccomp=unconfined
-# (helps when seccomp is blocking ASan's mprotect patterns)
+# or let ASan's mprotect patterns through
 podman run --security-opt=seccomp=unconfined ...
 ```
+
+In both cases, setting `ASAN_OPTIONS="abort_on_error=1:disable_coredump=1"`
+keeps the failure clean and avoids dumping a multi-gigabyte
+core of the shadow region.
 
 ## Valgrind — when it's worth the slowdown
 

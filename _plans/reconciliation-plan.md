@@ -22780,6 +22780,55 @@ Next: 04-process-scoped-state, then 05 / 07 / 07-outbox / 08 / 09.
 
 ---
 
+### 2026-05-17 — r150.1: explain shadow memory; reconcile ASan failure modes
+
+**The trigger.**
+
+User asked: "have we explained in the docs what shadow memory is?"
+Honest answer: no. §12 referenced ASan's shadow memory only as a
+gotcha ("requires a contiguous virtual address space...") and jumped
+straight to fixes, assuming the reader already knew the concept. The
+03-pmr example (r150) added more shadow-memory references in the same
+assume-it's-known style.
+
+**A real inconsistency found while checking.**
+
+§12 and the 03-pmr README attributed the SAME startup error to
+DIFFERENT causes:
+  - §12: vm.mmap_min_addr, SELinux mmap_zero, seccomp blocking mprotect
+  - 03-pmr: high ASLR entropy, fixed via setarch -R / vm.mmap_rnd_bits
+Both are legitimate — they're two distinct failure modes that produce
+a near-identical "Shadow memory range interleaves" error — but a reader
+moving between the two docs would not know which fix applied to their
+case.
+
+**Fix.**
+
+1. _docs/12-analysis-debugging.md: added a concrete explanation of
+   shadow memory before the gotcha — one shadow byte per 8 application
+   bytes, the addressability encoding (0 / 1-7 / poisoned), the
+   shadow=(addr>>3)+offset mapping, why ~1/8 of the address space is
+   reserved contiguously at startup, and why that makes use-after-free
+   catchable the instant freed memory is read. Then reorganized the
+   container failure modes into the TWO distinct cases with their
+   respective fixes (high ASLR entropy → setarch -R / mmap_rnd_bits;
+   kernel hardening/seccomp → mmap_min_addr / seccomp=unconfined),
+   noting ASAN_OPTIONS for clean aborts in both. §12 is now the
+   canonical explanation.
+2. examples/statelessness/03-pmr/README.md + _examples/statelessness-
+   03-pmr.md: kept the short operational note, added a pointer to §12
+   for the concept and the full failure-mode set.
+
+**Not changed (noted).**
+
+examples/demo-07-quality-pipeline also references shadow memory (the
+seccomp angle), which is consistent with §12's second failure mode. Left
+as-is; a §12 pointer could be added there later if desired.
+
+**Verified.** check-liquid clean.
+
+---
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from
