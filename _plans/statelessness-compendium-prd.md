@@ -340,7 +340,7 @@ diagram for that doc is often sufficient.
 |---|---|---|---|
 | 1 | Integration & discoverability (R1-R5) | 1-2 hours, one round | [x]   |
 | 2 | `02-raii` example | 4-6 hours | [x] (host-verified r149 — 3/3 paths, lease balance clean, first-try build) |
-| 2 | `03-pmr` example | 4-6 hours | [x] (authored r150; needs host build) |
+| 2 | `03-pmr` example | 4-6 hours | [x] (host-verified r150.3 — arena+bench+ASan trap all pass; static-libasan + direct-run) |
 | 2 | `04-process-scoped-state` example | 6-8 hours | [ ] |
 | 2 | `05-threading` example | 6-8 hours | [ ] |
 | 2 | `07-state-externalization` example | 8-10 hours | [ ] |

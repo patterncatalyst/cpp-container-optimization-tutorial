@@ -61,12 +61,15 @@ cd examples/statelessness/03-pmr
 
 CI verification: `scripts/test-stateless-demo-03-pmr.sh`.
 
-A note on ASan in containers: on newer kernels ASan can fail to map its
-shadow memory under high ASLR entropy. The demo runs `pmr-trap` via
-`setarch -R` to sidestep it; if you still hit it, set
-`sudo sysctl vm.mmap_rnd_bits=28` on the host. The trap itself is real
-either way. For what shadow memory is and the full set of failure modes,
-see [§12 Analysis & debugging]({{ '/docs/12-analysis-debugging/' | relative_url }}).
+A note on ASan in containers: the demo runs `pmr-trap` directly, and on
+most kernels ASan maps its shadow memory fine. If you hit
+`Shadow memory range interleaves` at startup (high ASLR entropy on newer
+kernels), the in-container `setarch -R` fix doesn't apply — the
+`personality` syscall it needs is blocked by seccomp — so apply a
+host-side mitigation: `sudo sysctl vm.mmap_rnd_bits=28` or
+`--security-opt seccomp=unconfined`. The trap itself is real either way.
+For what shadow memory is and the full set of failure modes, see
+[§12 Analysis &amp; debugging]({{ '/docs/12-analysis-debugging/' | relative_url }}).
 
 ## Where it sits in the compendium
 

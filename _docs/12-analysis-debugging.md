@@ -530,13 +530,18 @@ of flailing:
   `vm.mmap_rnd_bits` is large (32 on many 6.x configurations),
   the loader can place an ordinary library mapping inside the
   range ASan wants for its shadow, and ASan aborts before your
-  code ever runs. Reduce randomization for just that process
-  with `setarch -R <binary>` (this is what the `03-pmr`
-  compendium example does for its sanitizer binary), or lower
-  it host-wide:
+  code ever runs. On bare metal you can reduce randomization
+  for just that process with `setarch -R <binary>` — but inside
+  a container that usually fails with `failed to set
+  personality: Function not implemented`, because the
+  `personality` syscall it relies on is filtered by the default
+  seccomp profile. The reliable in-container fixes are host-wide
+  or seccomp-relaxing:
 
 ```bash
 sudo sysctl vm.mmap_rnd_bits=28
+# ...or let the personality/mprotect calls through:
+podman run --security-opt=seccomp=unconfined ...
 ```
 
 - **Kernel hardening / seccomp.** `vm.mmap_min_addr`, SELinux's

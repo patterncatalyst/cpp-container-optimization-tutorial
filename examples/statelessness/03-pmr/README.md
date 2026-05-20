@@ -69,16 +69,19 @@ and the full set of container failure modes and fixes — see
 [§12 Analysis & debugging](../../../docs/12-analysis-debugging/). The
 short operational version for this example:
 
-On newer kernels (6.x), ASan can fail to map its shadow memory because
-of high ASLR entropy — the symptom is `Shadow memory range interleaves`
-or `failed to allocate` at startup, *before* the bug is reached. The
-demo and test run `pmr-trap` via `setarch -R` (reduced ASLR) to
-sidestep it, and `util-linux` is in the runtime image to provide
-`setarch`. If you still hit it, set `vm.mmap_rnd_bits` lower on the
-host:
+The demo runs `pmr-trap` directly. On most kernels ASan maps its shadow
+memory fine and catches the bug — a nonzero exit and a
+`heap-use-after-free` report are the expected, educational result. If
+you instead hit `Shadow memory range interleaves` or `failed to
+allocate` at startup (newer kernels with high ASLR entropy), note that
+the usual in-container mitigation does *not* apply: `setarch -R` would
+reduce ASLR via the `personality` syscall, which the default container
+seccomp profile blocks (`failed to set personality: Function not
+implemented`). Apply a host-side mitigation instead:
 
 ```bash
 sudo sysctl vm.mmap_rnd_bits=28
+# ...or run the container with: --security-opt seccomp=unconfined
 ```
 
 This is an ASan-in-container environment issue, not a problem with the
@@ -96,7 +99,7 @@ trap itself — the bug is real regardless.
 ├── CMakeLists.txt           svc + client + pmr-trap (ASan, static libasan)
 ├── conanfile.py             gRPC + protobuf + abseil (no OTel)
 ├── conan.lock               empty placeholder
-├── Containerfile            multi-stage UBI 9 → ubi-minimal + util-linux
+├── Containerfile            multi-stage UBI 9 → ubi-minimal + libstdc++
 ├── compose.yml              single service; read-only rootfs + tmpfs
 └── demo.sh                  the driver
 ```

@@ -22887,6 +22887,64 @@ gcc lib dir. Retry build cost is now ~60s (cached gRPC layer), not 280s.
 
 ---
 
+### 2026-05-17 — r150.3: 03-pmr host-verified; clean up the trap's success output
+
+**The trigger.**
+
+r150.2's build fix worked: 15s rebuild (cached gRPC layer),
+static-libasan linked, and the demo ran end-to-end —
+  Act 1 arena: tokens=6 distinct=3
+  Act 2 bench: arena_us=2332 perobject_us=5318 (arena ~2.3x at N=50k,
+               reported honestly)
+  Act 3 trap:  textbook ASan heap-use-after-free at pmr_trap.cpp:71,
+               freed by monotonic_buffer_resource::_M_release_buffers
+The example is HOST-VERIFIED. But the success LOOKED like a failure
+because of two cosmetic lines, which the user flagged as "next error".
+
+**What looked wrong (both harmless).**
+
+1. `setarch: failed to set personality to (null): Function not
+   implemented`. setarch -R reduces ASLR via the personality() syscall,
+   which the container's default seccomp profile blocks. So setarch -R
+   failed and the `|| pmr-trap` fallback ran it directly — which worked,
+   because this kernel maps ASan's shadow memory fine without reduced
+   ASLR. My setarch-in-container approach (added r150) was simply wrong:
+   that syscall isn't available in the container.
+2. `Error: executing ... exit status 134`. The docker-compose provider
+   reporting the non-zero exit; 134 = SIGABRT = ASan aborting on purpose
+   after catching the bug. The success signal, surfaced as scary text.
+
+**Fix — make the success read as success.**
+
+- demo.sh + test: run pmr-trap DIRECTLY (dropped the doomed in-container
+  setarch -R). Filter the compose provider's chatter ("Executing
+  external compose provider", "Error: executing ... exit status 134")
+  from the displayed ASan report. Success is still decided by grepping
+  for heap-use-after-free; the shadow-memory branch now gives the
+  correct in-container mitigation.
+- Containerfile: removed util-linux from the runtime image — it was
+  added (r150) only to provide setarch, which we no longer use.
+- README + Jekyll page + §12: corrected the guidance. Inside a
+  container setarch -R does NOT work (personality blocked by seccomp);
+  the reliable fixes for the shadow-memory-interleave case are host-side
+  (sudo sysctl vm.mmap_rnd_bits=28) or --security-opt seccomp=unconfined.
+  §12 previously credited "the 03-pmr demo" with using setarch -R —
+  removed that and the recommendation, since neither is true.
+
+**Lesson (folds into G-65 / a new note).**
+
+setarch -R is a bare-metal ASLR trick; in a container the personality()
+syscall is typically seccomp-filtered, so it fails. For ASan shadow-
+memory startup failures in containers, reach for the host sysctl
+(vm.mmap_rnd_bits) or seccomp=unconfined, not setarch. And: a demo whose
+SUCCESS prints lines that look like errors is a UX bug — filter tool
+chatter so the intended signal is unambiguous.
+
+**Status.** 03-pmr marked host-verified in the compendium PRD §11
+timeline. check-liquid clean; bash -n clean.
+
+---
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from

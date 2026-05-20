@@ -85,7 +85,6 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
 
 RUN microdnf install -y --setopt=install_weak_deps=0 \
         libstdc++ \
-        util-linux \
     && microdnf clean all \
     && rm -rf /var/cache/yum
 

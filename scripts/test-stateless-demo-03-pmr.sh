@@ -68,18 +68,19 @@ log_step "Phase 4 — lifetime trap under AddressSanitizer"
 trap_out="$(
     "${COMPOSE[@]}" exec -T \
         -e ASAN_OPTIONS=abort_on_error=1:detect_leaks=0 \
-        pmr-svc sh -c \
-        'setarch -R /usr/local/bin/pmr-trap 2>&1 || /usr/local/bin/pmr-trap 2>&1' \
-        2>&1 || true
+        pmr-svc /usr/local/bin/pmr-trap 2>&1 || true
 )"
 if printf '%s\n' "$trap_out" | grep -q 'heap-use-after-free'; then
     log_ok "ASan caught the lifetime trap (heap-use-after-free)"
 elif printf '%s\n' "$trap_out" | grep -qiE 'shadow memory|failed to allocate'; then
     log_warn "ASan could not init shadow memory under this kernel's ASLR \
-entropy (try 'sudo sysctl vm.mmap_rnd_bits=28'); environmental, non-fatal"
+entropy; host fix: 'sudo sysctl vm.mmap_rnd_bits=28' or \
+'--security-opt seccomp=unconfined'. Environmental, non-fatal"
 else
     log_err "did not observe the expected ASan report:"
-    printf '%s\n' "$trap_out" | sed 's/^/    /'
+    printf '%s\n' "$trap_out" \
+        | grep -vE 'Executing external compose provider|^Error: executing' \
+        | sed 's/^/    /'
     exit 1
 fi
 

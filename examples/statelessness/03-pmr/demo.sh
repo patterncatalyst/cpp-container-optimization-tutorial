@@ -79,25 +79,33 @@ echo "==> Act 3: the lifetime trap — AddressSanitizer catches a dangling"
 echo "    arena view stored in process-scoped state. A nonzero exit and a"
 echo "    heap-use-after-free report are the EXPECTED, educational result."
 echo "    ------------------------------------------------------------"
-# setarch -R disables ASLR for the child, sidestepping the ASan shadow-
-# memory interleave that newer kernels' high mmap entropy can trigger.
-# Fall back to a direct run if setarch isn't usable.
+# Run the ASan binary directly. On most kernels ASan maps its shadow
+# memory fine and catches the bug (the nonzero exit IS the success
+# signal). We filter the compose provider's own status chatter — the
+# "Executing external compose provider" notice and its "Error:
+# executing ... exit status 134" line (134 = the deliberate ASan abort)
+# — so the ASan report reads cleanly.
 trap_out="$(
     "${COMPOSE[@]}" exec -T \
         -e ASAN_OPTIONS=abort_on_error=1:detect_leaks=0 \
-        pmr-svc sh -c \
-        'setarch -R /usr/local/bin/pmr-trap 2>&1 || /usr/local/bin/pmr-trap 2>&1' \
-        2>&1 || true
+        pmr-svc /usr/local/bin/pmr-trap 2>&1 || true
 )"
-printf '%s\n' "$trap_out" | sed 's/^/    /'
+printf '%s\n' "$trap_out" \
+    | grep -vE 'Executing external compose provider|^Error: executing|set personality' \
+    | sed 's/^/    /'
 echo "    ------------------------------------------------------------"
 if printf '%s\n' "$trap_out" | grep -q 'heap-use-after-free'; then
     echo "==> ASan caught the lifetime trap (heap-use-after-free) — as designed."
 elif printf '%s\n' "$trap_out" | grep -qiE 'shadow memory|failed to allocate'; then
-    echo "==> NOTE: ASan could not map its shadow memory under this kernel's"
-    echo "    ASLR entropy. Run 'sudo sysctl vm.mmap_rnd_bits=28' on the host"
-    echo "    and re-run, or see the README. The trap itself is real; this is"
-    echo "    an ASan-in-container environment issue, not a code problem."
+    echo "==> NOTE: ASan could not map its shadow memory at startup — this"
+    echo "    kernel's ASLR entropy clashes with ASan's shadow region. The"
+    echo "    in-container ASLR fix is itself blocked (the personality"
+    echo "    syscall is filtered by seccomp), so apply a host-side"
+    echo "    mitigation and re-run:"
+    echo "      sudo sysctl vm.mmap_rnd_bits=28"
+    echo "    or run the container with --security-opt seccomp=unconfined."
+    echo "    See docs §12. The trap itself is real; this is an"
+    echo "    ASan-in-container environment issue, not a code problem."
 else
     echo "==> NOTE: did not observe the expected ASan report; see output above."
 fi
