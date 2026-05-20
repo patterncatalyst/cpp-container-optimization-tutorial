@@ -22829,6 +22829,64 @@ as-is; a §12 pointer could be added there later if desired.
 
 ---
 
+### 2026-05-17 — r150.2: fix the 03-pmr build (ASan static libs missing)
+
+**The trigger.**
+
+r150's first host build failed at linking pmr-trap:
+  ld: cannot find libasan_preinit.o: No such file or directory
+  ld: cannot find -lasan: No such file or directory
+The gRPC chain compiled fine (~282s, mostly Conan building gRPC from
+source); only the ASan binary's link step failed.
+
+**Root cause.**
+
+The builder installed gcc-toolset-14 (the compiler) but NOT the
+AddressSanitizer libraries. The base toolset package ships the
+compiler; the ASan static library (libasan.a) and libasan_preinit.o
+that -static-libasan needs live in a separate package,
+gcc-toolset-14-libasan-devel. I knew this package from demo-07 (which
+installs it for its sanitizer stage and is host-verified) but failed to
+carry it into 03-pmr's leaner Containerfile.
+
+**Fix.**
+
+Added `gcc-toolset-14-libasan-devel` to the builder — but as a SEPARATE
+dnf layer placed AFTER the conan install step, not folded into the
+first dnf install. Rationale: the first dnf layer precedes the
+expensive conan-install layer (which builds gRPC from source). Editing
+the first layer would invalidate the conan layer's cache and force the
+whole ~280s gRPC rebuild on retry. Adding a new layer after conan
+install keeps that cache hit, so the user's retry only runs the small
+package install + the ~60s compile/link.
+
+Kept -static-libasan: the -libasan-devel package provides the static
+library, so the binary stays self-contained and the ubi-minimal runtime
+needs no sanitizer package. (demo-07 links ASan dynamically because it
+runs the instrumented binary inside the toolset build stage, which
+already has libasan.so on LD_LIBRARY_PATH; 03-pmr runs pmr-trap in the
+minimal runtime image, where static linking is cleaner than copying or
+installing the shared lib.)
+
+**New gotcha.**
+
+G-65: ASan in a UBI gcc-toolset builder needs gcc-toolset-N-libasan-devel
+(and -libubsan-devel for -fsanitize=undefined). The base gcc-toolset-N
+package does NOT include the sanitizer libraries. Install the sanitizer
+-devel package as a layer AFTER any expensive conan/build layer so a
+later edit doesn't bust that cache. -static-libasan then yields a
+self-contained binary needing no runtime sanitizer package.
+
+**Verification.**
+
+check-liquid clean. The fix matches demo-07's proven package choice; the
+static-link path is the one genuinely host-unverified detail, but the
+-libasan-devel package is by definition the static-ASan package, so
+-static-libasan resolves libasan.a + libasan_preinit.o from the toolset
+gcc lib dir. Retry build cost is now ~60s (cached gRPC layer), not 280s.
+
+---
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from

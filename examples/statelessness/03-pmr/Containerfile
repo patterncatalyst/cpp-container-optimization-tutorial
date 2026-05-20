@@ -53,6 +53,18 @@ RUN if [ -s conan.lock ]; then \
                         --build=missing ; \
     fi
 
+# AddressSanitizer libraries for the pmr-trap binary. Installed as a
+# SEPARATE layer AFTER the conan install above so the expensive gRPC-
+# chain layer stays cached across rebuilds — changing this line does not
+# force the dependency graph to recompile. gcc-toolset-14-libasan-devel
+# provides the STATIC ASan library (libasan.a + libasan_preinit.o) that
+# -static-libasan needs, so the runtime image needs no sanitizer package.
+# (This is the same package demo-07 uses for its sanitizer stage.)
+RUN dnf install -y --quiet --setopt=install_weak_deps=False \
+        gcc-toolset-14-libasan-devel \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf/*
+
 COPY src/   ./src/
 COPY proto/ ./proto/
 COPY CMakeLists.txt ./
