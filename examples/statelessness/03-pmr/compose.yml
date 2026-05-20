@@ -1,0 +1,27 @@
+# statelessness/03-pmr brings up a single service:
+#   pmr-svc — gRPC MemoryProcessor on :50051, healthz on :8080
+#
+# No observability stack: the PMR mechanics are visible in the
+# service's own stdout and the bench numbers come back in the RPC
+# response. The standalone pmr-trap binary (the lifetime-trap demo) is
+# baked into the same image and run via `podman compose exec`.
+#
+# Bring up:   podman compose -f compose.yml up --build
+# Drive it:   ./demo.sh
+# Tear down:  ./demo.sh --clean
+
+services:
+  pmr-svc:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: cpp-tut/stateless-03-pmr:latest
+    container_name: stateless-03-pmr
+    ports:
+      - "127.0.0.1:50051:50051"   # gRPC MemoryProcessor
+      - "127.0.0.1:18403:8080"    # healthz
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - "no-new-privileges:true"

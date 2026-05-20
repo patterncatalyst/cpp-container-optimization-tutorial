@@ -22661,6 +22661,125 @@ lifetime trap), then 04 / 05 / 07 / 07-outbox / 08 / 09.
 
 ---
 
+### 2026-05-17 — r150: compendium Phase 2, example 2 — 03-pmr
+
+**The trigger.**
+
+Second compendium example, the runnable companion to Doc 03 (PMR and
+the request arena). Reuses the 02-raii scaffold (same gRPC + protobuf
++ abseil Conan chain, UBI 9 Containerfile, compose shape, healthz +
+graceful shutdown), now host-proven, so the new surface is the PMR
+content itself.
+
+**What it does — three teaching artifacts.**
+
+1. The layered request arena (src/request_arena.hpp): a
+   monotonic_buffer_resource over an unsynchronized_pool_resource over
+   new_delete_resource — Doc 03's canonical recipe. Deliberately
+   NON-movable: the monotonic resource holds a pointer into the arena's
+   own inline buffer, so moving would dangle it. (Contrast 02-raii's
+   RequestContext, which is movable.)
+2. mode=arena: handler splits the payload into arena-allocated tokens
+   (pmr::vector<pmr::string>) + a pmr::unordered_map, all bulk-freed at
+   scope end.
+3. mode=bench: times arena bulk-release vs N per-object new/delete,
+   returns both numbers.
+4. The lifetime trap (src/pmr_trap.cpp): a STANDALONE AddressSanitizer
+   binary that stashes a string_view into arena memory in a process-
+   scoped cache, lets the arena die, then reads it -> ASan
+   heap-use-after-free. Standalone-and-separate by necessity: you can't
+   safely host a use-after-free in a long-lived service. Statically
+   linked against libasan so the minimal runtime needs nothing extra.
+
+**Two real bugs caught by in-sandbox compile-checks before commit.**
+
+These would both have failed the host build:
+
+a. main.cpp used std::pmr::unordered_map without including
+   <unordered_map>. Added the include.
+b. do_bench did v.emplace_back(sample.c_str(), arena.resource()) into
+   a pmr::vector<pmr::string>. That double-specifies the allocator (the
+   vector already injects its own) and fails the uses_allocator
+   static assertion. Fixed to v.emplace_back(sample.c_str()) — the
+   vector propagates its arena allocator to the element.
+
+**An honesty fix surfaced by running the bench.**
+
+The compile-run printed arena=35us perobj=25us at N=1000 — the arena
+was SLOWER. That's not a bug; it's the truth Doc 03 already states:
+PMR's reliable win is bounded, predictable per-request memory and
+shrunken tail-latency variance, NOT mean throughput (glibc's allocator
+is fast; at modest N the heap can match or beat the arena's wall
+clock). The original framing ("arena faster by ~Nx") and the test's
+arena_us <= perobject_us assertion were therefore both dishonest and
+fragile. Reframed: the bench reports both numbers as context not a
+scoreboard; the result string and README/demo text now state the
+predictability-over-throughput point explicitly; the test asserts only
+that both phases produced positive measurements, not an ordering. This
+keeps the example aligned with the compendium's own nuance.
+
+**ASan-in-container robustness.**
+
+Modern kernels' high mmap ASLR entropy can make ASan fail to map its
+shadow memory at startup ("Shadow memory range interleaves"). The demo
+and test run pmr-trap via 'setarch -R' (reduced ASLR) to sidestep it,
+util-linux is in the runtime image to provide setarch, and both
+scripts treat the shadow-memory case as an environmental warning (host
+fix: sysctl vm.mmap_rnd_bits=28) rather than a code failure. The
+nonzero exit from the ASan abort is treated as SUCCESS — catching the
+bug is the point.
+
+**Files (examples/statelessness/03-pmr/).**
+
+  proto/processor.proto    MemoryProcessor; mode = arena | bench
+  src/request_arena.hpp    layered monotonic+pool arena, non-movable
+  src/main.cpp             gRPC server: arena work + bench + healthz +
+                           graceful shutdown
+  src/client.cpp           one-shot client (arena | bench)
+  src/pmr_trap.cpp         standalone ASan lifetime-trap demo
+  CMakeLists.txt           svc + client + pmr-trap (ASan, -static-libasan,
+                           IPO off, not stripped)
+  conanfile.py             grpc 1.54.3 + protobuf/abseil override; no OTel
+  conan.lock               empty placeholder
+  Containerfile            UBI 9 -> ubi-minimal + libstdc++ + util-linux;
+                           strips svc/client, NOT pmr-trap
+  compose.yml              single svc; read-only rootfs + tmpfs; :18403 hz
+  demo.sh                  arena + bench + trap, robust to the ASan case
+  README.md                what/why/ASan note/layout/cross-refs
+
+**Supporting + integration.**
+
+  scripts/test-stateless-demo-03-pmr.sh   per-example CI test
+  _examples/statelessness-03-pmr.md        Jekyll page, order 203
+  examples.html                            03-pmr card in the Compendium
+                                           examples section
+  _reference/statelessness/03-pmr.md       "Run this pattern" callout
+  _plans/statelessness-compendium-prd.md   timeline example 2 [x]
+
+**Verified in-sandbox.**
+
+  - check-liquid.py clean (incl. new page)
+  - bash -n on demo.sh + test clean; aggregator discovers both stateless
+    tests
+  - standalone compile+run of request_arena.hpp (pmr containers from the
+    layered arena): clean
+  - standalone compile+run of the handler logic (arena work + bench),
+    AFTER the two bug fixes above: clean
+  - pmr_trap.cpp compiled with -fsanitize=address AND with
+    -static-libasan: both trip heap-use-after-free as designed
+
+**NOT verified (network disabled — needs Fedora 44 host).**
+
+Full container build (gRPC chain) + end-to-end demo/test. The gRPC
+server/client wiring follows 02-raii's host-verified pattern exactly.
+The PMR logic and the ASan trap ARE compile-and-run verified here. The
+one genuinely host-dependent unknown is the ASan-in-container shadow-
+memory behaviour, which the scripts handle gracefully either way.
+
+Next: 04-process-scoped-state, then 05 / 07 / 07-outbox / 08 / 09.
+
+---
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from

@@ -16,6 +16,15 @@ This document covers PMR for service handlers: how `monotonic_buffer_resource` w
 
 {% include excalidraw.html name="statelessness/03-pmr" caption="PMR monotonic_buffer_resource: bump-pointer per request, single bulk free at scope-end." %}
 
+> **Run this pattern.** A runnable companion lives at
+> [`examples/statelessness/03-pmr/`]({{ '/examples/statelessness-03-pmr/' | relative_url }}).
+> It's a gRPC service with an `arena` mode (per-request scratch from a
+> layered monotonic + pool arena) and a `bench` mode (the
+> release-cost comparison), plus a standalone AddressSanitizer binary
+> that demonstrates the lifetime trap below — ASan catches the dangling
+> arena view as a `heap-use-after-free`. Clone the repo, `cd` in, and
+> `./demo.sh`.
+
 ## Why PMR
 
 The Polymorphic Memory Resources facility, introduced in C++17 in `<memory_resource>`, separates two things that pre-PMR custom allocators conflated: *which* memory resource to use, and *how* to use it. A `std::pmr::memory_resource` is an abstract base with a single allocate/deallocate pair. A `std::pmr::polymorphic_allocator<T>` wraps a pointer to a memory resource and presents the standard allocator interface. The same vector type — `std::pmr::vector<int>` — can be backed by a stack-allocated arena, a heap-backed pool, a third-party allocator, or even a memory-mapped region, simply by handing it a different resource pointer.
