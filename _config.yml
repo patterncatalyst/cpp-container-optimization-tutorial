@@ -91,6 +91,7 @@ exclude:
     - README.md
     - .gitignore
     - PRD.md
+    - LESSONS-LEARNED.md
     - PUSHING-TO-GITHUB.md
     - GETTING-STARTED.md
     - STARTING-WITH-CLAUDE.md

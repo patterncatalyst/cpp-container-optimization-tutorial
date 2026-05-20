@@ -21233,7 +21233,7 @@ Covers:
   - 8 cross-reference matrix `<td>` cells for statelessness reference docs
   - 1 cross-reference matrix `<td>` cell for Demo 06
 
-Skip rule: any `href="/..."` already containing `{{` Liquid syntax
+Skip rule: any `href="/..."` already containing `{% raw %}{{{% endraw %}` Liquid syntax
 left untouched (defensive against double-wrapping).
 
 **Category 3: `_docs/15-where-to-go-next.md`.**
@@ -21386,7 +21386,7 @@ longer silently breaks every `relative_url` call.
 
 **Why this matters more broadly.**
 
-The pattern `bundle exec jekyll build --baseurl "${{ ... }}"` is
+The pattern `bundle exec jekyll build --baseurl "${% raw %}{{ ... }}{% endraw %}"` is
 common in GitHub-Pages-via-Actions workflows. Every one of them has
 this same latent bug. Worth documenting in the gotcha catalog as
 **G-64**:
@@ -22461,6 +22461,90 @@ Phase 1 complete. The compendium is now discoverable from the main
 tutorial (5 entry points), the authoring notes are extender-framed,
 and terminology is consistent. Next: r148+ Phase 2, the 8 examples,
 starting with `examples/statelessness/02-raii/`.
+
+---
+
+### 2026-05-17 — r148: fix the Jekyll Pages build (LESSONS-LEARNED.md fatal)
+
+**The trigger.**
+
+User reported the Pages build failing. The CI log showed a fatal
+Liquid exception at LESSONS-LEARNED.md line 30 — an unterminated raw
+tag — plus three non-fatal warnings (two in reconciliation-plan.md,
+one in _examples/demo-01-image-strategy.md).
+
+**Root cause — the lesson about Liquid hazards was itself a hazard.**
+
+LESSONS-LEARNED.md (added r144) has no front matter and — unlike
+README.md, PRD.md, CONTRIBUTING.md, and the onboarding docs — was
+never added to _config.yml's exclude list. So Jekyll picked it up
+and rendered it through Liquid. Section 1.1 of that file is the
+lesson titled "Liquid renders prose literally"; it contains a literal
+&#123;% raw block tag in prose as an example. Jekyll parsed that as an
+unterminated raw tag and the build died.
+
+Two compounding factors:
+
+1. The file was simply forgotten when it shipped in r144 — every
+   other root-level repo doc IS in the exclude list.
+2. scripts/check-liquid.py scanned _docs, _plans, _reference,
+   _examples, and four named root .html files — but NOT root-level
+   .md files. So it never saw LESSONS-LEARNED.md and reported clean
+   every round since r144, while the Pages build was failing.
+
+**Fix 1 (the fatal): exclude LESSONS-LEARNED.md.**
+
+Added it to _config.yml's exclude list, right after PRD.md. It's
+internal repo documentation of exactly the same kind as PRD.md and
+README.md. With it excluded, Jekyll never parses its prose, so the
+literal raw tag in section 1.1 is harmless and needs no escaping.
+
+**Fix 2 (robustness): harden check-liquid.py to scan root files.**
+
+Added read_excluded_root_files() which parses _config.yml's exclude
+block and returns the set of root-level filenames Jekyll skips.
+analyze() now globs all root *.md and *.html, subtracts the excluded
+set, and scans the remainder — replacing the old hardcoded list of
+four .html files. The analyzer now scans exactly what Jekyll renders
+at the root. Proven: with LESSONS-LEARNED.md temporarily un-excluded,
+the analyzer flags 4 hazards including line 30; excluded, clean.
+
+**Fix 3 (reader-facing warning): demo-01 Go-template literal.**
+
+_examples/demo-01-image-strategy.md had a podman --format command
+containing a Go template (&#123;&#123;.Size}}) in inline code. Jekyll tried
+to parse it as a Liquid expression (non-fatal warning, rendered wrong
+on the published page). Wrapped the token in a &#123;% raw %}...&#123;% endraw %} block —
+Liquid strips the markers before Markdown runs, so the reader sees
+the literal token correctly.
+
+**Fix 4 (cosmetic warnings): two reconciliation-plan.md literals.**
+
+Two historical plan entries quoted Liquid as literal &#123;&#123; inside
+inline code, producing non-fatal warnings. Same &#123;% raw %}/&#123;% endraw %} wrap.
+The /plans/reconciliation-plan/ page now renders without warnings.
+
+**Verification.**
+
+  scripts/check-liquid.py: clean (now including root *.md files)
+  All raw/endraw blocks balanced across published files
+  Detection proven by the un-exclude test above
+
+**Files changed.**
+
+  _config.yml                              + LESSONS-LEARNED.md exclude
+  scripts/check-liquid.py                  + root-file scanning (minus excludes)
+  _examples/demo-01-image-strategy.md      Go-template literal raw-wrapped
+  _plans/reconciliation-plan.md            two literals raw-wrapped + this entry
+
+**LESSONS-LEARNED candidate (meta).**
+
+A textbook instance of the §2.4 pattern (editorial debt compounds)
+crossed with §1.1 (Liquid hazards). The new lesson: a static analyzer
+must scan exactly the set of files the build processes — a gap between
+"what the linter checks" and "what the build renders" is where this
+hid for four rounds. The analyzer must derive its file list from the
+build's own include/exclude rules, not a hardcoded list.
 
 ---
 

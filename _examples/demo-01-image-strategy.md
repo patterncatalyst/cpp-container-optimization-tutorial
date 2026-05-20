@@ -141,7 +141,7 @@ A few rules of thumb when you're reading the table:
   surprise you at runtime. Test against your real workload before
   switching.
 - **Image size measurements include layers.** The numbers here are
-  `podman images --format "{{.Size}}"` output, which counts all
+  `podman images --format "{% raw %}{{.Size}}{% endraw %}"` output, which counts all
   layers. Squashing layers (`podman build --squash`) reduces the
   numbers but loses caching benefits.
 - **PGO build time roughly doubles.** The instrumented build, the

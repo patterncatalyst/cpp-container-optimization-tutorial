@@ -82,17 +82,58 @@ def strip_inline_raw(line: str) -> str:
     return INLINE_RAW_BLOCK.sub('', line)
 
 
+def read_excluded_root_files() -> set[str]:
+    """Parse _config.yml's `exclude:` list so the analyzer scans exactly
+    the root-level files Jekyll will actually render — no more, no less.
+
+    Returns the set of root-level filenames (e.g. {"README.md", "PRD.md"})
+    that Jekyll is told to skip. Directory excludes (trailing slash, or
+    paths with a slash) are ignored here since we only glob root files.
+    """
+    excluded: set[str] = set()
+    cfg = Path("_config.yml")
+    if not cfg.exists():
+        return excluded
+    in_exclude = False
+    for line in cfg.read_text().splitlines():
+        if re.match(r'^exclude:\s*$', line):
+            in_exclude = True
+            continue
+        if in_exclude:
+            # List items are indented "  - value"; the block ends at the
+            # first line that isn't a list item or a comment/blank.
+            m = re.match(r'^\s+-\s+(.+?)\s*$', line)
+            if m:
+                val = m.group(1)
+                # Only care about root-level files (no slash, not a dir).
+                if "/" not in val:
+                    excluded.add(val)
+                continue
+            if re.match(r'^\s*#', line) or line.strip() == "":
+                continue
+            # Non-list, non-comment, non-blank → end of the exclude block.
+            break
+    return excluded
+
+
 def analyze() -> list[str]:
     errors: list[str] = []
+
+    excluded_root = read_excluded_root_files()
+    # Root-level files Jekyll renders: every *.md / *.html at the repo root
+    # that isn't in _config.yml's exclude list. This catches forgotten
+    # root docs (e.g. a new LESSONS-LEARNED.md) before they reach CI.
+    root_files = [
+        p for p in (list(Path(".").glob("*.md")) + list(Path(".").glob("*.html")))
+        if p.name not in excluded_root
+    ]
 
     files = (
         list(Path("_docs").glob("*.md"))
         + list(Path("_plans").glob("*.md"))
         + list(Path("_reference").rglob("*.md"))
         + list(Path("_examples").glob("*.md"))
-        + [Path("index.html"), Path("examples.html"), Path("diagrams.html")]
-        + [Path("bibliography.html")]
-        + [Path("reference/statelessness.html")]
+        + root_files
     )
 
     for f in files:
