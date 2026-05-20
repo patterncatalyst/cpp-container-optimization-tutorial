@@ -818,6 +818,16 @@ recipe-revision drift is concretely visible).
   and more.
 - [Conan 2.x lockfile
   reference](https://docs.conan.io/2/tutorial/versioning/lockfiles.html).
+- The [statelessness compendium, Doc 11]({{ '/reference/statelessness/11-build-tooling/' | relative_url }})
+  is the build-tooling appendix for a stateless gRPC service:
+  Conan 2.x with version-pinned dependencies, separate dev and
+  release profiles (AddressSanitizer in dev, LTO + hardening in
+  release), CMake structure with proto codegen, the C++23
+  feature-support table mapped to compiler versions, the
+  libstdc++-vs-libc++ choice, the multi-stage Containerfile, and
+  full source for the vendored helpers. This section covers the
+  reproducibility *principle* and ABI hygiene; the compendium has
+  the worked configuration for a service project.
 
 ## What's next
 

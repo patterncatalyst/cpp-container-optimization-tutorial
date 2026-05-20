@@ -10,9 +10,21 @@ sectionid: reference
 
 ## Purpose
 
-This document set covers C++20/23 service design for deployment to Linux containers. Its through-line is *statelessness* as a deployment property — what makes a service safe to kill, replace, and replicate at the orchestrator's discretion — and how the C++ language features, library choices, and operational patterns either support that property or quietly undermine it.
+This compendium covers C++20/23 service design for deployment to Linux containers. Its through-line is *statelessness* as a deployment property — what makes a service safe to kill, replace, and replicate at the orchestrator's discretion — and how the C++ language features, library choices, and operational patterns either support that property or quietly undermine it.
 
 The treatment is opinionated and reference-style. Where positions are taken, they are marked as `> **Opinion.**` callouts. Where multiple acceptable approaches exist, both are described with their trade-offs. The goal is that an experienced C++ developer or architect can read the set straight through to understand the design space, or jump to a single document to solve a specific problem.
+
+> **A note on style, if you're arriving from the main tutorial.**
+> This compendium is written in a different register from the
+> [main tutorial]({{ '/' | relative_url }}). The tutorial uses
+> direct address ("you", "we") and walks you through a measured
+> demo per section. The compendium is reference-style: third-person,
+> denser, with explicit `> **Opinion.**` callouts separating the
+> author's positions from the descriptive material. The two are
+> peers — the tutorial teaches performance-under-constraints by
+> walking; the compendium is the design reference you consult.
+> Where they overlap (RAII, PMR, threading under cgroup limits,
+> build tooling), each points at the other.
 
 ## Audience
 
@@ -85,7 +97,7 @@ The bottom two rows on threading state are worth highlighting: `thread_local` lo
 
 ## Cross-cutting themes
 
-Eleven themes recur through the document set; they're worth keeping in mind across topics.
+Eleven themes recur through the compendium; they're worth keeping in mind across topics.
 
 1. **Orchestrator state ≠ language state.** Statelessness is decided by deployment configuration (volumes, StatefulSet status, no persistent mounts), not by what the C++ code does internally. The same binary can be deployed both ways.
 
@@ -147,7 +159,7 @@ Eleven themes recur through the document set; they're worth keeping in mind acro
 
 ## Out of scope
 
-A few topics the document set deliberately doesn't cover. They're worth flagging so the reader knows the boundary.
+A few topics the compendium deliberately doesn't cover. They're worth flagging so the reader knows the boundary.
 
 **Non-gRPC transports.** HTTP/REST via Drogon, Crow, or restbed; GraphQL via cppgraphqlgen; raw socket protocols. The patterns transfer but the specific API surfaces differ.
 
@@ -167,7 +179,7 @@ A few topics the document set deliberately doesn't cover. They're worth flagging
 
 ## Consolidated bibliography
 
-The books referenced across the document set, with the chapters most often cited.
+The books referenced across the compendium, with the chapters most often cited.
 
 **Iglberger, *C++ Software Design* (Addison-Wesley, 2022).** Chapters on the Single Responsibility Principle, value semantics, dependency injection, strategy pattern, type erasure, and the critique of Singleton. Cited in nearly every document; the strongest single reference for service-architecture decisions in modern C++.
 
@@ -179,7 +191,7 @@ The books referenced across the document set, with the chapters most often cited
 
 **"Building Low Latency Applications with C++" (Sourav Ghosh, Packt, 2023).** Chapters on the threading model, persistent state, memory layout for long-lived processes. Cited in [Doc 03](../03-pmr/), 05, 08.
 
-**Geewax, *API Design Patterns* (Manning, 2021).** Chapters on idempotency, standard methods, error handling, long-running operations. The reference for cross-cutting concerns that this set operationalizes in C++. Cited in [Doc 02](../02-raii/), 04, 07, 09, 10.
+**Geewax, *API Design Patterns* (Manning, 2021).** Chapters on idempotency, standard methods, error handling, long-running operations. The reference for cross-cutting concerns that this compendium operationalizes in C++. Cited in [Doc 02](../02-raii/), 04, 07, 09, 10.
 
 **Vaughn Vernon, *Implementing Domain-Driven Design* (Addison-Wesley, 2013).** The Outbox pattern is from here. Cited in [Doc 07](../07-state-externalization/).
 
@@ -196,4 +208,4 @@ Online references used across the set:
 - Conan 2 documentation (`docs.conan.io`) and CMake documentation
 - redis-plus-plus, libpqxx, librdkafka, spdlog, Abseil — each library's own README and API docs
 
-The bibliography is short by design: the patterns in this document set come from a small number of well-thought-out sources rather than a sprawl of blog posts and Stack Overflow answers. For specific questions not covered, the books above are the strongest starting points.
+The bibliography is short by design: the patterns in this compendium come from a small number of well-thought-out sources rather than a sprawl of blog posts and Stack Overflow answers. For specific questions not covered, the books above are the strongest starting points.

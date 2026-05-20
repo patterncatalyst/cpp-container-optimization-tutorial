@@ -22293,6 +22293,175 @@ candidates per the new PRD:
           1-2 hours, low risk
   - r148+: Phase 2 — Examples, one or two per round
 
+### 2026-05-17 — r146.1: resolved the 5 open questions in the compendium PRD
+
+**The trigger.**
+
+User answered all five open questions from the compendium PRD's §12
+in one message. Captured the answers into the PRD: moved them from
+§12 (open) to §13 (decision log), and propagated the consequences
+through §5 (examples table + test orchestration), §6 (directory
+layout), §11 (timeline), and the Jekyll-wrapper note.
+
+**The five resolutions.**
+
+  Q1  Test runner: separate `scripts/test-all-stateless-demos.sh`
+      aggregator + per-example `scripts/test-stateless-demo-NN-*.sh`
+      scripts. Mirrors the main tutorial's split. Two aggregators
+      stay independent.
+
+  Q2  Per-example Jekyll pages: yes, under
+      `_examples/statelessness-NN-name.md`, same format as the
+      top-level demo pages.
+
+  Q3  Example dir names match the compendium doc number + section
+      name: `02-raii`, `03-pmr`, `04-process-scoped-state`,
+      `05-threading`, `07-state-externalization`, `08-ephemeral-
+      filesystem`, `09-health-checks`. The second Doc-07 example is
+      `07-outbox-pattern` (pattern name as differentiator since two
+      dirs can't both be `07-state-externalization`).
+
+  Q4  The outbox example is a real multi-service setup: producer
+      service + outbox relay + idempotent consumer. Not a single
+      service polling its own table in-process. This makes it the
+      biggest example (re-estimated 12-16 hours, up from 10-12).
+
+  Q5  PostgreSQL client: libpqxx everywhere (mature, Conan Center,
+      RAII transactions). The only hand-rolled piece is the
+      `ScopedConnection` pool-checkout wrapper around
+      `pqxx::connection` — required because libpqxx has no built-in
+      pool, and the checkout / RAII-return / `invalidate()` flow IS
+      Doc 07's teaching point. User's constraint ("don't hand-roll
+      everything unless there's a demo advantage") is satisfied:
+      the demo advantage lives in the ~40-line pool wrapper; the
+      libpq wire protocol (no demo value) stays inside libpqxx.
+
+**Slug-naming change worth noting.**
+
+The r146 PRD draft used topic slugs numbered 01-08
+(`request-context-raii`, `pmr-monotonic-arena`, …). Q3's resolution
+changed these to compendium-doc-matched names (`02-raii`, `03-pmr`,
+…). All references updated across the PRD: §5 examples table, §6
+directory layout, §11 timeline rows, the Jekyll-wrapper filename
+note. Verified no stale topic slugs remain.
+
+**Files changed.**
+
+  _plans/statelessness-compendium-prd.md    §5/§6/§11/§12/§13 updated
+                                            (400 → 444 lines)
+  _plans/reconciliation-plan.md             this entry
+
+The compendium PRD now has zero open questions. r147 (Phase 1
+integration) is fully unblocked; r148+ (the 8 examples) have their
+naming, layout, test orchestration, multi-service shape, and DB
+client all settled.
+
+### 2026-05-17 — r147: compendium Phase 1 — integration & discoverability
+
+**The trigger.**
+
+With the sub-project PRD captured (r146) and all open questions
+resolved, Phase 1 is the low-risk integration work: make the
+compendium discoverable from the main tutorial, reframe the
+authoring notes, and normalize terminology. Per the PRD, this is
+recommended before the examples so the cross-reference scaffolding
+is in place when they land.
+
+**R1 — four "go deeper" callouts from `_docs/` + a §15 section.**
+
+Added blockquote callouts (matching the existing `> **Bold lead.**`
+style) pointing main-tutorial sections at their deeper compendium
+treatments:
+
+  _docs/03-raii-discipline.md   → Doc 02 (RequestContext, exception-safety guarantees, mistakes catalog)
+  _docs/07-memory-management.md → Doc 03 (PMR as architectural statelessness, request arena)
+  _docs/11-noisy-neighbors.md   → Doc 05 (CFS quota mechanics, thread-pool sizing, ResourceQuota trap)
+  _docs/13-reproducibility-abi.md → Doc 11 (Conan + CMake worked service config)
+
+Plus a new "Go deeper: the statelessness compendium" section in
+`_docs/15-where-to-go-next.md` that introduces the compendium as
+the service-design companion, lists the four overlap points, and
+points at the capstone (Doc 10) and the index. All 11 new links
+use the `relative_url` filter.
+
+**R2 — reframed `research-notes.md`.**
+
+  - Title: "Research notes (working drafts)" → "Authoring notes
+    for compendium extenders"
+  - Front-matter description rewritten to say "written for
+    contributors who want to extend or revise the compendium —
+    not a first-read"
+  - Added a prominent banner at the top: "This page is for
+    extenders, not first-time readers" with a pointer to the index
+  - Removed the "Remaining open per-doc questions" section (~12
+    stale author-facing TODOs, all resolved when the docs were
+    written); replaced with a one-line closing note explaining
+    the questions were resolved during drafting
+  - Kept "Drafting plan" and "Confirmed decisions" — they document
+    the design rationale, which is genuinely useful for extenders
+  - Front matter `order: 99` retained
+
+**R3 — reading-style note in the compendium index.**
+
+Added a `> **A note on style, if you're arriving from the main
+tutorial.**` callout to `00-index.md`, right after the Purpose
+section. Explains that the compendium uses third-person
+reference-register with `> **Opinion.**` callouts, distinct from
+the tutorial's direct-address walking style, and that the two are
+peers that cross-link where they overlap.
+
+**R4 — bibliography preamble link.**
+
+Added a second lead paragraph to `bibliography.html`'s hero
+introducing the compendium as drawing on the same books, with a
+link to its index. The cross-reference matrix lower on the page
+already covered the compendium; this makes the discovery path
+start at the top.
+
+**R5 — terminology normalization to "compendium".**
+
+Replaced reader-facing uses of the old terms:
+
+  _reference/statelessness/00-index.md          6× "document set" → "compendium" + 1 "this set"
+  _reference/statelessness/01-deployment-posture.md  2× "document set" → "compendium"
+  bibliography.html      3× "Statelessness reference" → "statelessness compendium"
+  index.html             "Statelessness reference set" → "Statelessness compendium"
+                         + doc-card desc "Companion reference set" → "Companion compendium"
+
+The `_reference/` directory name and `/reference/statelessness/`
+URL scheme are unchanged — those are structural, not reader-facing
+prose. Final sweep confirms zero "document set" / "reference set" /
+"reference collection" remain in reader-facing files (research-notes
+excluded, since it's now extender-facing and its historical phrasing
+is fine).
+
+**Verification.**
+
+  scripts/check-liquid.py: clean
+  Terminology sweep: zero stale terms in reader-facing files
+  All 11 new _docs/ compendium links use relative_url filter
+  Sub-project PRD §11 timeline: Phase 1 marked [x]
+
+**Files changed.**
+
+  _docs/03-raii-discipline.md                     R1 callout (Doc 02)
+  _docs/07-memory-management.md                   R1 callout (Doc 03)
+  _docs/11-noisy-neighbors.md                     R1 callout (Doc 05)
+  _docs/13-reproducibility-abi.md                 R1 callout (Doc 11)
+  _docs/15-where-to-go-next.md                    R1 compendium section
+  _reference/statelessness/research-notes.md      R2 reframe
+  _reference/statelessness/00-index.md            R3 style note + R5 terms
+  _reference/statelessness/01-deployment-posture.md  R5 terms
+  bibliography.html                               R4 preamble link + R5 terms
+  index.html                                      R5 terms (doc card)
+  _plans/statelessness-compendium-prd.md          Phase 1 marked done
+  _plans/reconciliation-plan.md                   this entry
+
+Phase 1 complete. The compendium is now discoverable from the main
+tutorial (5 entry points), the authoring notes are extender-framed,
+and terminology is consistent. Next: r148+ Phase 2, the 8 examples,
+starting with `examples/statelessness/02-raii/`.
+
 ---
 
 ## Known divergences from the PRD

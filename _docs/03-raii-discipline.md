@@ -246,6 +246,18 @@ The pattern itself is simple. The discipline is using it
 matter." In a container, no resource is small enough not to
 matter.
 
+> **Go deeper in the compendium.** This section introduces RAII
+> as a resource-discipline mechanic. The [statelessness
+> compendium, Doc 02]({{ '/reference/statelessness/02-raii/' | relative_url }})
+> develops it into a full request-scope discipline for a
+> stateless service: the `RequestContext` pattern that bundles
+> per-request state into one RAII type, the gRPC callback API as
+> the request boundary, the three exception-safety guarantees,
+> and a catalog of the common mistakes (throwing destructors,
+> raw pointers, locks held across `co_await`, missing `noexcept`
+> moves). Read it when you're designing a service rather than
+> learning the idiom.
+
 ## Lab tip — see the failure on your machine
 
 If you want to feel the difference rather than read about it,

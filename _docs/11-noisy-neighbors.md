@@ -325,6 +325,15 @@ delegation once, re-login, and all four scenarios run.
 - [cgroups v2 admin guide](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html)
   for the full surface area of the `cpu` and `cpuset`
   controllers and the unified hierarchy semantics
+- The [statelessness compendium, Doc 05]({{ '/reference/statelessness/05-threading/' | relative_url }})
+  goes deep on the application side of CPU limits: CFS quota
+  mechanics, throttling as a tail-latency source, the thread-pool
+  stack-memory budget, allocator arena counts under cgroup limits,
+  the cgroup-detection helper, `std::stop_token` cooperative
+  cancellation, and the gRPC sync-server `ResourceQuota`
+  configuration trap. This section is the two-tenant isolation
+  *demo*; the compendium is the in-process threading discipline
+  that complements it.
 
 ## What's next
 

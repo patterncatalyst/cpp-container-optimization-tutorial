@@ -1,16 +1,24 @@
 ---
-title: Research notes (working drafts)
-description: "The working notes that drove the drafting process — per-document research findings, framing decisions, and the open questions worked through during writing. Reference material for anyone wanting to extend or revise the set."
+title: Authoring notes for compendium extenders
+description: "The framing decisions, per-document research findings, and source anchors that drove the compendium's drafting. Written for contributors who want to extend or revise the compendium — not a first-read for the material itself."
 order: 99
 layout: tutorial
 sectionid: reference
 ---
 
-# Research Notes — Statelessness in C++ Services on Containers
+# Authoring Notes — Statelessness Compendium
 
-Working notes for the "Optimizing C++ on Containers" project. Organized per planned doc; each section captures core findings, the authoritative sources to lean on, code-pattern anchors for drafting, and open questions before drafting begins.
+> **This page is for extenders, not first-time readers.** If you're
+> here to learn about statelessness in C++ services, start at the
+> [compendium index]({{ '/reference/statelessness/00-index/' | relative_url }})
+> instead — it has the reading guide and the scenario jump table.
+> This page is the authoring record: the framing decisions, the
+> source anchors each document leans on, and the design rationale,
+> kept for anyone proposing edits or additions to the compendium.
 
-Convention: book references (Iglberger, Yonts, Enberg "Latency", Geewax "API Design Patterns", "C++ High Performance 2e", "Building Low Latency Apps") are tagged inline as the book is relevant to a finding. They are not all confirmed citations until drafting — the bibliography per doc will check chapter-level.
+These are the working notes that drove the compendium's drafting. Organized per document; each section captures core findings, the authoritative sources leaned on, and the code-pattern anchors used during drafting.
+
+Convention: book references (Iglberger, Yonts, Enberg "Latency", Geewax "API Design Patterns", "C++ High Performance 2e", "Building Low Latency Apps") are tagged inline where the book is relevant to a finding. Chapter-level citations are confirmed in each document's own bibliography.
 
 ---
 
@@ -664,15 +672,6 @@ These were originally open questions; locked in before drafting started:
 6. **Container stack.** Podman + podman-compose as primary; Kubernetes-specific notes inline where they materially differ.
 7. **Threading as a dedicated doc.** Doc 05 covers threading and concurrency in its own right; threaded through the others as cross-references.
 
-## Remaining open per-doc questions
+---
 
-These remain for the user to clarify before or during drafting of the specific doc:
-
-- **Doc 02:** Depth of micro-benchmark for ctor/dtor cost? **Default plan: a short example with explanatory prose, not a fully-tooled benchmark — that belongs in a separate perf-tooling note.**
-- **Doc 03:** Whether to include the `std::flat_map` (C++23) example alongside `std::pmr::*` containers. **Default plan: yes, briefly, as the modern small-N alternative.**
-- **Doc 04:** Should the cgroup v2 CPU-limit detection snippet show a vendored helper or recommend a library? **Default plan: vendor a small self-contained helper, then mention `concurrencpp`/Abseil as alternatives.**
-- **Doc 05:** asio-grpc vs raw callback API depth? Boost.Fiber treatment? `std::execution` mention? **Default plans: cover both gRPC APIs briefly; present fibers and stackless coroutines as alternatives with trade-offs; mention `std::execution` as the future direction without deep coverage.**
-- **Doc 06:** How hard to lean on `constinit` vs `constexpr` distinction? **Default plan: cover both, since the difference matters for startup cost.**
-- **Doc 07:** Cover Kafka/NATS/RabbitMQ? **Default plan: brief mention only; full coverage is its own document.**
-- **Doc 08:** Rootless Podman callout depth? **Default plan: one paragraph noting UID mapping and storage location.**
-- **Doc 10:** Depth of asio-grpc coroutine example? **Default plan: small example, mention as the modern shape, not deep coverage. Coordinate with Doc 05's coverage.**
+*The per-doc open questions that originally lived here were all resolved during drafting; every document in the compendium is now written. The framing decisions above are retained as the design rationale for anyone extending the set.*

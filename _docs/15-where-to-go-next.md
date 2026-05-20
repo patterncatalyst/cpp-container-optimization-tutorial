@@ -42,6 +42,39 @@ from, and a section-by-section cross-reference of which book this
 tutorial points at where — see the
 [**Bibliography page**]({{ '/bibliography/' | relative_url }}).
 
+## Go deeper: the statelessness compendium
+
+If this tutorial gave you the performance-under-constraints mental
+model, the **[statelessness compendium]({{ '/reference/statelessness/00-index/' | relative_url }})**
+is the companion that goes deep on *service design* for the same
+environment. It's a thirteen-document, opinionated reference on
+what makes a C++ service safe to kill, replace, and replicate at
+the orchestrator's discretion — and how C++ language features,
+library choices, and operational patterns either support that
+property or quietly undermine it.
+
+It's reference-style rather than walking-tutorial-style, and it
+overlaps this tutorial in a few places while going much deeper:
+
+- [Doc 02 — RAII]({{ '/reference/statelessness/02-raii/' | relative_url }})
+  extends §3's resource discipline into the full `RequestContext`
+  request-scope pattern.
+- [Doc 03 — PMR]({{ '/reference/statelessness/03-pmr/' | relative_url }})
+  extends §7's allocator coverage into the request-arena design
+  pattern.
+- [Doc 05 — Threading]({{ '/reference/statelessness/05-threading/' | relative_url }})
+  extends §11's isolation demo into the in-process threading
+  discipline under CFS limits.
+- [Doc 11 — Build tooling]({{ '/reference/statelessness/11-build-tooling/' | relative_url }})
+  extends §13's reproducibility principle into a worked
+  service-project configuration.
+
+The capstone, [Doc 10]({{ '/reference/statelessness/10-grpc-microservices/' | relative_url }}),
+composes every pattern into one realistic order-pricing gRPC
+service. Start at the
+[compendium index]({{ '/reference/statelessness/00-index/' | relative_url }}),
+which has a reading guide and a scenario-based jump table.
+
 ## Topics deliberately skipped
 
 - **Coroutines (C++20).** Worth a tutorial of their own; the

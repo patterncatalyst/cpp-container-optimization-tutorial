@@ -30,7 +30,7 @@ The middle definition is the practical one. It permits an in-process cache as lo
 
 A useful test: if a replica is killed and re-spawned with no warning, do clients notice anything other than (at worst) a small latency spike on the first few requests? If yes, the service is not stateless in this sense — regardless of what its developers say.
 
-A note on vocabulary before going further: "container" is overloaded. In this document set, *std container* refers to `std::vector` and friends, *OS container* refers to an OCI-format unit run by Podman or Docker, and *Kubernetes container* refers to a container inside a Kubernetes pod. Where the meaning is obvious from context, the bare word is fine; where it could go either way, the docs are explicit.
+A note on vocabulary before going further: "container" is overloaded. In this compendium, *std container* refers to `std::vector` and friends, *OS container* refers to an OCI-format unit run by Podman or Docker, and *Kubernetes container* refers to a container inside a Kubernetes pod. Where the meaning is obvious from context, the bare word is fine; where it could go either way, the docs are explicit.
 
 ## The orchestrator's line: posture in Podman and Kubernetes
 
@@ -355,7 +355,7 @@ A *sharded cache* service runs N replicas where each owns a key range, by consis
 
 A *primary-replica database* (Postgres with streaming replication, MySQL with binlog replication, Redis with sentinel) is unambiguously stateful and lives in a `StatefulSet`.
 
-For a typical microservice in the user's stack — gRPC service, OTel-instrumented, observed via Grafana — the default posture is stateless: podman-compose with `read_only: true` and named replicas, or a Kubernetes `Deployment`. `StatefulSet` is reached for only when there is a concrete reason. The rest of this document set assumes the stateless default unless otherwise noted.
+For a typical microservice in the user's stack — gRPC service, OTel-instrumented, observed via Grafana — the default posture is stateless: podman-compose with `read_only: true` and named replicas, or a Kubernetes `Deployment`. `StatefulSet` is reached for only when there is a concrete reason. The rest of this compendium assumes the stateless default unless otherwise noted.
 
 ## Recommendation summary
 

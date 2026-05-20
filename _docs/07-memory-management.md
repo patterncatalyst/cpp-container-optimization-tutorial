@@ -293,6 +293,15 @@ combination — useful for seeing how the *layout* decisions from
   ([kernel.org docs](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html))
   for the full memory controller surface area; everything above is
   a tour of the bits that bite C++ services.
+- The [statelessness compendium, Doc 03]({{ '/reference/statelessness/03-pmr/' | relative_url }})
+  treats PMR as *architectural statelessness* — the in-language
+  realization of "the request brings its own memory, all releases
+  together." It covers `monotonic_buffer_resource` mechanics, the
+  layered monotonic + `unsynchronized_pool_resource` recipe, the
+  choice between `pmr::vector` / `pmr::flat_map` / `pmr::unordered_map`
+  with the destruction-asymmetry win, the lifetime trap, and the
+  C++23 additions. Read it for the request-arena design pattern;
+  this section is the allocator-performance and cgroup-ceiling view.
 
 ## What's next
 

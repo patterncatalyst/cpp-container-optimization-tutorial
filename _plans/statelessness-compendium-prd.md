@@ -170,20 +170,24 @@ Eight new runnable examples under `examples/statelessness/`, each a
 self-contained Podman project with its own `./demo.sh`, matching
 the conventions of the main tutorial's 7 demos.
 
-Examples are numbered independently of the main demos so it's clear
-which collection an example belongs to (no `demo-08-*` numbering).
-Slug names match the compendium doc topic, not its number.
+Example directories **match the compendium doc number and section
+name** (resolved Q3): the example for Doc 02 (`02-raii.md`) lives at
+`examples/statelessness/02-raii/`, and so on. This makes the
+example↔doc mapping unambiguous from the directory name alone. Doc 07
+has two examples (state externalization + the Outbox pattern); the
+second is differentiated by pattern name (`07-outbox-pattern`) since
+two directories can't share `07-state-externalization`.
 
-| # | Example slug                  | Compendium doc | What it demonstrates                                                                                                 |
-|---|-------------------------------|----------------|----------------------------------------------------------------------------------------------------------------------|
-| 1 | `request-context-raii`        | Doc 02         | The `RequestContext` RAII pattern; gRPC callback API as the request boundary; common-mistakes catalog with runtime diagnostics |
-| 2 | `pmr-monotonic-arena`         | Doc 03         | Per-request `monotonic_buffer_resource` arena; layered monotonic + `sync_pool` recipe; lifetime-trap counterexample with sanitizer output |
-| 3 | `process-scoped-wiring`       | Doc 04         | `main()`-owned wiring of `TracerProvider` + gRPC channels + connection pools + parsed config; State Architecture Table walkthrough in code |
-| 4 | `cgroup-thread-sizing`        | Doc 05         | CFS quota detection via `cgroup_helper`; thread pool sized to `cpu.max`; gRPC `ResourceQuota` configuration; cooperative cancellation via `stop_token` |
-| 5 | `scoped-connection-pool`      | Doc 07         | Connection pool as process-scoped + per-handler `ScopedConnection` RAII checkout with `invalidate()`; idempotency keys; deadline propagation        |
-| 6 | `ephemeral-fs-traps`          | Doc 08         | Container with `--read-only=true`; spdlog default file write fails; fix via stdout output; `tmpfs` for scratch; PVC for what persists                |
-| 7 | `grpc-health-shutdown`        | Doc 09         | Three probes (startup/liveness/readiness); gRPC health service; graceful shutdown sequence tying `stop_token` → pool drain → reverse-order destruction |
-| 8 | `outbox-pattern`              | Doc 07         | The Outbox pattern: DB write + event emission atomic; outbox-relay sidecar; idempotent consumer; full path observable via OTel                       |
+| Example dir                       | Compendium doc | What it demonstrates                                                                                                 |
+|-----------------------------------|----------------|----------------------------------------------------------------------------------------------------------------------|
+| `02-raii`                         | Doc 02         | The `RequestContext` RAII pattern; gRPC callback API as the request boundary; common-mistakes catalog with runtime diagnostics |
+| `03-pmr`                          | Doc 03         | Per-request `monotonic_buffer_resource` arena; layered monotonic + `sync_pool` recipe; lifetime-trap counterexample with sanitizer output |
+| `04-process-scoped-state`         | Doc 04         | `main()`-owned wiring of `TracerProvider` + gRPC channels + connection pools + parsed config; State Architecture Table walkthrough in code |
+| `05-threading`                    | Doc 05         | CFS quota detection via `cgroup_helper`; thread pool sized to `cpu.max`; gRPC `ResourceQuota` configuration; cooperative cancellation via `stop_token` |
+| `07-state-externalization`        | Doc 07         | Connection pool as process-scoped + per-handler `ScopedConnection` RAII checkout with `invalidate()`; idempotency keys; deadline propagation        |
+| `07-outbox-pattern`               | Doc 07         | The Outbox pattern as a real multi-service setup (resolved Q4): producer service + relay + idempotent consumer; DB write + event emission atomic; full path observable via OTel |
+| `08-ephemeral-filesystem`         | Doc 08         | Container with `--read-only=true`; spdlog default file write fails; fix via stdout output; `tmpfs` for scratch; PVC for what persists                |
+| `09-health-checks`                | Doc 09         | Three probes (startup/liveness/readiness); gRPC health service; graceful shutdown sequence tying `stop_token` → pool drain → reverse-order destruction |
 
 **Documents without a dedicated example** (deliberate):
 - **Doc 01** (deployment posture) is vocabulary; no demonstrable
@@ -194,6 +198,18 @@ Slug names match the compendium doc topic, not its number.
   example would duplicate Doc 10's code listing.
 - **Doc 11** (build tooling) is referenced by every example's
   `CMakePresets.json` + Containerfile; no dedicated example.
+
+**PostgreSQL client (resolved Q5).** Examples that touch PostgreSQL
+(`07-state-externalization`, `07-outbox-pattern`) use **libpqxx**
+for connections and transactions — it's mature, in Conan Center, and
+provides RAII transactions out of the box; there's no demo value in
+hand-rolling the libpq wire protocol. The one hand-rolled piece is
+the `ScopedConnection` pool-checkout wrapper *around* `pqxx::connection`
+— and that's required regardless, because libpqxx has no built-in
+connection pool, and the checkout / RAII-return / `invalidate()`-on-
+broken-connection flow **is** the teaching point of Doc 07. So the
+demo advantage (the pattern is fully visible, ~40 lines) is preserved
+without hand-rolling anything that has no teaching value.
 
 ### Phase 3 — Bidirectional cross-references
 
@@ -206,16 +222,20 @@ relevant section, linking to its example.
 Tutorial sections in `_docs/` that link to a compendium doc (from
 R1) also mention the corresponding example.
 
-### Phase 4 — Test orchestration
+### Phase 4 — Test orchestration (resolved Q1)
 
-Either:
-- **(a)** Extend `scripts/test-all-demos.sh` to also run the
-  statelessness examples, or
-- **(b)** Add `scripts/test-all-statelessness-examples.sh` as a
-  separate aggregator, with `scripts/test-everything.sh` calling
-  both
+- Each example has its own test entry point — a `demo.sh` inside
+  the example dir (the run script) plus a corresponding
+  `scripts/test-stateless-demo-NN-<name>.sh` (the CI test script),
+  matching the main tutorial's `examples/demo-NN/demo.sh` +
+  `scripts/test-demo-NN-*.sh` split.
+- A dedicated aggregator `scripts/test-all-stateless-demos.sh` runs
+  every statelessness example test in sequence and prints a summary;
+  does NOT fail-fast (same contract as `test-all-demos.sh`).
+- The two aggregators stay separate. If a single "run everything"
+  entry point is wanted later, a thin `scripts/test-everything.sh`
+  can call both, but that's not required for Phase 4.
 
-Decision deferred to first example landing (Phase 2.1).
 
 ## 6. Examples directory layout
 
@@ -230,15 +250,19 @@ examples/
 ├── demo-07-quality-pipeline/
 │
 └── statelessness/                          ← NEW: compendium examples
-    ├── 01-request-context-raii/
-    ├── 02-pmr-monotonic-arena/
-    ├── 03-process-scoped-wiring/
-    ├── 04-cgroup-thread-sizing/
-    ├── 05-scoped-connection-pool/
-    ├── 06-ephemeral-fs-traps/
-    ├── 07-grpc-health-shutdown/
-    └── 08-outbox-pattern/
+    ├── 02-raii/                             (Doc 02 — RequestContext RAII)
+    ├── 03-pmr/                              (Doc 03 — monotonic arena)
+    ├── 04-process-scoped-state/             (Doc 04 — main()-owned wiring)
+    ├── 05-threading/                        (Doc 05 — cgroup thread sizing)
+    ├── 07-state-externalization/            (Doc 07 — scoped connection pool)
+    ├── 07-outbox-pattern/                   (Doc 07 — outbox, multi-service)
+    ├── 08-ephemeral-filesystem/             (Doc 08 — ephemeral FS traps)
+    └── 09-health-checks/                    (Doc 09 — health + shutdown)
 ```
+
+Directory names match the compendium doc number + section name
+(resolved Q3). The two Doc-07 examples share the `07-` prefix; the
+Outbox one is differentiated by pattern name.
 
 Each statelessness example follows the main demo conventions:
 
@@ -254,10 +278,12 @@ examples/statelessness/NN-name/
 └── conanfile.py + conan.lock  ← pinned deps
 ```
 
-Per-example Jekyll wrapper pages will be generated under
-`_examples/statelessness-NN-name.md` (same pattern as the main
-demos' `_examples/demo-NN-*.md`) so the examples appear in the
-`/examples/` gallery alongside the main demos.
+Per-example Jekyll wrapper pages are generated under
+`_examples/statelessness-NN-name.md` (resolved Q2 — yes, same
+format as the top-level project demo pages) so the examples appear
+in the `/examples/` gallery alongside the main demos. The wrapper
+filename carries the `statelessness-` prefix plus the doc-matched
+number and name (e.g. `_examples/statelessness-02-raii.md`).
 
 ## 7. Diagrams
 
@@ -312,43 +338,56 @@ diagram for that doc is often sufficient.
 
 | Phase | Milestone | Est. effort | Done? |
 |---|---|---|---|
-| 1 | Integration & discoverability (R1-R5) | 1-2 hours, one round | [ ] |
-| 2 | Example 1: `request-context-raii` | 4-6 hours | [ ] |
-| 2 | Example 2: `pmr-monotonic-arena` | 4-6 hours | [ ] |
-| 2 | Example 3: `process-scoped-wiring` | 6-8 hours | [ ] |
-| 2 | Example 4: `cgroup-thread-sizing` | 6-8 hours | [ ] |
-| 2 | Example 5: `scoped-connection-pool` | 8-10 hours | [ ] |
-| 2 | Example 6: `ephemeral-fs-traps` | 4-6 hours | [ ] |
-| 2 | Example 7: `grpc-health-shutdown` | 6-8 hours | [ ] |
-| 2 | Example 8: `outbox-pattern` | 10-12 hours | [ ] |
+| 1 | Integration & discoverability (R1-R5) | 1-2 hours, one round | [x]   |
+| 2 | `02-raii` example | 4-6 hours | [ ] |
+| 2 | `03-pmr` example | 4-6 hours | [ ] |
+| 2 | `04-process-scoped-state` example | 6-8 hours | [ ] |
+| 2 | `05-threading` example | 6-8 hours | [ ] |
+| 2 | `07-state-externalization` example | 8-10 hours | [ ] |
+| 2 | `07-outbox-pattern` example (multi-service) | 12-16 hours | [ ] |
+| 2 | `08-ephemeral-filesystem` example | 4-6 hours | [ ] |
+| 2 | `09-health-checks` example | 6-8 hours | [ ] |
 | 3 | Bidirectional cross-references | Folded into Phase 2 | [ ] |
-| 4 | Test-aggregator orchestration | 2-3 hours | [ ] |
+| 4 | `test-all-stateless-demos.sh` aggregator + per-demo test scripts | 2-3 hours | [ ] |
 
-**Estimated total effort:** Phase 1 + Phase 2 + Phase 4 ≈ 50-70
-hours of part-time work, comparable to one of the main tutorial's
-larger demos × 8.
+**Estimated total effort:** Phase 1 + Phase 2 + Phase 4 ≈ 55-75
+hours of part-time work. The `07-outbox-pattern` example is the
+single biggest item now that it's scoped as a real multi-service
+producer + relay + consumer setup (resolved Q4).
 
 ## 12. Open questions
 
-- **Q1**: Should statelessness examples be picked up by the main
-  `test-all-demos.sh`, or have their own
-  `test-all-statelessness-examples.sh`? *Deferred to Phase 2.1*
-- **Q2**: Should each example get a generated Jekyll page under
-  `_examples/`, or only the main demos? *Preferred answer: yes,
-  same pattern as main demos*
-- **Q3**: Numbering for example slugs — match compendium doc
-  numbers (e.g. example 2 = `02-pmr-monotonic-arena` since Doc 03
-  is "03-pmr")? *Open — current proposed layout uses example-local
-  numbering 01-08 with topic-matching slugs*
-- **Q4**: Should the `outbox-pattern` example (example 8) be split
-  into a producer + consumer + relay multi-service setup, or kept
-  as a single service with the outbox table polled in-process?
-  *Open — multi-service is more realistic but more complex*
-- **Q5**: PostgreSQL client library — `libpqxx` (matches
-  Doc 07's examples) or the official `libpq` C API with hand-rolled
-  RAII wrappers? *Preferred: `libpqxx` for the realistic case, hand-
-  rolled RAII for the `scoped-connection-pool` example specifically
-  to make the pattern visible*
+All five initial open questions were resolved on 2026-05-17; kept
+here with their resolutions for the record.
+
+- **Q1 (resolved).** Test runner — separate aggregator
+  `scripts/test-all-stateless-demos.sh` plus per-example test
+  scripts `scripts/test-stateless-demo-NN-<name>.sh`, mirroring the
+  main tutorial's split. The two aggregators stay separate; a
+  `test-everything.sh` umbrella is optional and not required.
+- **Q2 (resolved).** Yes — each example gets a generated Jekyll
+  page under `_examples/statelessness-NN-name.md`, same format as
+  the top-level project demo pages, so they appear in the
+  `/examples/` gallery.
+- **Q3 (resolved).** Example directories match the compendium doc
+  number + section name (`02-raii`, `03-pmr`, …). The two Doc-07
+  examples share the `07-` prefix; the Outbox one uses the pattern
+  name (`07-outbox-pattern`) as the differentiator.
+- **Q4 (resolved).** The `07-outbox-pattern` example is a real
+  multi-service setup — producer service + outbox relay + idempotent
+  consumer — reflecting what the Outbox pattern actually does in
+  production, rather than a single service polling its own outbox
+  table in-process.
+- **Q5 (resolved).** PostgreSQL client is **libpqxx** everywhere
+  (mature, Conan Center, RAII transactions). The only hand-rolled
+  piece is the `ScopedConnection` pool-checkout wrapper around
+  `pqxx::connection` — required because libpqxx has no built-in
+  pool, and the checkout / RAII-return / `invalidate()` flow is the
+  teaching point of Doc 07. No hand-rolling of anything without
+  demo value (i.e. not the libpq wire protocol).
+
+No open questions remain. New questions that surface during Phase 2
+get appended here.
 
 ## 13. Decision log
 
@@ -359,6 +398,11 @@ larger demos × 8.
 | 2026-05-17 | 8 examples scoped, not 11 (one per compendium doc)                                             | Docs 01, 06, 10, 11 don't have demonstrable patterns of their own; constraint prevents scope creep |
 | 2026-05-17 | Examples live under `examples/statelessness/NN-slug/`, not flat with the main demos            | Visual grouping; prevents demo numbering conflict; supports per-collection test orchestration |
 | 2026-05-17 | `research-notes.md` reframed (option B), not deleted (option A)                                | The authoring narrative has value for extenders; the fix is reframing it as such, not hiding it |
+| 2026-05-17 | Q1: separate `test-all-stateless-demos.sh` aggregator + per-example test scripts               | Mirrors the main tutorial's `test-all-demos.sh` + `test-demo-NN-*.sh` split; keeps the two collections' test runs independent |
+| 2026-05-17 | Q2: per-example Jekyll pages under `_examples/statelessness-NN-name.md`                         | Same format as top-level demo pages; examples appear in the `/examples/` gallery |
+| 2026-05-17 | Q3: example dirs match compendium doc number + section name                                    | Unambiguous example↔doc mapping from the directory name; two Doc-07 examples differentiated by pattern name |
+| 2026-05-17 | Q4: `07-outbox-pattern` is a real multi-service setup (producer + relay + consumer)            | Reflects what the Outbox pattern actually does in production; a single-service in-process poller would misrepresent it |
+| 2026-05-17 | Q5: libpqxx everywhere; only the `ScopedConnection` pool-checkout wrapper is hand-rolled       | libpqxx has no built-in pool, and the checkout/RAII-return/invalidate flow is Doc 07's teaching point; no demo value in hand-rolling the libpq wire protocol |
 
 ## 14. Stakeholders
 
