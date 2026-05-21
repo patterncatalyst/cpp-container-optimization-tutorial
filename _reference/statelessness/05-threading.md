@@ -16,6 +16,15 @@ Doing concurrency correctly in a stateless service requires understanding which 
 
 {% include excalidraw.html name="statelessness/05-threading" caption="Threading in a cgroup-constrained service: cpu.max budgets the worker pool." %}
 
+> **Run this pattern.** A runnable companion lives at
+> [`examples/statelessness/05-threading/`]({{ '/examples/statelessness-05-threading/' | relative_url }}).
+> Two small binaries (no gRPC, builds in seconds): a `cpu-probe` that
+> reads `/sys/fs/cgroup/cpu.max` and prints it against
+> `hardware_concurrency()`, and a `pool-bench` that runs the same
+> CPU-bound workload at pool sizes 1/2/4/8 under `--cpus=2` so you can
+> watch throughput plateau at the quota while p99 and max latency climb
+> with oversubscription. Clone the repo, `cd` in, and `./demo.sh`.
+
 ## Thread-local storage is process-scoped, not request-scoped
 
 The most common subtle bug at the threading-statelessness interface is treating `thread_local` storage as if it were request-local. It is not. In a thread-pool model — which is the standard service model — a thread handles many requests sequentially, and any `thread_local` variable persists across those requests. A `thread_local` correlation ID set in handler A and not cleared remains set for handler B that happens to land on the same thread.

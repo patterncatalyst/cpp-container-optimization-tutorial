@@ -342,7 +342,7 @@ diagram for that doc is often sufficient.
 | 2 | `02-raii` example | 4-6 hours | [x] (host-verified r149 — 3/3 paths, lease balance clean, first-try build) |
 | 2 | `03-pmr` example | 4-6 hours | [x] (host-verified r150.3 — arena+bench+ASan trap all pass; static-libasan + direct-run) |
 | 2 | `04-process-scoped-state` example | 6-8 hours | [x] (host-verified r151.1 — composition order, LRU 8→cap4 w/ 4 evictions, reverse teardown all clean) |
-| 2 | `05-threading` example | 6-8 hours | [ ] |
+| 2 | `05-threading` example | 6-8 hours | [x] (authored r152; sandbox-verified probe+bench; needs host build under --cpus) |
 | 2 | `07-state-externalization` example | 8-10 hours | [ ] |
 | 2 | `07-outbox-pattern` example (multi-service) | 12-16 hours | [ ] |
 | 2 | `08-ephemeral-filesystem` example | 4-6 hours | [ ] |

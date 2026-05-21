@@ -168,6 +168,18 @@ permalink: /examples/
                 </p>
                 <div class="card__meta"><span>Read page →</span></div>
             </a>
+
+            <a class="card" href="{{ '/examples/statelessness-05-threading/' | relative_url }}">
+                <div class="card__eyebrow">Compendium · <strong>Doc 05</strong></div>
+                <h3 class="card__title">Threading &amp; CPU budget</h3>
+                <p class="card__desc">
+                    hardware_concurrency() lies under a cgroup quota. A
+                    cgroup-aware probe and a pool-size sweep under
+                    --cpus=2 show oversubscription buys no throughput and
+                    wrecks tail latency via CFS throttling.
+                </p>
+                <div class="card__meta"><span>Read page →</span></div>
+            </a>
         </div>
     </div>
 </section>

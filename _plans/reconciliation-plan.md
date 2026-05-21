@@ -23035,6 +23035,100 @@ Next: 05-threading (CFS quota, thread pool sized to cpu.max).
 
 ---
 
+### 2026-05-17 — r152: compendium Phase 2, example 4 — 05-threading
+
+**The trigger.**
+
+Fourth compendium example, the runnable companion to Doc 05 (threading
+under container limits). Turns the thread-safety the earlier examples
+foreshadowed into the main subject: hardware_concurrency() lies under a
+cgroup CPU quota, and oversubscribing a CFS-throttled container hurts
+tail latency without buying throughput.
+
+**Design departure: no gRPC, no Conan.**
+
+The teaching is about CPU/threading, not request handling, so this is
+the FIRST compendium example built as plain standard-library binaries —
+no gRPC chain, no Conan, no perl set. The Containerfile is just
+gcc-toolset-14 + cmake building two small C++ files, so it builds in
+seconds rather than minutes. Structurally it follows demo-05 (isolation)
+rather than 02/03/04: podman run --cpus (not compose), with cgroup v2
+'cpu' controller delegation detection (G-40) and a graceful warn +
+pointer to scripts/cgroup-delegation.sh when the quota can't be enforced
+rootless.
+
+**Two binaries.**
+
+  cpu-probe (src/cpu_probe.cpp + src/cgroup_cpu.hpp): reads
+    /sys/fs/cgroup/cpu.max (cgroup v2; cgroup v1 cfs_quota_us fallback;
+    min 1; unlimited→hardware_concurrency), and prints
+    hardware_concurrency() (the host lie) next to the cgroup quota (the
+    truth) and the recommended pool size, with a warning when they
+    diverge.
+  pool-bench (src/pool_bench.cpp): runs a fixed xorshift CPU-bound
+    workload across a sized pool, tasks pulled from a shared atomic
+    counter, recording per-task latency; reports throughput + p50/p99/max.
+
+demo.sh runs cpu-probe under --cpus=2, then pool-bench at pool sizes
+1/2/4/8 under --cpus=2, so the throughput-plateau and tail-latency-blowup
+read straight off the table.
+
+**Unusually strong in-sandbox verification.**
+
+Unlike the gRPC examples (which can't build without network), this one
+is pure stdlib, so BOTH binaries were compiled AND RUN in the sandbox.
+On the sandbox's single core (a hard CPU constraint) pool-bench produced
+exactly the predicted shape:
+  pool=1: throughput=3044/s p99=359us  max=831us
+  pool=2: throughput=3044/s p99=4562us max=6081us
+  pool=8: throughput=3034/s p99=28364us max=40351us
+Same throughput regardless of pool size; p99 climbs 359us -> 28ms as the
+pool oversubscribes the single core. cpu-probe exercised the cgroup v1
+fallback (sandbox has no cpu.max) and correctly reported unlimited.
+
+**Files (examples/statelessness/05-threading/).**
+
+  src/cgroup_cpu.hpp   CpuBudget detect_cpu_budget(): v2 cpu.max, v1
+                       fallback, recommended_pool()
+  src/cpu_probe.cpp    the lie-vs-truth probe
+  src/pool_bench.cpp   the oversubscription benchmark
+  CMakeLists.txt       two binaries; Threads only; no external deps
+  Containerfile        UBI 9 gcc-toolset-14 + cmake -> ubi-minimal; no
+                       Conan/gRPC/perl
+  demo.sh              delegation detect + cpu-probe + pool sweep
+  README.md            includes the "pools you didn't write" coda
+                       (gRPC ResourceQuota, MALLOC_ARENA_MAX, jemalloc,
+                       OpenMP/TBB)
+
+**Supporting + integration.**
+
+  scripts/test-stateless-demo-05-threading.sh   build + probe + a
+        throughput-plateau assertion (pool=8 not >25% over pool=2) that
+        only fires when the cpu controller is delegated; otherwise warns
+  _examples/statelessness-05-threading.md       Jekyll page, order 205
+  examples.html                                 05 card in Compendium
+  _reference/statelessness/05-threading.md      "Run this pattern" callout
+  _plans/statelessness-compendium-prd.md        timeline example 4 [x]
+
+**Verified in-sandbox.**
+
+  - check-liquid clean (incl. new page)
+  - bash -n on demo.sh + test clean; aggregator finds all four tests
+  - cpu-probe + pool-bench compiled with -std=c++23 -Wall -Wextra AND
+    RAN, producing the predicted throughput-plateau / tail-latency result
+
+**NOT verified (network disabled — needs host build).**
+
+The container build itself (trivial — gcc-toolset compile, no deps) and
+whether --cpus=2 enforces a real CFS quota rootless (depends on cgroup
+delegation; demo.sh + test detect this and degrade to a warning). The
+binaries' own behaviour is already proven by the sandbox run.
+
+Next: 07-state-externalization (ScopedConnection RAII, idempotency,
+deadlines) — back to gRPC, plus libpqxx.
+
+---
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from

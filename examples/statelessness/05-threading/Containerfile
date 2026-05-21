@@ -1,0 +1,47 @@
+# statelessness/05-threading — CPU-budget detection + pool-sizing demo.
+#
+# The first compendium example with NO gRPC and NO Conan: it's pure
+# standard library plus reading /sys/fs/cgroup, so the build is just a
+# C++ compile of two small binaries — seconds, not minutes. No perl set,
+# no dependency graph.
+#
+# Builds:
+#   cpu-probe   prints hardware_concurrency() vs the cgroup cpu quota
+#   pool-bench  runs a CPU-bound workload across a sized pool and reports
+#               throughput + tail latency
+
+FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
+
+RUN dnf install -y --quiet --setopt=install_weak_deps=False \
+        gcc-toolset-14 \
+        cmake ninja-build \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf/*
+
+ENV PATH="/opt/rh/gcc-toolset-14/root/usr/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
+
+WORKDIR /src
+COPY src/ ./src/
+COPY CMakeLists.txt ./
+
+RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build build -j"$(nproc)" \
+    && strip --strip-all build/cpu-probe build/pool-bench
+
+# ════════════════════════════════════════════════════════════════════════
+# Runtime — ubi-minimal + libstdc++.
+# ════════════════════════════════════════════════════════════════════════
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
+
+RUN microdnf install -y --setopt=install_weak_deps=0 \
+        libstdc++ \
+    && microdnf clean all \
+    && rm -rf /var/cache/yum
+
+COPY --from=builder /src/build/cpu-probe  /usr/local/bin/cpu-probe
+COPY --from=builder /src/build/pool-bench /usr/local/bin/pool-bench
+
+# No service, no ports: these are batch binaries the demo runs under
+# `podman run --cpus=N` to show the cgroup quota's effect.
+ENTRYPOINT ["/usr/local/bin/cpu-probe"]
