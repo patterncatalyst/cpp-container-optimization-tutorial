@@ -23433,6 +23433,104 @@ confirm.
 
 ---
 
+### r154 — Compendium example 6: statelessness/07-outbox-pattern (the transactional outbox with Kafka)
+
+The sixth and most complex compendium example, the runnable companion to
+Doc 07's *Outbox pattern* section. It is a real multi-service setup
+(resolving PRD Q4): a gRPC producer, a relay, and an idempotent consumer,
+backed by PostgreSQL and a Kafka broker.
+
+**What it demonstrates**
+
+- **Atomic order + event write** (`src/order_svc.cpp`). `CreateOrder`
+  writes the order row (deduped on `idempotency_key`, as in 07) and an
+  `outbox` row in ONE transaction. The outbox row is written only on a
+  fresh insert, so a client retry never emits a duplicate event. Both
+  commit together — no window where the order exists but the event was
+  lost.
+- **The relay** (`src/relay.cpp`). A poller reads unpublished rows with
+  `SELECT … WHERE published_at IS NULL … FOR UPDATE SKIP LOCKED`,
+  produces each to Kafka, flushes to confirm the broker acked, marks
+  them published, and commits. A crash between the Kafka ack and the
+  commit re-publishes on the next pass: at-least-once. The relay also
+  has a one-shot `produce &lt;event_id&gt; &lt;payload&gt;` mode used to
+  inject a duplicate event for the idempotency demo/test.
+- **The idempotent consumer** (`src/consumer.cpp`). Applies each event
+  with `INSERT … ON CONFLICT (event_id) DO NOTHING` and commits the
+  Kafka offset only after the DB apply (a crash re-delivers rather than
+  drops). A duplicate `event_id` is a no-op. At-least-once delivery + an
+  idempotent consumer = exactly-once effect.
+- **librdkafka via a C-API RAII wrapper** (`src/kafka.hpp`).
+  `KafkaProducer` (idempotent producer, `produce` + `flush`) and
+  `KafkaConsumer` (manual offset commit) wrap the librdkafka C API.
+
+**Stack and dependency decisions**
+
+- **Broker: Strimzi Kafka** (`quay.io/strimzi/kafka:latest-kafka-3.9.0`)
+  run standalone in single-node KRaft mode (no Zookeeper): the container
+  formats its own storage and starts the broker via a custom command.
+  Dual listeners — INTERNAL (`kafka:9092`) for in-network services and
+  EXTERNAL (`localhost:19092`) for host tools. A new sanctioned image
+  exception, Red Hat ecosystem.
+- **librdkafka from EPEL** (`librdkafka-devel` build, `librdkafka`
+  runtime). librdkafka has no UBI-native package, so EPEL is enabled
+  solely for it — a new sanctioned exception. We use the C API (stable C
+  ABI) rather than the C++ binding, the same reasoning that drove the
+  07 libpq-over-libpqxx pivot (no Conan C++ recipe to fight, no
+  libstdc++ ABI mixing). This deliberately deviates from PRD Q5
+  ("libpqxx everywhere"); PostgreSQL is reached through libpq, Kafka
+  through librdkafka C.
+- **kcat** is documented as an OPTIONAL host prerequisite
+  (`sudo dnf install kcat` on Fedora). Neither the demo nor the test
+  requires it: idempotency is exercised by the relay's `produce` mode,
+  which injects a duplicate directly. kcat is purely a window onto the
+  bus (Act 2 dumps the topic if present, skips gracefully if absent).
+- **CMAKE_POLICY_VERSION_MINIMUM=3.5** is set in this builder as
+  future-proofing against a future UBI CMake 4.x (which rejects deps
+  declaring `cmake_minimum_required &lt; 3.5`). Honored from the
+  environment by CMake 3.31+; harmless today (G-67). Backfilling it into
+  the other gRPC builders remains a planned tidy-up round.
+- **Naming.** The producer's gRPC server TU is `order_svc.cpp` (not
+  `main.cpp`), since the image has three `main()`s — sidestepping the
+  `main.cpp`/`client.cpp` naming question that the planned rename round
+  will settle for the single-server examples.
+
+**Wiring (consistent example schema)**
+
+- Directory `examples/statelessness/07-outbox-pattern/` (proto, src ×7,
+  CMakeLists, conanfile, conan.lock, Containerfile, compose.yml ×5
+  services, demo.sh, README.md).
+- Jekyll page `_examples/statelessness-07-outbox-pattern.md` (order 208,
+  permalink `/examples/statelessness-07-outbox-pattern/`).
+- examples.html "Compendium examples" card after the 07-state card.
+- "Run this pattern" callout in Doc 07's *Outbox pattern* section.
+- Test `scripts/test-stateless-demo-07-outbox-pattern.sh` (healthz
+  :18406; create → assert outbox row → poll projection for applied +
+  outbox published → inject duplicate via relay `produce` → assert
+  consumer logged duplicate + projection count == 1). The aggregator
+  discovers all six stateless tests.
+- PRD §11 timeline row marked authored.
+
+**Verification status**
+
+- Sandbox (strong): `pg_pool.hpp` (renamespaced) pool algorithm
+  re-verified against a fake libpq. `relay.cpp` AND `consumer.cpp`
+  compiled clean (`-Wall -Wextra`), linked, and smoke-ran against an
+  extended fake libpq + a fake librdkafka — the relay's `produce` mode
+  prints the produced event; the consumer starts, idles, and shuts down
+  gracefully on signal. `kafka.hpp` compiles. That covers two of the
+  three new binaries fully. Both shell scripts pass `bash -n`. compose
+  YAML parses. check-liquid clean.
+- Host-only (NOT yet built): `order_svc.cpp` is gRPC (host-only, as in
+  every gRPC example). The genuine host unknowns to watch on first
+  build: EPEL on the ubi-minimal runtime (the `rpm -i epel-release` then
+  `microdnf install librdkafka` path may need a CRB dep); the Strimzi
+  image tag `latest-kafka-3.9.0` and its KRaft startup command (non-root
+  UID 1001, `/opt/kafka/bin` scripts, `/tmp` writable, the dual-listener
+  config, `auto.create.topics.enable`); `pkg_check_modules` finding
+  `rdkafka.pc`; and `podman compose` honoring `depends_on:
+  service_healthy`.
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from

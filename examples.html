@@ -192,6 +192,18 @@ permalink: /examples/
                 </p>
                 <div class="card__meta"><span>Read page →</span></div>
             </a>
+            <a class="card" href="{{ '/examples/statelessness-07-outbox-pattern/' | relative_url }}">
+                <div class="card__eyebrow">Compendium · <strong>Doc 07</strong></div>
+                <h3 class="card__title">Outbox pattern</h3>
+                <p class="card__desc">
+                    Atomic DB write plus event emission: an order and its
+                    event written in one transaction, a relay that publishes
+                    the outbox to Kafka with FOR UPDATE SKIP LOCKED, and an
+                    idempotent consumer — at-least-once delivery plus
+                    idempotent apply gives an exactly-once effect.
+                </p>
+                <div class="card__meta"><span>Read page →</span></div>
+            </a>
         </div>
     </div>
 </section>

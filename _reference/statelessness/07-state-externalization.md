@@ -345,6 +345,17 @@ void OutboxPoller::run(std::stop_token stop) {
 
 The poller runs as a background `std::jthread` inside the service, or as a separate sidecar process. `FOR UPDATE SKIP LOCKED` ensures multiple poller replicas don't process the same row twice. The `published_at` timestamp marks completion.
 
+> **Run this pattern.** A runnable companion lives at
+> [`examples/statelessness/07-outbox-pattern/`]({{ '/examples/statelessness-07-outbox-pattern/' | relative_url }}).
+> A gRPC `OrderService` writes the order and an `outbox` row in one
+> transaction; a separate relay process polls the outbox with
+> `FOR UPDATE SKIP LOCKED`, publishes to Kafka, and marks rows published;
+> an idempotent consumer applies events with `ON CONFLICT (event_id) DO
+> NOTHING`. Because the relay re-publishes after a crash (at-least-once),
+> the idempotent consumer makes the end-to-end effect exactly-once. The
+> companion uses librdkafka's C API and a single-node Strimzi Kafka
+> broker. Clone the repo, `cd` in, and `./demo.sh`.
+
 The pattern has trade-offs — eventual consistency between DB and message bus, complexity of the poller, idempotency requirements on the consumer side — but it is the only correct answer for the "atomic DB write + event emission" requirement. The alternative — best-effort publish after commit — has a failure mode that is silent and hard to detect.
 
 ## Recommendation summary

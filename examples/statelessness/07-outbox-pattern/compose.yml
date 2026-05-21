@@ -1,0 +1,139 @@
+# statelessness/07-outbox-pattern — the transactional outbox with Kafka.
+#
+# Five services:
+#   postgres        orders + outbox + order_projection (SCLorg image)
+#   kafka           single-node KRaft broker (Strimzi image, no Zookeeper)
+#   order-svc       gRPC producer: CreateOrder writes order + outbox atomically
+#   outbox-relay    polls outbox -> publishes to Kafka -> marks published
+#   order-consumer  consumes Kafka -> idempotent projection (ON CONFLICT)
+#
+# order-svc, outbox-relay, and order-consumer are the SAME image (built
+# once via order-svc) running different commands.
+#
+# Kafka exposes two listeners: INTERNAL (kafka:9092) for the in-network
+# services, and EXTERNAL (localhost:19092) so host tools like kcat can
+# read the topic. See README for the kcat prerequisite.
+#
+# Bring up:   podman compose -f compose.yml up --build
+# Drive it:   ./demo.sh
+# Tear down:  ./demo.sh --clean
+
+services:
+  postgres:
+    image: quay.io/sclorg/postgresql-16-c9s:latest
+    container_name: stateless-07ob-postgres
+    environment:
+      POSTGRESQL_USER: orders
+      POSTGRESQL_PASSWORD: orders
+      POSTGRESQL_DATABASE: orders
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orders -d orders -h 127.0.0.1"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    tmpfs:
+      - /tmp
+    security_opt:
+      - "no-new-privileges:true"
+
+  kafka:
+    # Strimzi's Kafka image (Red Hat ecosystem). Normally driven by the
+    # Strimzi operator; here we run it standalone in single-node KRaft
+    # mode by formatting storage and starting the broker ourselves.
+    image: quay.io/strimzi/kafka:latest-kafka-3.9.0
+    container_name: stateless-07ob-kafka
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        CLUSTER_ID="$$(/opt/kafka/bin/kafka-storage.sh random-uuid)"
+        cat > /tmp/kraft.properties <<'PROPS'
+        process.roles=broker,controller
+        node.id=1
+        controller.quorum.voters=1@localhost:9093
+        listeners=INTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:19092
+        advertised.listeners=INTERNAL://kafka:9092,EXTERNAL://localhost:19092
+        controller.listener.names=CONTROLLER
+        listener.security.protocol.map=CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+        inter.broker.listener.name=INTERNAL
+        log.dirs=/tmp/kraft-logs
+        offsets.topic.replication.factor=1
+        transaction.state.log.replication.factor=1
+        transaction.state.log.min.isr=1
+        group.initial.rebalance.delay.ms=0
+        auto.create.topics.enable=true
+        PROPS
+        /opt/kafka/bin/kafka-storage.sh format -t "$$CLUSTER_ID" -c /tmp/kraft.properties --ignore-formatted
+        exec /opt/kafka/bin/kafka-server-start.sh /tmp/kraft.properties
+    ports:
+      - "127.0.0.1:19092:19092"   # EXTERNAL listener for host kcat
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+    tmpfs:
+      - /tmp
+
+  order-svc:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: cpp-tut/stateless-07-outbox-pattern:latest
+    container_name: stateless-07ob-order-svc
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PG_CONNINFO: "postgresql://orders:orders@postgres:5432/orders"
+      PG_POOL_SIZE: "4"
+    command: ["/usr/local/bin/order-svc"]
+    ports:
+      - "127.0.0.1:50051:50051"   # gRPC OrderService
+      - "127.0.0.1:18406:8080"    # healthz
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - "no-new-privileges:true"
+
+  outbox-relay:
+    image: cpp-tut/stateless-07-outbox-pattern:latest
+    container_name: stateless-07ob-relay
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      PG_CONNINFO: "postgresql://orders:orders@postgres:5432/orders"
+      KAFKA_BROKERS: "kafka:9092"
+      KAFKA_TOPIC: "orders"
+    command: ["/usr/local/bin/outbox-relay", "run"]
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - "no-new-privileges:true"
+
+  order-consumer:
+    image: cpp-tut/stateless-07-outbox-pattern:latest
+    container_name: stateless-07ob-consumer
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      PG_CONNINFO: "postgresql://orders:orders@postgres:5432/orders"
+      KAFKA_BROKERS: "kafka:9092"
+      KAFKA_TOPIC: "orders"
+    command: ["/usr/local/bin/order-consumer"]
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - "no-new-privileges:true"

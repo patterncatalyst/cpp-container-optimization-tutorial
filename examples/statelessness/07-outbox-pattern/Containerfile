@@ -1,0 +1,110 @@
+# statelessness/07-outbox-pattern — gRPC + PostgreSQL + Kafka.
+#
+# Builds four binaries from one image:
+#   order-svc      gRPC producer (writes order + outbox in one txn)
+#   order-client   gRPC client
+#   outbox-relay   outbox poller -> Kafka (libpq + librdkafka)
+#   order-consumer Kafka -> idempotent projection (libpq + librdkafka)
+#
+# Dependencies:
+#   gRPC + protobuf + abseil   via Conan (the verified G-22..G-30 trio)
+#   libpq                      system, UBI AppStream (libpq-devel)
+#   librdkafka (C client)      system, EPEL (librdkafka-devel)
+#
+# librdkafka has no UBI-native package, so EPEL is enabled solely for it
+# (a sanctioned exception). We use librdkafka's C API for the same reason
+# 07 uses libpq over libpqxx: a stable C ABI, no Conan C++ recipe to
+# fight. The first build compiles the gRPC chain (~5 min cold); a warm
+# Conan cache makes it far faster.
+
+FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
+
+# EPEL (for librdkafka-devel). libpq-devel is in UBI AppStream.
+RUN rpm -i https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm \
+    && dnf install -y --quiet --setopt=install_weak_deps=False \
+        gcc-toolset-14 \
+        cmake ninja-build git python3-pip \
+        pkgconf-pkg-config \
+        libpq-devel librdkafka-devel \
+        perl-FindBin perl-IPC-Cmd perl-Data-Dumper perl-Pod-Html \
+        perl-Pod-Usage perl-File-Compare perl-File-Copy perl-File-Path \
+        perl-Time-Piece perl-Getopt-Long perl-Digest-SHA \
+        perl-threads perl-threads-shared perl-Thread-Queue \
+        perl-Term-ANSIColor \
+        which \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf/*
+
+ENV PATH="/opt/rh/gcc-toolset-14/root/usr/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
+# Future-proofing: relaxes the cmake_minimum_required floor for any
+# Conan-built dep declaring < 3.5 (which CMake 4.x rejects). Honored from
+# the environment by CMake 3.31+; harmless to projects already on >= 3.5
+# (G-67).
+ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
+
+RUN pip install --quiet "conan~=2.0"
+
+RUN conan profile detect --force && \
+    sed -i 's|^compiler.cppstd=.*|compiler.cppstd=gnu17|' \
+        /root/.conan2/profiles/default
+
+WORKDIR /src
+
+COPY conanfile.py conan.lock ./
+RUN if [ -s conan.lock ]; then \
+        echo "==> Using committed conan.lock with --lockfile-partial"; \
+        conan install . --output-folder=build/conan \
+                        -s build_type=Release \
+                        --lockfile=conan.lock \
+                        --lockfile-partial \
+                        --build=missing ; \
+    else \
+        echo "==> conan.lock is empty placeholder; resolving graph fresh"; \
+        rm -f conan.lock ; \
+        conan install . --output-folder=build/conan \
+                        -s build_type=Release \
+                        --build=missing ; \
+    fi
+
+COPY src/   ./src/
+COPY proto/ ./proto/
+COPY CMakeLists.txt ./
+
+RUN cmake -S . -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_TOOLCHAIN_FILE=build/conan/conan_toolchain.cmake \
+    && cmake --build build -j"$(nproc)" \
+    && strip --strip-all build/order-svc build/order-client \
+                         build/outbox-relay build/order-consumer
+
+# ════════════════════════════════════════════════════════════════════════
+# Runtime — ubi-minimal + libstdc++ + libpq + librdkafka (all shared).
+# ════════════════════════════════════════════════════════════════════════
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
+
+# EPEL again for librdkafka at runtime; libpq is in UBI AppStream.
+RUN rpm -i https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm \
+    && microdnf install -y --setopt=install_weak_deps=0 \
+        libstdc++ \
+        libpq \
+        librdkafka \
+    && microdnf clean all \
+    && rm -rf /var/cache/yum
+
+COPY --from=builder /src/build/order-svc      /usr/local/bin/order-svc
+COPY --from=builder /src/build/order-client   /usr/local/bin/order-client
+COPY --from=builder /src/build/outbox-relay   /usr/local/bin/outbox-relay
+COPY --from=builder /src/build/order-consumer /usr/local/bin/order-consumer
+
+# :50051 gRPC OrderService, :8080 healthz (order-svc)
+EXPOSE 50051 8080
+
+ENV PG_CONNINFO="postgresql://orders:orders@postgres:5432/orders"
+ENV PG_POOL_SIZE=4
+ENV KAFKA_BROKERS="kafka:9092"
+ENV KAFKA_TOPIC="orders"
+
+# CMD (not ENTRYPOINT): compose selects which binary each service runs by
+# passing it as the command (G-66). A bare run starts the producer.
+CMD ["/usr/local/bin/order-svc"]
