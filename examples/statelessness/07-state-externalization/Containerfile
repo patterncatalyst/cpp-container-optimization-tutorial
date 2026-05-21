@@ -1,0 +1,88 @@
+# statelessness/07-state-externalization — gRPC + PostgreSQL (libpqxx).
+#
+# Same UBI 9 + gRPC builder as the other compendium gRPC examples, plus
+# libpqxx (and libpq) resolved by Conan. With static linkage
+# (*/*:shared=False) libpq is linked into the binary, so the runtime
+# image still needs only libstdc++.
+#
+# The first build compiles the gRPC chain from source (~5 min cold); a
+# warm Conan cache from an earlier compendium example makes it far
+# faster. libpqxx/libpq are the new packages this round.
+
+FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
+
+RUN dnf install -y --quiet --setopt=install_weak_deps=False \
+        gcc-toolset-14 \
+        cmake ninja-build git python3-pip \
+        pkgconf-pkg-config \
+        perl-FindBin perl-IPC-Cmd perl-Data-Dumper perl-Pod-Html \
+        perl-Pod-Usage perl-File-Compare perl-File-Copy perl-File-Path \
+        perl-Time-Piece perl-Getopt-Long perl-Digest-SHA \
+        perl-threads perl-threads-shared perl-Thread-Queue \
+        perl-Term-ANSIColor \
+        which \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf/*
+
+ENV PATH="/opt/rh/gcc-toolset-14/root/usr/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
+
+RUN pip install --quiet "conan~=2.0"
+
+RUN conan profile detect --force && \
+    sed -i 's|^compiler.cppstd=.*|compiler.cppstd=gnu17|' \
+        /root/.conan2/profiles/default
+
+WORKDIR /src
+
+COPY conanfile.py conan.lock ./
+RUN if [ -s conan.lock ]; then \
+        echo "==> Using committed conan.lock with --lockfile-partial"; \
+        conan install . --output-folder=build/conan \
+                        -s build_type=Release \
+                        --lockfile=conan.lock \
+                        --lockfile-partial \
+                        --build=missing ; \
+    else \
+        echo "==> conan.lock is empty placeholder; resolving graph fresh"; \
+        rm -f conan.lock ; \
+        conan install . --output-folder=build/conan \
+                        -s build_type=Release \
+                        --build=missing ; \
+    fi
+
+COPY src/   ./src/
+COPY proto/ ./proto/
+COPY CMakeLists.txt ./
+
+RUN cmake -S . -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_TOOLCHAIN_FILE=build/conan/conan_toolchain.cmake \
+    && cmake --build build -j"$(nproc)" \
+    && strip --strip-all build/order-svc \
+    && strip --strip-all build/order-client
+
+# ════════════════════════════════════════════════════════════════════════
+# Runtime — ubi-minimal + libstdc++ (libpq is static).
+# ════════════════════════════════════════════════════════════════════════
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
+
+RUN microdnf install -y --setopt=install_weak_deps=0 \
+        libstdc++ \
+    && microdnf clean all \
+    && rm -rf /var/cache/yum
+
+COPY --from=builder /src/build/order-svc    /usr/local/bin/order-svc
+COPY --from=builder /src/build/order-client /usr/local/bin/order-client
+
+# :50051 gRPC OrderService, :8080 healthz
+EXPOSE 50051 8080
+
+# Defaults overridable by compose. The service retries the DB at startup
+# so it tolerates Postgres still coming up.
+ENV PG_CONNINFO="postgresql://orders:orders@postgres:5432/orders"
+ENV PG_POOL_SIZE=4
+
+# CMD (not ENTRYPOINT): the demo runs order-client by passing it as the
+# command (G-66). A bare run starts the service.
+CMD ["/usr/local/bin/order-svc"]

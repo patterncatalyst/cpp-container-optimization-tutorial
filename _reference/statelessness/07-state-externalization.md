@@ -18,6 +18,15 @@ The C++-specific concerns are: every network call may throw or hang, connection 
 
 {% include excalidraw.html name="statelessness/07-state-externalization" caption="State externalization: process-scoped pool, ScopedConnection RAII, authoritative state outside the process." %}
 
+> **Run this pattern.** A runnable companion lives at
+> [`examples/statelessness/07-state-externalization/`]({{ '/examples/statelessness-07-state-externalization/' | relative_url }}).
+> A gRPC OrderService backed by PostgreSQL: the `PgPool` +
+> `ScopedConnection` checkout from this document, DB-authoritative
+> idempotency via `INSERT … ON CONFLICT DO NOTHING RETURNING` (a retry
+> with the same key replays the original order), and the inbound gRPC
+> deadline propagated to the transaction's `statement_timeout`. Clone
+> the repo, `cd` in, and `./demo.sh`.
+
 ## What externalizes, and what doesn't
 
 The State Architecture Table from Doc 04 has a third column — "external" — that this document develops. The state categories that belong there:

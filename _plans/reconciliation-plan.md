@@ -23178,6 +23178,116 @@ already sandbox-proven in r152; this is purely the container invocation.
 
 ---
 
+### 2026-05-17 — r153: compendium Phase 2, example 5 — 07-state-externalization
+
+**The trigger.**
+
+Fifth compendium example, the runnable companion to Doc 07 (state
+externalization) and the FIRST with a real backing store: a gRPC
+OrderService backed by PostgreSQL via compose, adding libpqxx to the
+Conan deps.
+
+**What it demonstrates.**
+
+  1. Connection pool with RAII checkout (src/pg_pool.hpp). libpqxx ships
+     no pool, so PgPool is the one hand-rolled piece (per the PRD Q5
+     decision). Process-scoped (built in main()'s composition root,
+     injected by ref). ScopedConnection is the per-request RAII handle —
+     returns the connection on scope exit, invalidate() marks a poisoned
+     connection so the pool discards it on release. release() is noexcept
+     and never opens a connection (no work in a destructor); a discarded
+     connection is replaced lazily on the next acquire (where creation
+     can throw, mapped to an error status).
+  2. DB-authoritative idempotency. CreateOrder uses INSERT ... ON
+     CONFLICT (idempotency_key) DO NOTHING RETURNING — race-free; a
+     returned row = created, empty = key seen before -> read original
+     back, flag idempotent_replay=true. UNIQUE constraint is the
+     authoritative dedup point (survives replica swaps; an in-process
+     check would not).
+  3. Deadline propagation. Handler reads ctx->deadline(), sets the
+     transaction statement_timeout from ms remaining.
+  4. Closes the 03-pmr lifetime trap: authoritative state is the
+     external table; results copied into owned std::strings; no cache
+     borrowing from a request arena.
+
+**Files (examples/statelessness/07-state-externalization/).**
+
+  proto/order.proto    OrderService: CreateOrder + GetOrder
+  src/pg_pool.hpp       PgPool + ScopedConnection (mutex + condition_var
+                        free list; acquire(timeout) throws on timeout;
+                        eager fill; lazy replace; move-only handle)
+  src/main.cpp          composition root (PgPool retried at startup),
+                        schema migration (CREATE TABLE IF NOT EXISTS
+                        orders, UNIQUE idempotency_key), idempotent
+                        CreateOrder + GetOrder with guarded acquire +
+                        deadline->statement_timeout, healthz, graceful
+                        shutdown
+  src/client.cpp        create / get driver (5s deadline)
+  CMakeLists.txt        order-svc + order-client; links gRPC + libpqxx
+                        (libpqxx::pqxx); G-23 link-group; libpqxx/libpq
+                        in the same group
+  conanfile.py          gRPC trio + libpqxx/7.7.4; NO speculative
+                        openssl/zlib override (let Conan resolve; add one
+                        line if it conflicts)
+  conan.lock            empty placeholder
+  Containerfile         UBI 9 builder (+ pkgconf-pkg-config) -> ubi-minimal
+                        + libstdc++ (libpq static); CMD not ENTRYPOINT
+                        (G-66); ENV PG_CONNINFO/PG_POOL_SIZE
+  compose.yml           postgres (quay.io/sclorg/postgresql-16-c9s, a
+                        sanctioned image exception) + order-svc; svc
+                        depends_on postgres healthy (pg_isready) AND
+                        retries at startup; healthz :18405
+  demo.sh               3 acts: create K1 / retry K1 replay / new K2 + get
+  README.md             includes PgBouncer production note + build note
+
+**Supporting + integration.**
+
+  scripts/test-stateless-demo-07-state-externalization.sh   5 phases:
+        healthz; create K1 (replay=false); retry K1 (same id, replay=true);
+        new K2 (distinct id); GetOrder read-back
+  _examples/statelessness-07-state-externalization.md       order 207
+  examples.html                          07 card in Compendium examples
+  _reference/statelessness/07-state-externalization.md      "Run this
+        pattern" callout after the diagram
+  _plans/statelessness-compendium-prd.md timeline example 5 [x]
+
+**Verified in-sandbox (pure-stdlib parts only).**
+
+  - check-liquid clean; bash -n on demo + test clean; aggregator finds
+    all five tests
+  - PgPool ALGORITHM unit-tested against a fake pqxx::connection:
+    eager fill, exhaustion timeout (no deadlock), reuse without growth,
+    invalidate->discard, lazy single-replacement, move-safe (no
+    double-release). Final state constructed=3 destroyed=1 live=2.
+  - The handler's guarded-acquire shape verified:
+    std::optional<ScopedConnection> emplace via move-ctor, ->get(),
+    ->invalidate(), timeout caught with optional left empty. (Found and
+    fixed a real bug mid-build: the original acquire was in an IIFE
+    OUTSIDE the try, so a checkout timeout would have escaped uncaught
+    and hung the RPC.)
+
+**NOT verified (network disabled — needs host build). NEW SURFACE.**
+
+This is the meatiest example and has the most unverified surface:
+  - Conan resolving libpqxx + grpc together: both pull openssl/zlib
+    transitively; a version conflict is the most likely first-build
+    failure -> one override line in conanfile.py (like 03-pmr's libasan).
+  - libpqxx/7.7.4 may need a version bump to whatever Conan Center ships;
+    the CMake target name (assumed libpqxx::pqxx) may differ -> legible
+    link/find_package error, one-line fix.
+  - libpq static link into ubi-minimal runtime (libstdc++ only) —
+    unverified; if libpq needs a runtime lib it'll surface at run.
+  - compose depends_on condition:service_healthy support in the user's
+    podman-compose provider (mitigated: order-svc retries at startup).
+  - postgres image pull + env var names + pg_isready healthcheck.
+The C++ logic (pool, RAII, idempotency control flow, deadline math) is
+as verified as it can be without the libpqxx/Postgres integration.
+
+Next: 07-outbox-pattern (producer + relay + idempotent consumer), then
+08-ephemeral-filesystem, then 09-health-checks.
+
+---
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from
