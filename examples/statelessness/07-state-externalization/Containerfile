@@ -26,6 +26,11 @@ RUN dnf install -y --quiet --setopt=install_weak_deps=False \
 
 ENV PATH="/opt/rh/gcc-toolset-14/root/usr/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
+# Escape hatch for dependencies whose CMakeLists still declare a
+# cmake_minimum_required below 3.5, which modern CMake (pulled by Conan
+# to build packages) now rejects. Honored from the environment by CMake
+# 3.31+; harmless to projects already on >= 3.5 (G-67).
+ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
 
 RUN pip install --quiet "conan~=2.0"
 

@@ -23288,6 +23288,55 @@ Next: 07-outbox-pattern (producer + relay + idempotent consumer), then
 
 ---
 
+### 2026-05-17 — r153.1: fix 07 — libpqxx 7.7.4 incompatible with modern CMake
+
+**The trigger.**
+
+r153's first host build: postgres image pulled fine, the gRPC chain +
+libpq built, then libpqxx/7.7.4 FAILED at configure:
+  CMake Error at cmake/config.cmake:45 (cmake_determine_compile_features):
+    Unknown CMake command "cmake_determine_compile_features".
+plus a top-of-log "Update the VERSION argument <min>" deprecation.
+
+**Root cause.**
+
+libpqxx 7.7.x ships a bundled cmake/config.cmake that include()s the
+internal module CMakeDetermineCompileFeatures and calls
+cmake_determine_compile_features — an undocumented CMake internal that
+modern CMake removed. Conan pulls a current CMake to build the package,
+so the include fails ("could not find requested file") and the command
+is then unknown. libpqxx reworked its CMake build in 7.8, so 7.7.x
+simply cannot configure under current CMake. libpq itself configured
+fine (got to function probes), so the breakage was isolated to libpqxx.
+
+**Fix (two parts, both low-risk, chosen to pass the expensive gRPC
+rebuild in one shot).**
+
+  1. Bump libpqxx 7.7.4 -> 7.9.0 (post-rework; no internal-command hack).
+  2. ENV CMAKE_POLICY_VERSION_MINIMUM=3.5 in the builder stage — the
+     documented escape hatch for any dependency still declaring
+     cmake_minimum_required < 3.5 (which modern CMake now rejects).
+     Honored from the environment by CMake 3.31+; harmless to projects
+     already on >= 3.5, so it cannot affect the proven gRPC chain build.
+
+**New gotcha.**
+
+G-67: libpqxx 7.7.x (and other pre-modern-CMake projects) fail to build
+under the current CMake that Conan pulls, via removed internal commands
+(cmake_determine_compile_features) and the cmake_minimum_required < 3.5
+removal. Fix: use libpqxx >= 7.9.0, and set
+CMAKE_POLICY_VERSION_MINIMUM=3.5 (env or -D) to relax the minimum-version
+floor for stubborn transitive deps.
+
+**Verified.** check-liquid clean. Change is conanfile version + one
+builder ENV; the C++ is unchanged from r153 (pool algorithm + handler
+shape already sandbox-verified). The openssl/zlib Conan-conflict
+possibility flagged in r153 has NOT yet been reached — the build failed
+earlier, at libpqxx configure; we'll learn whether that conflict
+materializes once libpqxx 7.9.0 configures.
+
+---
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from

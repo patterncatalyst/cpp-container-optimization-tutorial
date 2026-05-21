@@ -42,7 +42,10 @@ class Stateless07StateExternalizationConan(ConanFile):
         self.requires("grpc/1.54.3")
         self.requires("protobuf/3.21.12", override=True)
         self.requires("abseil/20230125.3", override=True)
-        # New: PostgreSQL client. Pulls libpq transitively. The version
-        # may need adjusting to whatever Conan Center currently ships;
-        # 7.7.4 is a long-stable recipe.
-        self.requires("libpqxx/7.7.4")
+        # New: PostgreSQL client. Pulls libpq transitively.
+        # 7.9.0 (not 7.7.x): libpqxx reworked its CMake build in 7.8.
+        # 7.7.x ships a cmake/config.cmake that calls the long-removed
+        # internal command `cmake_determine_compile_features`, which
+        # fails to configure under the modern CMake Conan uses to build
+        # the package (gotcha G-67).
+        self.requires("libpqxx/7.9.0")
