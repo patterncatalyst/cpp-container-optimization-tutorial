@@ -23337,6 +23337,102 @@ materializes once libpqxx 7.9.0 configures.
 
 ---
 
+### 2026-05-17 — r153.2: 07 — pivot libpqxx (Conan) -> libpq (system); + planned server.cpp rename
+
+**The trigger.**
+
+r153.1 bumped libpqxx 7.7.4 -> 7.9.0 to dodge the
+cmake_determine_compile_features error. The host rebuild showed 7.9.0
+FAILS IDENTICALLY — same libpqxx cmake/config.cmake calling the removed
+internal command, same "include could not find requested file:
+CMakeDetermineCompileFeatures". So it is not version-specific: the
+libpqxx Conan recipe's bundled CMake build does not configure under the
+CMake in our gcc-toolset-14/UBI toolchain, across versions. Chasing more
+versions or pinning CMake is guesswork that burns the user's build
+cycles.
+
+**Decision: drop the libpqxx Conan dependency; use libpq (the C client)
+from UBI AppStream.**
+
+This is a fix, not a workaround. It removes THREE uncertainty sources at
+once:
+  - no libpqxx CMake build (the failing step disappears entirely);
+  - no Conan OpenSSL/zlib conflict (conanfile reverts to the proven
+    gRPC-only trio, identical to 02-raii);
+  - C ABI, so no libstdc++ mixing concern that a system C++ lib raises.
+And it preserves every Doc 07 teaching point — PgPool + ScopedConnection
+RAII checkout, idempotency via INSERT ... ON CONFLICT ... RETURNING,
+deadline -> SET LOCAL statement_timeout. Only the connection type
+changes: PGconn* instead of pqxx::connection. Doc 07 itself names libpq
+as the layer libpqxx sits on.
+
+This DOES deviate from the sub-project PRD's Q5 decision ("libpqxx
+everywhere; ScopedConnection the only hand-rolled piece"). Recorded as a
+deliberate, justified deviation. The alternative that keeps libpqxx —
+building it from source via its autotools (./configure) path, bypassing
+its broken CMake — was considered and rejected as more Containerfile
+complexity for no teaching gain.
+
+**Changes.**
+
+  src/pg_pool.hpp   PgPool/ScopedConnection now own PGconn* (PgConnPtr =
+                    unique_ptr<PGconn, PQfinish-deleter>); open_one() uses
+                    PQconnectdb + PQstatus; algorithm unchanged.
+  src/main.cpp      DB calls rewritten to libpq C API: PgResultPtr RAII
+                    (PQclear), exec_cmd() helper for BEGIN/COMMIT/SET/DDL,
+                    PQexecParams for the ON CONFLICT insert + replay
+                    SELECT + GetOrder; broken-connection detection via
+                    PQstatus(c) != CONNECTION_OK -> invalidate. Guarded
+                    acquire (optional<ScopedConnection>) retained.
+  CMakeLists.txt    find_package(libpqxx) -> find_package(PostgreSQL);
+                    link PostgreSQL::PostgreSQL (system libpq) not
+                    libpqxx::pqxx.
+  conanfile.py      libpqxx requirement removed; back to gRPC trio.
+  Containerfile     builder: + libpq-devel, - pkgconf, -
+                    CMAKE_POLICY_VERSION_MINIMUM (both were libpqxx-only).
+                    runtime: + libpq (libpq.so.5, dynamic). Header updated.
+  README / Jekyll / demo.sh   prose updated libpqxx -> libpq with the
+                    rationale; build note rewritten.
+
+**G-67 (updated).** libpqxx's Conan recipe (>=7.7.4 through >=7.9.0)
+fails to build under modern CMake: its bundled cmake/config.cmake calls
+the removed internal command cmake_determine_compile_features. Neither a
+version bump nor CMAKE_POLICY_VERSION_MINIMUM fixes it. Resolution used:
+reach PostgreSQL via libpq (system, C ABI) instead of libpqxx via Conan.
+
+**Verified in-sandbox.** check-liquid clean. PgPool algorithm re-verified
+against a fake libpq-fe.h (PQconnectdb/PQstatus/PQfinish): eager fill,
+exhaustion timeout, reuse, invalidate->discard, lazy replacement,
+move-safe, AND the optional<ScopedConnection> handler shape
+(constructed=3 destroyed=2 live=1). The libpq C API calls in main.cpp
+follow standard signatures but are NOT sandbox-compilable (gRPC headers);
+verified by the host demo.
+
+**NOT verified (needs host build).** The container build with libpq-devel
+(UBI AppStream), find_package(PostgreSQL) locating system libpq, the
+libpq C API calls end-to-end, and the postgres compose service. The
+libpqxx CMake failure is gone by construction (no libpqxx).
+
+---
+
+### Planned tidy-up (not yet done): rename main.cpp -> server.cpp in gRPC examples
+
+Per user observation (r153): in the gRPC examples the SERVER's
+translation unit is named `main.cpp` while the client is `client.cpp`,
+which reads oddly ("two files with main(), classes in main.cpp"). It is
+correct — each is a separate executable target with its own main(), the
+same layout across 02-raii/03-pmr/04/07 — but the naming is less than
+self-documenting. PLANNED single cross-cutting tidy-up round: rename
+`src/main.cpp` -> `src/server.cpp` in every gRPC compendium example
+(02-raii, 03-pmr, 04-process-scoped-state, 07-state-externalization) and
+update each CMakeLists `add_executable(... src/main.cpp ...)` ->
+`src/server.cpp`, in ONE commit so the convention stays uniform. Not done
+piecemeal (would make whichever example changed first the odd one out).
+Low priority; do as a dedicated refactor round, then host-rebuild each to
+confirm.
+
+---
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from

@@ -14,13 +14,16 @@
 // response as a replay.
 //
 // The inbound gRPC deadline propagates to the database: the handler
-// reads ctx->deadline() and sets the transaction's statement_timeout
-// from the time remaining, so a slow query cannot outlive the client's
-// patience.
+// reads ctx->deadline() and issues SET LOCAL statement_timeout from the
+// time remaining, so a slow query cannot outlive the client's patience.
+//
+// PostgreSQL is reached through libpq (the C client). See pg_pool.hpp
+// for why the runnable example uses libpq directly rather than libpqxx.
 
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <memory>
@@ -37,7 +40,7 @@
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
 
-#include <pqxx/pqxx>
+#include <libpq-fe.h>
 
 #include "order.grpc.pb.h"
 #include "pg_pool.hpp"
@@ -54,10 +57,27 @@ void log_line(const std::string& msg) {
 
 namespace {
 
-// Compute milliseconds left until the gRPC deadline, or 0 if there is
-// effectively no deadline (gRPC represents "none" as a far-future
-// time_point). Clamped to a sane band so we never set an absurd
-// statement_timeout.
+// RAII for a libpq result.
+struct PgResultDeleter {
+    void operator()(PGresult* r) const noexcept {
+        if (r) PQclear(r);
+    }
+};
+using PgResultPtr = std::unique_ptr<PGresult, PgResultDeleter>;
+
+[[noreturn]] void pg_throw(PGconn* c, const std::string& what) {
+    throw std::runtime_error(what + ": " + PQerrorMessage(c));
+}
+
+// Run a no-result command (BEGIN/COMMIT/ROLLBACK/SET/DDL), checking it.
+void exec_cmd(PGconn* c, const char* sql) {
+    PgResultPtr r(PQexec(c, sql));
+    if (!r || PQresultStatus(r.get()) != PGRES_COMMAND_OK) {
+        pg_throw(c, std::string("command failed: ") + sql);
+    }
+}
+
+// Milliseconds until the gRPC deadline, or 0 if effectively none.
 long deadline_ms_remaining(grpc::CallbackServerContext* ctx) {
     const auto deadline = ctx->deadline();
     const auto now = std::chrono::system_clock::now();
@@ -99,35 +119,49 @@ public:
             return reactor;
         }
 
+        PGconn* c = conn->get();
         try {
-            pqxx::work txn(conn->get());
+            exec_cmd(c, "BEGIN");
 
             // Propagate the inbound deadline to the database.
             if (const long ms = deadline_ms_remaining(ctx); ms > 0) {
-                txn.exec("SET LOCAL statement_timeout = " + std::to_string(ms));
+                exec_cmd(c, ("SET LOCAL statement_timeout = " +
+                             std::to_string(ms)).c_str());
             }
 
             // Race-free idempotent insert. A returned row means we
             // created the order; no row means the key already existed.
-            const pqxx::result ins = txn.exec_params(
+            const char* ins_params[3] = {req->customer_id().c_str(),
+                                         req->item().c_str(),
+                                         req->idempotency_key().c_str()};
+            PgResultPtr ins(PQexecParams(
+                c,
                 "INSERT INTO orders (customer_id, item, idempotency_key) "
                 "VALUES ($1, $2, $3) "
                 "ON CONFLICT (idempotency_key) DO NOTHING "
                 "RETURNING order_id",
-                req->customer_id(), req->item(), req->idempotency_key());
-
-            long order_id = 0;
-            bool replay = ins.empty();
-            if (replay) {
-                const pqxx::result sel = txn.exec_params(
-                    "SELECT order_id FROM orders WHERE idempotency_key = $1",
-                    req->idempotency_key());
-                order_id = sel.at(0).at(0).as<long>();
-            } else {
-                order_id = ins.at(0).at(0).as<long>();
+                3, nullptr, ins_params, nullptr, nullptr, 0));
+            if (!ins || PQresultStatus(ins.get()) != PGRES_TUPLES_OK) {
+                pg_throw(c, "insert failed");
             }
 
-            txn.commit();
+            long order_id = 0;
+            const bool replay = (PQntuples(ins.get()) == 0);
+            if (replay) {
+                const char* sel_params[1] = {req->idempotency_key().c_str()};
+                PgResultPtr sel(PQexecParams(
+                    c, "SELECT order_id FROM orders WHERE idempotency_key = $1",
+                    1, nullptr, sel_params, nullptr, nullptr, 0));
+                if (!sel || PQresultStatus(sel.get()) != PGRES_TUPLES_OK ||
+                    PQntuples(sel.get()) == 0) {
+                    pg_throw(c, "replay lookup failed");
+                }
+                order_id = std::strtol(PQgetvalue(sel.get(), 0, 0), nullptr, 10);
+            } else {
+                order_id = std::strtol(PQgetvalue(ins.get(), 0, 0), nullptr, 10);
+            }
+
+            exec_cmd(c, "COMMIT");
 
             resp->set_order_id(order_id);
             resp->set_customer_id(req->customer_id());
@@ -137,13 +171,18 @@ public:
                      " order_id=" + std::to_string(order_id) +
                      (replay ? " (idempotent replay)" : " (created)"));
             reactor->Finish(grpc::Status::OK);
-        } catch (const pqxx::broken_connection& e) {
-            conn->invalidate();  // poisoned — drop it from the pool
-            reactor->Finish(grpc::Status(grpc::StatusCode::UNAVAILABLE,
-                                         std::string("database connection lost: ") +
-                                             e.what()));
         } catch (const std::exception& e) {
-            reactor->Finish(grpc::Status(grpc::StatusCode::INTERNAL, e.what()));
+            // Best-effort rollback; then decide whether the connection
+            // itself is poisoned and must be dropped from the pool.
+            { PgResultPtr rb(PQexec(c, "ROLLBACK")); }
+            if (PQstatus(c) != CONNECTION_OK) {
+                conn->invalidate();
+                reactor->Finish(grpc::Status(grpc::StatusCode::UNAVAILABLE,
+                                             e.what()));
+            } else {
+                reactor->Finish(grpc::Status(grpc::StatusCode::INTERNAL,
+                                             e.what()));
+            }
         }
         return reactor;
     }
@@ -161,30 +200,37 @@ public:
                                              e.what()));
             return reactor;
         }
+
+        PGconn* c = conn->get();
         try {
-            pqxx::work txn(conn->get());
-            if (const long ms = deadline_ms_remaining(ctx); ms > 0) {
-                txn.exec("SET LOCAL statement_timeout = " + std::to_string(ms));
-            }
-            const pqxx::result r = txn.exec_params(
+            const std::string id = std::to_string(req->order_id());
+            const char* params[1] = {id.c_str()};
+            PgResultPtr r(PQexecParams(
+                c,
                 "SELECT order_id, customer_id, item FROM orders WHERE order_id = $1",
-                req->order_id());
-            txn.commit();
-            if (r.empty()) {
+                1, nullptr, params, nullptr, nullptr, 0));
+            if (!r || PQresultStatus(r.get()) != PGRES_TUPLES_OK) {
+                pg_throw(c, "select failed");
+            }
+            if (PQntuples(r.get()) == 0) {
                 reactor->Finish(grpc::Status(grpc::StatusCode::NOT_FOUND,
                                              "no such order"));
                 return reactor;
             }
-            resp->set_order_id(r[0][0].as<long>());
-            resp->set_customer_id(r[0][1].as<std::string>());
-            resp->set_item(r[0][2].as<std::string>());
+            resp->set_order_id(std::strtol(PQgetvalue(r.get(), 0, 0), nullptr, 10));
+            resp->set_customer_id(PQgetvalue(r.get(), 0, 1));
+            resp->set_item(PQgetvalue(r.get(), 0, 2));
             resp->set_idempotent_replay(false);
             reactor->Finish(grpc::Status::OK);
-        } catch (const pqxx::broken_connection& e) {
-            conn->invalidate();
-            reactor->Finish(grpc::Status(grpc::StatusCode::UNAVAILABLE, e.what()));
         } catch (const std::exception& e) {
-            reactor->Finish(grpc::Status(grpc::StatusCode::INTERNAL, e.what()));
+            if (PQstatus(c) != CONNECTION_OK) {
+                conn->invalidate();
+                reactor->Finish(grpc::Status(grpc::StatusCode::UNAVAILABLE,
+                                             e.what()));
+            } else {
+                reactor->Finish(grpc::Status(grpc::StatusCode::INTERNAL,
+                                             e.what()));
+            }
         }
         return reactor;
     }
@@ -196,16 +242,14 @@ private:
 // ── schema migration at startup ──────────────────────────────────────
 void migrate(PgPool& pool) {
     ScopedConnection conn = pool.acquire(std::chrono::milliseconds(2000));
-    pqxx::work txn(conn.get());
-    txn.exec(
-        "CREATE TABLE IF NOT EXISTS orders ("
-        "  order_id        BIGSERIAL PRIMARY KEY,"
-        "  customer_id     TEXT        NOT NULL,"
-        "  item            TEXT        NOT NULL,"
-        "  idempotency_key TEXT        NOT NULL UNIQUE,"
-        "  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()"
-        ")");
-    txn.commit();
+    exec_cmd(conn.get(),
+             "CREATE TABLE IF NOT EXISTS orders ("
+             "  order_id        BIGSERIAL PRIMARY KEY,"
+             "  customer_id     TEXT        NOT NULL,"
+             "  item            TEXT        NOT NULL,"
+             "  idempotency_key TEXT        NOT NULL UNIQUE,"
+             "  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()"
+             ")");
     log_line("schema ready (orders table; UNIQUE idempotency_key)");
 }
 
@@ -231,12 +275,12 @@ void run_healthz(std::uint16_t port) {
     const char* resp =
         "HTTP/1.1 200 OK\r\nContent-Length: 3\r\nContent-Type: text/plain\r\n\r\nok\n";
     while (!g_shutting_down.load(std::memory_order_relaxed)) {
-        int c = ::accept(fd, nullptr, nullptr);
-        if (c < 0) break;
+        int cfd = ::accept(fd, nullptr, nullptr);
+        if (cfd < 0) break;
         char buf[512];
-        (void)::recv(c, buf, sizeof(buf), 0);
-        (void)::send(c, resp, std::strlen(resp), 0);
-        ::close(c);
+        (void)::recv(cfd, buf, sizeof(buf), 0);
+        (void)::send(cfd, resp, std::strlen(resp), 0);
+        ::close(cfd);
     }
     ::close(fd);
 }

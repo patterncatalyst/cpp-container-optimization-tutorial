@@ -23,8 +23,9 @@ request.
 
 ## What it demonstrates
 
-**A connection pool with RAII checkout.** libpqxx ships a connection
-type but no pool, so `PgPool` is the one piece the compendium
+**A connection pool with RAII checkout.** libpq gives one connection at
+a time (`PGconn*`) and no pool, so `PgPool` is the one piece the
+compendium
 hand-rolls. It is process-scoped — built once in `main()`'s composition
 root (Doc 04) — and hands out a `ScopedConnection` per request that
 returns the connection on scope exit (the RAII discipline of Doc 02

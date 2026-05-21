@@ -9,8 +9,9 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 add_compile_options(-O2 -DNDEBUG)
 
 # Force --start-group/--end-group around static archives so the linker
-# resolves circular deps among gRPC, protobuf, abseil (G-23). libpqxx
-# and libpq are added to the same group below.
+# resolves circular deps among gRPC, protobuf, abseil (G-23). The system
+# libpq (PostgreSQL::PostgreSQL) is a shared lib and unaffected by the
+# grouping.
 set(CMAKE_CXX_LINK_EXECUTABLE
     "<CMAKE_CXX_COMPILER> <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> \
      <OBJECTS> -o <TARGET> -Wl,--start-group <LINK_LIBRARIES> -Wl,--end-group")
@@ -18,7 +19,7 @@ set(CMAKE_CXX_LINK_EXECUTABLE
 find_package(gRPC     CONFIG REQUIRED)
 find_package(Protobuf CONFIG REQUIRED)
 find_package(absl     CONFIG REQUIRED)
-find_package(libpqxx  CONFIG REQUIRED)
+find_package(PostgreSQL REQUIRED)   # system libpq (libpq-devel); C client
 find_package(Threads  REQUIRED)
 
 set(PROTO_FILE ${CMAKE_CURRENT_SOURCE_DIR}/proto/order.proto)
@@ -50,7 +51,7 @@ add_executable(order-svc src/main.cpp ${PROTO_SRCS} ${GRPC_SRCS})
 target_include_directories(order-svc PRIVATE ${GENERATED_DIR} src)
 target_link_libraries(order-svc PRIVATE
     gRPC::grpc++ gRPC::grpc++_reflection protobuf::libprotobuf
-    libpqxx::pqxx Threads::Threads)
+    PostgreSQL::PostgreSQL Threads::Threads)
 
 add_executable(order-client src/client.cpp ${PROTO_SRCS} ${GRPC_SRCS})
 target_include_directories(order-client PRIVATE ${GENERATED_DIR} src)

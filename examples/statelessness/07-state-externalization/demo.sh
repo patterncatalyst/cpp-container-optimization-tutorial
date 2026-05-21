@@ -52,7 +52,7 @@ filter_compose() { grep -vE 'Executing external compose provider|^Error: executi
 client() { "${COMPOSE[@]}" exec -T "$SVC" /usr/local/bin/order-client 127.0.0.1:50051 "$@" 2>/dev/null | filter_compose; }
 
 echo "==> Building and starting postgres + order-svc"
-echo "    (first build compiles the gRPC chain + libpqxx; warm cache is faster)"
+echo "    (first build compiles the gRPC chain; warm cache is faster)"
 "${COMPOSE[@]}" up -d --build
 
 echo "==> Waiting for order-svc healthz on http://127.0.0.1:18405"

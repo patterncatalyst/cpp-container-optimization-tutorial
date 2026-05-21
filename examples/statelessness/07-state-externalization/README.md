@@ -13,8 +13,8 @@ database through an RAII checkout per request.
 ## What it demonstrates
 
 **A connection pool with RAII checkout**
-([`src/pg_pool.hpp`](src/pg_pool.hpp)). libpqxx ships a connection type
-but no pool, so `PgPool` is the one piece the compendium hand-rolls. It
+([`src/pg_pool.hpp`](src/pg_pool.hpp)). libpq gives one connection at a
+time (`PGconn*`) and no pool, so `PgPool` is the one piece the compendium hand-rolls. It
 is process-scoped — built once in `main()`'s composition root (Doc 04) —
 and hands out a `ScopedConnection` per request that returns the
 connection to the pool on scope exit (the RAII discipline of Doc 02,
@@ -79,24 +79,31 @@ still coming up.
 ├── src/pg_pool.hpp      PgPool + ScopedConnection (the hand-rolled pool)
 ├── src/main.cpp         composition root, migration, idempotent handler
 ├── src/client.cpp       create / get driver
-├── CMakeLists.txt       svc + client; links gRPC + libpqxx
-├── conanfile.py         gRPC trio + libpqxx (the one new dependency)
+├── CMakeLists.txt       svc + client; links gRPC + system libpq
+├── conanfile.py         gRPC + protobuf + abseil (libpq is a system pkg)
 ├── conan.lock           empty placeholder
-├── Containerfile        UBI 9 builder → ubi-minimal (libpq static)
+├── Containerfile        UBI 9 builder → ubi-minimal (+ libstdc++, libpq)
 ├── compose.yml          postgres + order-svc
 └── demo.sh              the driver
 ```
 
 ## A note on the build
 
-This adds **libpqxx** (and `libpq`) to the otherwise-proven gRPC Conan
-chain. Both gRPC and libpq depend transitively on OpenSSL and zlib; if
-Conan resolves them to incompatible versions, `conan install` fails with
-a clear "version conflict" naming the package. The fix is a single
-override line in `conanfile.py` (the same pattern as the existing
-protobuf/abseil overrides). The pool's checkout/timeout/invalidate logic
-is unit-tested separately from libpqxx; the SQL and libpqxx integration
-are verified by the demo against a live PostgreSQL.
+PostgreSQL is reached through **libpq**, the C client, installed from
+UBI's own AppStream (`libpq-devel` at build, `libpq` at runtime) — not
+through Conan. Doc 07's prose sketches the pool around **libpqxx** (the
+C++ wrapper), but libpqxx's Conan recipe doesn't build under the CMake
+in this toolchain: its bundled `cmake/config.cmake` calls the removed
+internal command `cmake_determine_compile_features`, which fails to
+configure across libpqxx versions (gotcha G-67). Using libpq directly
+avoids that, sidesteps any OpenSSL/zlib resolution conflict between
+gRPC's Conan chain and libpq, and — being a C ABI — removes the
+libstdc++ mixing concern a system C++ library would raise. The
+connection-pool, idempotency, and deadline patterns are identical either
+way; only the connection type changes (`PGconn*` rather than
+`pqxx::connection`). The pool's checkout/timeout/invalidate logic is
+unit-tested separately; the SQL is verified by the demo against a live
+PostgreSQL.
 
 ## Production note
 

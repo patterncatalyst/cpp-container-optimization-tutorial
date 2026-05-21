@@ -1,20 +1,22 @@
-# statelessness/07-state-externalization — gRPC + PostgreSQL (libpqxx).
+# statelessness/07-state-externalization — gRPC + PostgreSQL (libpq).
 #
-# Same UBI 9 + gRPC builder as the other compendium gRPC examples, plus
-# libpqxx (and libpq) resolved by Conan. With static linkage
-# (*/*:shared=False) libpq is linked into the binary, so the runtime
-# image still needs only libstdc++.
+# Same UBI 9 + gRPC builder as the other compendium gRPC examples. The
+# PostgreSQL client is libpq, installed from UBI's AppStream as a system
+# package (libpq-devel at build, libpq at runtime) — NOT via Conan. See
+# pg_pool.hpp / conanfile.py for why (the libpqxx Conan recipe's CMake
+# build is broken under this toolchain — G-67 — and libpq's C ABI keeps
+# the runtime simple). libpq is a small shared library, so the runtime
+# image carries libstdc++ plus libpq.
 #
-# The first build compiles the gRPC chain from source (~5 min cold); a
-# warm Conan cache from an earlier compendium example makes it far
-# faster. libpqxx/libpq are the new packages this round.
+# The first build compiles the gRPC chain (~5 min cold); a warm Conan
+# cache from an earlier compendium example makes it far faster.
 
 FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
 
 RUN dnf install -y --quiet --setopt=install_weak_deps=False \
         gcc-toolset-14 \
         cmake ninja-build git python3-pip \
-        pkgconf-pkg-config \
+        libpq-devel \
         perl-FindBin perl-IPC-Cmd perl-Data-Dumper perl-Pod-Html \
         perl-Pod-Usage perl-File-Compare perl-File-Copy perl-File-Path \
         perl-Time-Piece perl-Getopt-Long perl-Digest-SHA \
@@ -26,11 +28,6 @@ RUN dnf install -y --quiet --setopt=install_weak_deps=False \
 
 ENV PATH="/opt/rh/gcc-toolset-14/root/usr/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
-# Escape hatch for dependencies whose CMakeLists still declare a
-# cmake_minimum_required below 3.5, which modern CMake (pulled by Conan
-# to build packages) now rejects. Honored from the environment by CMake
-# 3.31+; harmless to projects already on >= 3.5 (G-67).
-ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
 
 RUN pip install --quiet "conan~=2.0"
 
@@ -74,6 +71,7 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
 
 RUN microdnf install -y --setopt=install_weak_deps=0 \
         libstdc++ \
+        libpq \
     && microdnf clean all \
     && rm -rf /var/cache/yum
 
