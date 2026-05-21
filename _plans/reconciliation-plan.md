@@ -22945,6 +22945,96 @@ timeline. check-liquid clean; bash -n clean.
 
 ---
 
+### 2026-05-17 — r151: compendium Phase 2, example 3 — 04-process-scoped-state
+
+**The trigger.**
+
+Third compendium example, the runnable companion to Doc 04 (process-
+scoped state and the State Architecture Table). Reuses the host-verified
+gRPC scaffold. Simpler than 03-pmr — no AddressSanitizer binary, so no
+libasan-devel and no ASLR/shadow-memory concerns.
+
+**What it does — the composition root made visible.**
+
+main() constructs every piece of process-scoped state by name, in
+dependency order, and injects it into the service by reference:
+  config -> metrics -> cache -> service -> server
+Each type logs on construct AND destruct (via wire_log, the rc_log
+pattern). So:
+  - startup logs show construction order (the composition root)
+  - the service holds const ServiceConfig& / MetricsRegistry& /
+    BoundedCache& — dependency injection, no Meyers singletons
+  - graceful stop shows RAII tearing down in the EXACT reverse order
+    (server -> service -> cache -> metrics -> config), which is also the
+    correct shutdown order — for free, because deps are built before
+    their users. The server is held in a global for the signal handler,
+    so main() resets it explicitly (logging -server) before the locals
+    unwind.
+
+**Bounded state.** BoundedCache is an LRU with a hard capacity
+(CACHE_CAPACITY env, default 4). The demo looks up 8 distinct keys; the
+cache evicts the LRU entry rather than growing, Stats shows
+cache_size==capacity with evictions>0. Prose ties this to the cgroup
+budget: an unbounded map keyed on request input is the classic
+works-in-test/OOM-in-prod bug.
+
+**Thread-safety (foreshadows Doc 05).** The shared mutable cache takes a
+mutex; metrics are atomic; the immutable config needs neither.
+
+**Files (examples/statelessness/04-process-scoped-state/).**
+
+  proto/state.proto       StateService: Lookup + Stats
+  src/composition.hpp     ServiceConfig (immutable, from_env), 
+                          MetricsRegistry (atomic), BoundedCache (LRU,
+                          mutex), each with ctor/dtor wire_log
+  src/main.cpp            composition root; StateServiceImpl (DI by ref);
+                          Lookup/Stats handlers; healthz; graceful
+                          shutdown with explicit g_server.reset()
+  src/client.cpp          one-shot client (lookup <key> | stats)
+  CMakeLists.txt          state-svc + state-client (no ASan target)
+  conanfile.py            grpc 1.54.3 + protobuf/abseil override; no OTel
+  conan.lock              empty placeholder
+  Containerfile           UBI 9 -> ubi-minimal + libstdc++; ENV
+                          CACHE_CAPACITY=4; no libasan
+  compose.yml             single svc; read-only rootfs + tmpfs; :18404 hz
+  demo.sh                 3 acts: composition root / eviction / teardown
+  README.md               what/why/State Architecture Table/layout
+
+**Supporting + integration.**
+
+  scripts/test-stateless-demo-04-process-scoped-state.sh   per-example
+        CI test: startup-order markers, cache bounded (size==cap,
+        evictions>0), reverse teardown order
+  _examples/statelessness-04-process-scoped-state.md       Jekyll page,
+        order 204
+  examples.html                          04 card in Compendium examples
+  _reference/statelessness/04-process-scoped-state.md      "Run this
+        pattern" callout
+  _plans/statelessness-compendium-prd.md timeline example 3 [x]
+
+**Verified in-sandbox.**
+
+  - check-liquid clean (incl. new page)
+  - bash -n on demo.sh + test clean; aggregator finds all three tests
+  - standalone compile+run of composition.hpp with assertions: LRU
+    eviction (evicts true LRU after promotion), bounding (size stays at
+    cap), config/metrics all correct
+  - verified the guaranteed-copy-elision pattern
+    `ServiceConfig config = ServiceConfig::from_env();` compiles with
+    deleted copy + no move ctor, and env parsing (default 4, override 16)
+
+**NOT verified (network disabled — needs host build).**
+
+Full container build + e2e. gRPC server/client/healthz/graceful-shutdown
+follow 02-raii and 03-pmr's host-verified pattern exactly; the
+process-scoped logic (LRU, config, metrics) is compile+run verified
+here. No ASan this time, so none of 03-pmr's container-sanitizer
+caveats apply.
+
+Next: 05-threading (CFS quota, thread pool sized to cpu.max).
+
+---
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from

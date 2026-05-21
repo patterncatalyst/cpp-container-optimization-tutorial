@@ -1,0 +1,45 @@
+// statelessness/04-process-scoped-state — StateService.
+//
+// Demonstrates the State Architecture Table (compendium Doc 04): the
+// service holds process-scoped state (a parsed config, a metrics
+// registry, a bounded in-process cache) wired in main() and injected
+// by reference into the handler. A Lookup either hits the cache
+// (process-scoped) or "computes" the value (standing in for an external
+// fetch — the third column of the table), inserting it and possibly
+// evicting the least-recently-used entry because the cache is bounded.
+
+syntax = "proto3";
+
+package statelessstate;
+
+service StateService {
+  // Look a key up in the process-scoped bounded cache. On a miss the
+  // value is computed (simulating an external fetch) and inserted,
+  // which may evict the LRU entry since the cache is capacity-bounded.
+  rpc Lookup(LookupRequest) returns (LookupResponse);
+  // Report the process-scoped metrics and current cache occupancy.
+  rpc Stats(StatsRequest) returns (StatsResponse);
+}
+
+message LookupRequest {
+  string key = 1;
+}
+
+message LookupResponse {
+  string key = 1;
+  string value = 2;
+  bool cache_hit = 3;
+  int64 cache_size = 4;       // current entries
+  int64 cache_capacity = 5;   // the bound
+}
+
+message StatsRequest {}
+
+message StatsResponse {
+  int64 lookups = 1;
+  int64 hits = 2;
+  int64 misses = 3;
+  int64 evictions = 4;
+  int64 cache_size = 5;
+  int64 cache_capacity = 6;
+}

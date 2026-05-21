@@ -1,0 +1,30 @@
+# statelessness/04-process-scoped-state brings up a single service:
+#   state-svc — gRPC StateService on :50051, healthz on :8080
+#
+# No observability stack: the composition root and teardown order are
+# visible in the service's own stdout, and cache occupancy comes back in
+# the RPC responses.
+#
+# Bring up:   podman compose -f compose.yml up --build
+# Drive it:   ./demo.sh
+# Tear down:  ./demo.sh --clean
+
+services:
+  state-svc:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: cpp-tut/stateless-04-process-scoped-state:latest
+    container_name: stateless-04-process-scoped-state
+    environment:
+      # Small cap so the demo shows eviction quickly. Bump it to see the
+      # cache hold more before evicting.
+      CACHE_CAPACITY: "4"
+    ports:
+      - "127.0.0.1:50051:50051"   # gRPC StateService
+      - "127.0.0.1:18404:8080"    # healthz
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - "no-new-privileges:true"

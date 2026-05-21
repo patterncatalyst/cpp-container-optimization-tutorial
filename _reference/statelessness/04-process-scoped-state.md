@@ -18,6 +18,15 @@ This document covers process-scoped state: what belongs there, what doesn't, the
 
 {% include excalidraw.html name="statelessness/04-process-scoped-state" caption="The State Architecture Table: process-scoped, request-scoped, external — sort early." %}
 
+> **Run this pattern.** A runnable companion lives at
+> [`examples/statelessness/04-process-scoped-state/`]({{ '/examples/statelessness-04-process-scoped-state/' | relative_url }}).
+> A gRPC service whose `main()` is a composition root — process-scoped
+> config, metrics, and a bounded LRU cache built by name and injected by
+> reference, with logging that shows construction order at startup and
+> the exact-reverse teardown on shutdown. Fill the cache past its
+> capacity to watch it evict rather than grow. Clone the repo, `cd` in,
+> and `./demo.sh`.
+
 ## Categories of process-scoped state
 
 A typical C++ microservice in this stack carries several kinds of process-scoped state.
