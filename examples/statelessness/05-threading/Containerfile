@@ -44,4 +44,9 @@ COPY --from=builder /src/build/pool-bench /usr/local/bin/pool-bench
 
 # No service, no ports: these are batch binaries the demo runs under
 # `podman run --cpus=N` to show the cgroup quota's effect.
-ENTRYPOINT ["/usr/local/bin/cpu-probe"]
+# No ENTRYPOINT: this image ships two binaries and the demo selects
+# which to run by passing it as the command. CMD (unlike ENTRYPOINT) is
+# a default that a passed command REPLACES — `podman run IMG cpu-probe`
+# and `podman run IMG pool-bench 2 …` each run the right binary, while a
+# bare `podman run IMG` runs the probe.
+CMD ["/usr/local/bin/cpu-probe"]

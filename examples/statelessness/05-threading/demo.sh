@@ -79,6 +79,12 @@ for p in 1 2 4 8; do
     label=""
     [[ "$p" == "$CPUS" ]] && label="   <- matches the --cpus=$CPUS quota"
     out="$(podman run --rm --cpus="$CPUS" "$IMG" /usr/local/bin/pool-bench "$p" "$TASKS" "$ITERS")"
+    if [[ "$out" != pool=* ]]; then
+        echo "    ERROR: pool-bench did not produce a result line (got:" >&2
+        printf '%s\n' "$out" | head -3 | sed 's/^/      /' >&2
+        echo "    ). Check the Containerfile CMD/ENTRYPOINT." >&2
+        exit 1
+    fi
     printf '    %s%s\n' "$out" "$label"
 done
 echo "    ------------------------------------------------------------"

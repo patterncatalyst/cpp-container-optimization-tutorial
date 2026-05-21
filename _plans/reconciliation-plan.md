@@ -23129,6 +23129,55 @@ deadlines) — back to gRPC, plus libpqxx.
 
 ---
 
+### 2026-05-17 — r152.1: fix 05-threading — ENTRYPOINT swallowed pool-bench
+
+**The trigger.**
+
+r152's host run: cpu-probe (Act 1) printed perfectly — host shows 22
+cores, the --cpus=2 cgroup quota reads 2.00, the oversubscription
+warning fires (an 11x lie, a great demonstration). But Act 2's
+pool-bench sweep printed the CPU-PROBE output four times instead of
+benchmark lines. pool-bench never ran.
+
+**Root cause — ENTRYPOINT vs CMD.**
+
+The Containerfile had `ENTRYPOINT ["/usr/local/bin/cpu-probe"]`. A
+command passed to `podman run IMG /usr/local/bin/pool-bench 2 ...` does
+NOT replace an exec-form ENTRYPOINT — it is APPENDED as arguments to it.
+So every Act 2 run executed `cpu-probe /usr/local/bin/pool-bench 2 2000
+400000`; cpu-probe ignores its args and prints the probe. Act 1 only
+worked by luck (the appended arg was itself cpu-probe). For a multi-tool
+image where the caller chooses the binary, ENTRYPOINT is wrong.
+
+**Fix.**
+
+ENTRYPOINT -> CMD. CMD is a default that a passed command REPLACES, so
+`podman run IMG /usr/local/bin/pool-bench 2 ...` runs pool-bench,
+`podman run IMG /usr/local/bin/cpu-probe` runs cpu-probe, and a bare
+`podman run IMG` still runs the probe. Also hardened demo.sh Act 2 to
+fail loudly if pool-bench output doesn't start with "pool=" (the demo
+had silently printed garbage rather than erroring).
+
+The test script (test-stateless-demo-05-threading.sh) would already have
+caught this — it greps pool-bench output for "throughput=" and exits
+non-zero if empty — so the test was sound; only the demo showed wrong
+output without failing.
+
+**New gotcha.**
+
+G-66: For a container image shipping MULTIPLE binaries where the caller
+picks which to run via the run command, use CMD, not exec-form
+ENTRYPOINT. ENTRYPOINT is prepended and a passed command becomes its
+args (needs --entrypoint to override); CMD is replaced by a passed
+command. Symptom: passing binary B runs binary A with B as an ignored
+argument.
+
+**Verified.** bash -n clean; check-liquid clean; CMD confirmed, no
+ENTRYPOINT. Quick host rebuild (no gRPC). The binaries themselves were
+already sandbox-proven in r152; this is purely the container invocation.
+
+---
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from
