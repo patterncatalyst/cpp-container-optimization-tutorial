@@ -14,7 +14,7 @@ The health-check endpoint is the orchestrator's API into the service. It is the 
 
 The health-check semantics are more subtle than "is the service up." There are at least three distinct questions an orchestrator wants to ask — should I kill this replica, should I route traffic to it, has it finished starting up — and conflating them produces failure modes that look correct in development and fail in production. Kubernetes exposes the three as separate probes (startup, liveness, readiness); Podman's `HEALTHCHECK` directive collapses them into one. Either way, the C++ service has to think about each distinctly and answer them correctly.
 
-This document covers the health-check model: the three probes and what each means, the gRPC standard health protocol that's become the canonical answer, the same-port-vs-separate-port trade-off, what "alive" and "ready" actually mean for a C++ service, and the graceful-shutdown sequence that ties Doc 05's `std::stop_token`, Doc 07's pool draining, and Doc 06's destruction order into a single coherent flow.
+This document covers the health-check model: the three probes and what each means, the gRPC standard health protocol that's become the canonical answer, the same-port-vs-separate-port trade-off, what "alive" and "ready" actually mean for a C++ service, and the graceful-shutdown sequence that ties [Doc 05 (threading)](../05-threading/)'s `std::stop_token`, [Doc 07 (state externalization)](../07-state-externalization/)'s pool draining, and [Doc 06 (12-factor)](../06-twelve-factor/)'s destruction order into a single coherent flow.
 
 {% include excalidraw.html name="statelessness/09-health-checks" caption="Three probes (startup, liveness, readiness) and the graceful-shutdown sequence that ties scope destructors together." %}
 
@@ -42,7 +42,7 @@ This document covers the health-check model: the three probes and what each mean
 
 Kubernetes distinguishes three probes per container. Podman has a single `healthcheck`. The semantic distinctions are worth understanding even when only one of them is configurable, because they translate to the questions any orchestrator needs answered.
 
-The **startup probe** asks "has the service finished initializing yet?" Until it succeeds, the other probes are not run. This is the probe that gives a C++ service time to construct its `TracerProvider`, build its channel cache, warm its connection pools, and load any deserialized configuration — all the process-scoped state from Doc 04. A slow-starting service that doesn't declare a startup probe risks being killed by liveness failures during its initialization. The probe is intended to be permissive: long timeout, many retries, no harm in being slow during the startup window.
+The **startup probe** asks "has the service finished initializing yet?" Until it succeeds, the other probes are not run. This is the probe that gives a C++ service time to construct its `TracerProvider`, build its channel cache, warm its connection pools, and load any deserialized configuration — all the process-scoped state from [Doc 04 (process-scoped state)](../04-process-scoped-state/). A slow-starting service that doesn't declare a startup probe risks being killed by liveness failures during its initialization. The probe is intended to be permissive: long timeout, many retries, no harm in being slow during the startup window.
 
 The **liveness probe** asks "is the service deadlocked or otherwise unable to serve?" If it fails repeatedly, the orchestrator kills the container and starts a fresh one. The intended use is for catching processes that are running but have stopped making progress — a stuck thread holding a critical lock, an infinite loop in a background worker, a deadlock that the process can't recover from. The probe should be cheap and direct: does the process respond to a no-op call?
 
@@ -74,7 +74,7 @@ Readiness is more nuanced because it controls traffic flow. The right answer dep
 
 A newly-started replica is not ready until its process-scoped state is initialized. The channel cache has its primary upstreams connected; the connection pool has its minimum number of healthy connections checked in; configuration parsing succeeded; the OTel exporter has connected to the OTLP backend (or has failed and decided to retry, depending on the failure mode policy). The startup probe covers the bulk-initialization window; readiness covers the steady-state question.
 
-A replica becomes not-ready when it cannot serve traffic at the moment. The most common case is graceful shutdown: SIGTERM arrives, the service flips readiness to NOT_SERVING immediately so the orchestrator stops routing new requests, then drains in-flight work before exiting. Doc 06 mentioned the staged startup; this is the symmetric staged shutdown. Other not-ready conditions include connection pool exhaustion (no connections available to serve), backpressure trigger (PSI-aware backoff from Doc 05), and explicit administrative drain.
+A replica becomes not-ready when it cannot serve traffic at the moment. The most common case is graceful shutdown: SIGTERM arrives, the service flips readiness to NOT_SERVING immediately so the orchestrator stops routing new requests, then drains in-flight work before exiting. [Doc 06](../06-twelve-factor/) mentioned the staged startup; this is the symmetric staged shutdown. Other not-ready conditions include connection pool exhaustion (no connections available to serve), backpressure trigger (PSI-aware backoff from [Doc 05](../05-threading/)), and explicit administrative drain.
 
 A replica becomes ready again when the not-ready condition clears. Connection pool refilled, backpressure subsided, dependency reachable. The orchestrator polls the readiness probe on its configured cadence; recovery is automatic once the probe starts returning success.
 
@@ -173,7 +173,7 @@ A hybrid pattern is common: a small HTTP server on a separate port for liveness 
 
 ## Defining a startup probe correctly
 
-C++ services often have non-trivial startup time — the static initialization tax from Doc 06, plus process-scoped state construction from Doc 04, plus initial connection establishment from Doc 07. A service that takes 10 seconds to be ready and uses only a liveness probe with a 1-second timeout will get killed before it can start.
+C++ services often have non-trivial startup time — the static initialization tax from [Doc 06](../06-twelve-factor/), plus process-scoped state construction from [Doc 04](../04-process-scoped-state/), plus initial connection establishment from [Doc 07](../07-state-externalization/). A service that takes 10 seconds to be ready and uses only a liveness probe with a 1-second timeout will get killed before it can start.
 
 The startup probe pattern handles this. While the startup probe runs, neither the liveness nor the readiness probe runs; the orchestrator gives the service time to come up. Once startup succeeds (typically when the gRPC server reports server-wide SERVING), the other probes take over.
 
@@ -190,7 +190,7 @@ startupProbe:
 
 Podman's equivalent uses the `--start-period` option on the `HEALTHCHECK` directive — during the start period, failures are not counted against the retries budget.
 
-The application-side pattern uses the staged-startup approach from Doc 06: start the server with health reporting NOT_SERVING, do the expensive initialization, then flip health to SERVING when ready:
+The application-side pattern uses the staged-startup approach from [Doc 06](../06-twelve-factor/): start the server with health reporting NOT_SERVING, do the expensive initialization, then flip health to SERVING when ready:
 
 ```cpp
 int main(int argc, char** argv) {
@@ -279,10 +279,10 @@ The full sequence, end to end:
 1. SIGTERM arrives at the container.
 2. The signal handler flips the per-service health status to NOT_SERVING. The empty-name (server-wide) status remains SERVING.
 3. The orchestrator's next readiness probe (typically within a few seconds) sees NOT_SERVING and removes the replica from the Service's endpoint set. New traffic stops arriving.
-4. The signal handler signals `process_stop`. Background workers (the outbox poller from Doc 07, any async batch jobs) see `stop_requested()` and exit their loops via `std::jthread`'s cooperative cancellation. Doc 05's pattern applies directly.
+4. The signal handler signals `process_stop`. Background workers (the outbox poller from [Doc 07](../07-state-externalization/), any async batch jobs) see `stop_requested()` and exit their loops via `std::jthread`'s cooperative cancellation. [Doc 05](../05-threading/)'s pattern applies directly.
 5. The signal handler calls `server->Shutdown(deadline)`. gRPC stops accepting new RPCs and waits for in-flight RPCs to complete, up to the deadline.
 6. `server->Wait()` returns when shutdown is complete.
-7. Control returns to `main()`. Process-scoped state destructs in reverse construction order (Doc 04): the service, then the pools, then the channel cache, then the tracer provider (with a `ForceFlush` so in-flight spans get exported).
+7. Control returns to `main()`. Process-scoped state destructs in reverse construction order ([Doc 04](../04-process-scoped-state/)): the service, then the pools, then the channel cache, then the tracer provider (with a `ForceFlush` so in-flight spans get exported).
 8. `main()` returns. Process exits with status 0.
 
 The sequence respects each subsystem's contract: gRPC drains in-flight RPCs to deadline, the outbox poller finishes its current iteration before exiting, the pools close connections cleanly, the tracer flushes spans. The orchestrator sees a clean exit and proceeds with whatever it was doing (rolling deploy, scale-down, node drain).
@@ -352,6 +352,6 @@ _The works below are collected, with reading guidance and a cross-reference matr
 
 **"Building Low Latency Applications with C++".** The chapter on signal handling and graceful shutdown is the closest published reference for the C++ side of the shutdown sequence. The book leans toward custom signal-handling rather than gRPC-integrated patterns; the principles transfer.
 
-**The Twelve-Factor App, Factor IX (Disposability).** The canonical statement that processes should be disposable: fast startup, graceful shutdown. Worth re-reading in conjunction with Doc 06.
+**The Twelve-Factor App, Factor IX (Disposability).** The canonical statement that processes should be disposable: fast startup, graceful shutdown. Worth re-reading in conjunction with [Doc 06](../06-twelve-factor/).
 
 **Linux signal-handling documentation, particularly `signal-safety(7)`.** The list of functions that are async-signal-safe. The signal handler shown above operates within these constraints; deviating from them invites deadlocks at shutdown.

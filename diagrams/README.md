@@ -35,14 +35,18 @@ Diagrams currently in the set:
 | `12-debug-sidecar-pattern`            | §12     | ephemeral gdb sidecar                  |
 | `13-reproducibility-conan-flow`       | §13     | hermetic build pipeline                |
 | `14-pitfalls-avx512-mismatch`         | §14     | AVX-512 mismatch trap                  |
-| `08-deadline-budget-flow`             | §8      | deadline budget propagation across hops |
-| `11-cfs-throttling-timeline`          | §11     | CFS quota throttling vs tail latency   |
 | `11-numa-local-remote`                | §11     | NUMA local vs remote access latency    |
 | `13-abi-break-taxonomy`               | §13     | ABI-safe vs ABI-breaking changes       |
+| `08-deadline-budget-flow`             | stateless 07, 10 | deadline budget propagation across hops |
+| `11-cfs-throttling-timeline`          | stateless 05 | CFS quota throttling vs tail latency   |
 
 The last four are supplementary concept diagrams (a second figure for a
-section) added to visualize a temporal or comparison concept the
-section's primary diagram doesn't show.
+section) that visualize a temporal or comparison concept the section's
+primary diagram doesn't. NUMA and the ABI taxonomy live in the main
+tutorial (§11, §13); the deadline-budget and CFS-throttling figures are
+embedded in the statelessness compendium docs where their prose lives
+(deadline propagation in Doc 07 and the capstone Doc 10; CPU-quota
+throttling in Doc 05), so they're listed but not shown in the main gallery.
 
 ### Statelessness compendium diagrams
 

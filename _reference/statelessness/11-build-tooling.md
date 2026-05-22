@@ -137,7 +137,7 @@ tools.build:linkflags=[
 ]
 ```
 
-The dev profile turns on AddressSanitizer for development builds — catches arena lifetime bugs (Doc 03), the locks-across-`co_await` UB (Doc 05), and most of the resource-leak patterns. The release profile enables LTO and the standard set of hardening flags. `-fvisibility=hidden` reduces dynamic symbol table size, which helps both startup time (Doc 06) and security surface.
+The dev profile turns on AddressSanitizer for development builds — catches arena lifetime bugs ([Doc 03 (PMR)](../03-pmr/)), the locks-across-`co_await` UB ([Doc 05 (threading)](../05-threading/)), and most of the resource-leak patterns. The release profile enables LTO and the standard set of hardening flags. `-fvisibility=hidden` reduces dynamic symbol table size, which helps both startup time ([Doc 06 (12-factor)](../06-twelve-factor/)) and security surface.
 
 Invoking Conan:
 
@@ -157,19 +157,19 @@ Brief notes on each library — what it's for, what version is current, what to 
 
 **opentelemetry-cpp** is the C++ SDK for OTel. `with_otlp_grpc: True` enables the OTLP-over-gRPC exporter that talks to the OTel Collector. The library pulls in its own protobuf descriptors; ensure Conan resolves to the same protobuf version as gRPC uses. The `with_stl: "CXX17"` option (despite the name, it covers C++17 and later) uses standard-library types like `std::shared_ptr` in the API instead of the SDK's internal `nostd::*` types, which simplifies user code.
 
-**libpqxx** is the C++ wrapper for libpq. As Doc 07 noted, it does not ship a connection pool; the `PgPool` class in Doc 07 fills the gap. `libpqxx/7.9.0` requires PostgreSQL 14+ on the server side.
+**libpqxx** is the C++ wrapper for libpq. As [Doc 07 (state externalization)](../07-state-externalization/) noted, it does not ship a connection pool; the `PgPool` class in [Doc 07](../07-state-externalization/) fills the gap. `libpqxx/7.9.0` requires PostgreSQL 14+ on the server side.
 
-**redis-plus-plus** is the C++ Redis client, layered over hiredis. `redis-plus-plus/1.3.13` covers Redis 6.x and 7.x. The bundled connection pool (Doc 07) is usable out of the box.
+**redis-plus-plus** is the C++ Redis client, layered over hiredis. `redis-plus-plus/1.3.13` covers Redis 6.x and 7.x. The bundled connection pool ([Doc 07](../07-state-externalization/)) is usable out of the box.
 
 **librdkafka** is the C client; the bundled `cppkafka` or `modern-cpp-kafka` wrappers provide C++ idioms. Both are available via Conan recipes. Pin the client to a version compatible with the broker fleet (Kafka clients are generally backward-compatible to older brokers but forward-compatible only within a major version).
 
-**spdlog** is the logging library (Doc 08). `spdlog/1.14.1` supports the structured-pattern formatting used in the Doc 08 example. The header-only mode is the default; the compiled mode (`header_only: False` option) reduces compile time for large codebases.
+**spdlog** is the logging library ([Doc 08 (ephemeral filesystem)](../08-ephemeral-filesystem/)). `spdlog/1.14.1` supports the structured-pattern formatting used in the [Doc 08](../08-ephemeral-filesystem/) example. The header-only mode is the default; the compiled mode (`header_only: False` option) reduces compile time for large codebases.
 
-**abseil** provides `flat_hash_map`, `node_hash_map`, `Cord`, `Time`, and other utilities used across the doc set. Doc 04 mentioned `absl::flat_hash_map` as a denser alternative to `std::unordered_map` for process-scoped caches. Pin to a recent LTS release; Abseil's compatibility story is documented and reliable.
+**abseil** provides `flat_hash_map`, `node_hash_map`, `Cord`, `Time`, and other utilities used across the doc set. [Doc 04 (process-scoped state)](../04-process-scoped-state/) mentioned `absl::flat_hash_map` as a denser alternative to `std::unordered_map` for process-scoped caches. Pin to a recent LTS release; Abseil's compatibility story is documented and reliable.
 
-**boost** is used primarily for Asio (Doc 05) and optionally for Fiber (Doc 05). Build with `shared: False` to embed in the binary; build `without_python` to avoid pulling in Python dependencies that aren't needed.
+**boost** is used primarily for Asio ([Doc 05](../05-threading/)) and optionally for Fiber ([Doc 05](../05-threading/)). Build with `shared: False` to embed in the binary; build `without_python` to avoid pulling in Python dependencies that aren't needed.
 
-**asio-grpc** is the coroutine bridge between gRPC's `CompletionQueue` and Boost.Asio's executor model (Doc 05, Doc 10). Header-only; pulled in via Conan's CMake find_package generation.
+**asio-grpc** is the coroutine bridge between gRPC's `CompletionQueue` and Boost.Asio's executor model ([Doc 05](../05-threading/), [Doc 10 (gRPC capstone)](../10-grpc-microservices/)). Header-only; pulled in via Conan's CMake find_package generation.
 
 **nlohmann_json** is the standard JSON library for C++. Used for parsing configuration files that don't fit in env vars (rare, but useful for complex policies). Also useful for structured logging if spdlog's built-in patterns are insufficient.
 
@@ -307,15 +307,15 @@ The compiler version controls which C++23 features are available. The table belo
 
 | Feature | Used in | GCC | Clang/libc++ |
 |---|---|---|---|
-| `std::expected` | Doc 02 | 12+ | 16+ |
-| `<stacktrace>` | Doc 02, 08 | 14+ | 18+ (link `-lstdc++_libbacktrace`) |
-| `std::pmr::stacktrace` | Doc 02, 03 | 14+ | 18+ |
+| `std::expected` | [Doc 02 (RAII)](../02-raii/) | 12+ | 16+ |
+| `<stacktrace>` | [Doc 02](../02-raii/), 08 | 14+ | 18+ (link `-lstdc++_libbacktrace`) |
+| `std::pmr::stacktrace` | [Doc 02](../02-raii/), 03 | 14+ | 18+ |
 | `std::print`, `std::println` | (optional) | 14+ | 18+ (partial) |
-| `std::flat_map` / `std::flat_set` | Doc 03, 04 | 15+ | not yet (as of 2026) |
-| `std::stop_token` / `std::jthread` | Doc 05, 09 | 10+ (C++20) | 13+ (C++20) |
+| `std::flat_map` / `std::flat_set` | [Doc 03](../03-pmr/), 04 | 15+ | not yet (as of 2026) |
+| `std::stop_token` / `std::jthread` | [Doc 05](../05-threading/), 09 | 10+ (C++20) | 13+ (C++20) |
 | `std::generator` | (optional, coroutines) | 14+ | 19+ (partial) |
-| `constinit` | Doc 06 | 10+ (C++20) | 11+ (C++20) |
-| Designated initializers | Doc 03 | 8+ (C++20) | 10+ (C++20) |
+| `constinit` | [Doc 06](../06-twelve-factor/) | 10+ (C++20) | 11+ (C++20) |
+| Designated initializers | [Doc 03](../03-pmr/) | 8+ (C++20) | 10+ (C++20) |
 
 For services that need `std::flat_map` today and don't have GCC 15+, the fallback is Abseil's `absl::flat_hash_map` (different semantics — hash table, not sorted) or `absl::btree_map` (sorted, b-tree, similar cache behaviour to `flat_map`). Both are stable and well-tested.
 
@@ -327,7 +327,7 @@ GCC 14 with libstdc++ on a glibc 2.35+ host is the recommended baseline as of 20
 
 libstdc++ (GCC's standard library) and libc++ (Clang's standard library) differ in implementation details that occasionally matter for service code.
 
-`std::string`'s small-string optimization (SBO) holds up to 15 bytes in libstdc++, up to 22 bytes in libc++ (Doc 02 mentioned this in the constructor-cost discussion). For services that handle many short identifiers, libc++'s SBO can produce measurable allocation savings.
+`std::string`'s small-string optimization (SBO) holds up to 15 bytes in libstdc++, up to 22 bytes in libc++ ([Doc 02](../02-raii/) mentioned this in the constructor-cost discussion). For services that handle many short identifiers, libc++'s SBO can produce measurable allocation savings.
 
 `std::unordered_map`'s implementation differs: libstdc++ uses bucket-array-of-singly-linked-lists; libc++ uses a similar approach with different load factor defaults. For high-cardinality maps, `absl::flat_hash_map` outperforms both consistently.
 
@@ -393,7 +393,7 @@ ENTRYPOINT ["/usr/local/bin/pricing_service"]
 
 A few choices to call out. The build stage uses the full Fedora image; the runtime stage uses `fedora-minimal` which is much smaller. The binary is stripped after build to remove debug symbols (production debugging uses separate symbol files shipped to a symbol server, not symbols in the running image). `grpc_health_probe` comes from the gRPC ecosystem's prebuilt binary release — adding a few MB to the image, far less than building it from source.
 
-The `USER 1000` directive matches the `runAsUser: 1000` from the Kubernetes manifest in Doc 10. Running as a non-root UID inside the container is independent of the rootless-Podman story (Doc 08) but layers on the same defense-in-depth.
+The `USER 1000` directive matches the `runAsUser: 1000` from the Kubernetes manifest in [Doc 10](../10-grpc-microservices/). Running as a non-root UID inside the container is independent of the rootless-Podman story ([Doc 08](../08-ephemeral-filesystem/)) but layers on the same defense-in-depth.
 
 For a smaller image, switch the runtime base to `distroless` (Google's stripped-down image) or build a static binary against musl libc and use `scratch` as the base. The trade-off is that distroless and scratch images are harder to debug interactively; for a development-side compose file, the full Fedora image is more friendly.
 
@@ -403,7 +403,7 @@ Three small helpers were referenced across the doc set but never shown in full. 
 
 ### `vendor/cgroup_helper/`
 
-The cgroup CPU limit reader from Doc 05.
+The cgroup CPU limit reader from [Doc 05](../05-threading/).
 
 ```cpp
 // cgroup_helper.h
@@ -521,7 +521,7 @@ target_include_directories(cgroup_helper PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 ### `vendor/psi_reader/`
 
-The PSI parser from Doc 05's sidebar. Brief because it's straightforward — read the file, parse three `avgN=X.XX` fields:
+The PSI parser from [Doc 05](../05-threading/)'s sidebar. Brief because it's straightforward — read the file, parse three `avgN=X.XX` fields:
 
 ```cpp
 // psi_reader.h
@@ -554,7 +554,7 @@ The `.cpp` implementation reads the file, parses the `some` or `full` line into 
 
 ### `vendor/otel_propagator/`
 
-The trace-context propagator used in Doc 10's `compute_tax`. The OTel C++ SDK provides the underlying machinery; this is a thin wrapper that adapts to a `grpc::ClientContext`:
+The trace-context propagator used in [Doc 10](../10-grpc-microservices/)'s `compute_tax`. The OTel C++ SDK provides the underlying machinery; this is a thin wrapper that adapts to a `grpc::ClientContext`:
 
 ```cpp
 // otel_propagator.h

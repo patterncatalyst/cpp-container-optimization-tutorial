@@ -10,11 +10,11 @@ sectionid: reference
 
 ## Thesis
 
-A stateless service is not a stateless process. The prior documents have been careful with the distinction: request-scoped state lives and dies inside a handler (Doc 02), often inside a per-request arena (Doc 03). Process-scoped state lives for the lifetime of the OS container, accumulates over many requests, and dies cleanly on cold start. The orchestrator does not care about process-scoped state — it cares about whether the service can be killed and replaced without correctness loss. As long as process-scoped state is *rebuildable from configuration on cold start*, the service is stateless from the orchestrator's view, regardless of how much memory the process is holding.
+A stateless service is not a stateless process. The prior documents have been careful with the distinction: request-scoped state lives and dies inside a handler ([Doc 02 (RAII)](../02-raii/)), often inside a per-request arena ([Doc 03 (PMR)](../03-pmr/)). Process-scoped state lives for the lifetime of the OS container, accumulates over many requests, and dies cleanly on cold start. The orchestrator does not care about process-scoped state — it cares about whether the service can be killed and replaced without correctness loss. As long as process-scoped state is *rebuildable from configuration on cold start*, the service is stateless from the orchestrator's view, regardless of how much memory the process is holding.
 
 The mental error to avoid is the C++ developer's instinct to treat any persistent in-process state as "stateful." A gRPC channel cache, a Redis connection pool, an OpenTelemetry `TracerProvider`, a parsed-once configuration object — all live for the process lifetime, all are legitimate, and none make the service stateful in the cloud-native sense. The right framing is: process-scoped state is *expensive to rebuild*, not *needs to be replicated or persisted*. Confusing these two — putting authoritative session data in a `static` map because it's faster than Redis — is one of the most common architectural mistakes when moving a C++ codebase from monolith to containers.
 
-This document covers process-scoped state: what belongs there, what doesn't, the State Architecture Table that anchors the distinction across the doc set, how to wire process-scoped state in `main()` rather than reaching for singletons, and how to size it against the OS container's memory and ephemeral-storage budget. CPU limits get a sizing-budget mention here; the threading-correctness consequences are Doc 05's subject.
+This document covers process-scoped state: what belongs there, what doesn't, the State Architecture Table that anchors the distinction across the doc set, how to wire process-scoped state in `main()` rather than reaching for singletons, and how to size it against the OS container's memory and ephemeral-storage budget. CPU limits get a sizing-budget mention here; the threading-correctness consequences are [Doc 05 (threading)](../05-threading/)'s subject.
 
 {% include excalidraw.html name="statelessness/04-process-scoped-state" caption="The State Architecture Table: process-scoped, request-scoped, external — sort early." %}
 
@@ -39,11 +39,11 @@ The **OpenTelemetry `TracerProvider`** is the canonical singleton in modern serv
 
 **Prepared statement caches** are typically attached to a database connection or to the pool. The first execution of a query plans it; subsequent executions reuse the plan. The cache is process-scoped (per-connection or per-pool) and bounded in size.
 
-**PMR upstream resources** are the heap source for per-request arenas that overflow their inline buffers (Doc 03). A single process-scoped `std::pmr::synchronized_pool_resource`, backed by the global allocator, is a reasonable default; sizing matters for memory-tight services.
+**PMR upstream resources** are the heap source for per-request arenas that overflow their inline buffers ([Doc 03](../03-pmr/)). A single process-scoped `std::pmr::synchronized_pool_resource`, backed by the global allocator, is a reasonable default; sizing matters for memory-tight services.
 
-**Best-effort in-process caches** sit in front of external lookups for performance — short-TTL caches of frequently-accessed data, computed-once expensive results. They miss to an authoritative external store on cache miss or eviction (Doc 07 covers the externalization pattern). They are *never* the authoritative source.
+**Best-effort in-process caches** sit in front of external lookups for performance — short-TTL caches of frequently-accessed data, computed-once expensive results. They miss to an authoritative external store on cache miss or eviction ([Doc 07 (state externalization)](../07-state-externalization/) covers the externalization pattern). They are *never* the authoritative source.
 
-**Parsed configuration** is the result of reading environment variables, command-line flags, and config files at startup. It lives for the process lifetime, immutable after construction. Doc 06 covers configuration philosophy.
+**Parsed configuration** is the result of reading environment variables, command-line flags, and config files at startup. It lives for the process lifetime, immutable after construction. [Doc 06 (12-factor)](../06-twelve-factor/) covers configuration philosophy.
 
 **JIT-compiled regexes, parsed Lua scripts, machine-learning model weights loaded from disk** — anything that takes significant time to construct and never changes once built — belongs here too.
 
@@ -71,13 +71,13 @@ The single most useful artifact in this doc set; referenced from several others.
 | Authoritative session / user state | — | — (external) |
 | User-visible counters, rate-limit windows | — | — (external) |
 
-Two rows worth dwelling on. The fourth from the bottom — "Authoritative session / user state" — has no check in either column. It belongs in *external* state (Redis, PostgreSQL, Kafka) because the service is stateless: data that clients depend on cannot live in any single replica. Doc 07 develops the externalization pattern. The same is true of user-visible counters and rate-limit windows — they have to be consistent across replicas, which means they live in a shared store.
+Two rows worth dwelling on. The fourth from the bottom — "Authoritative session / user state" — has no check in either column. It belongs in *external* state (Redis, PostgreSQL, Kafka) because the service is stateless: data that clients depend on cannot live in any single replica. [Doc 07](../07-state-externalization/) develops the externalization pattern. The same is true of user-visible counters and rate-limit windows — they have to be consistent across replicas, which means they live in a shared store.
 
 > **Opinion.** When you find yourself wanting to put something in the "process-scoped" column because it's faster than externalizing, ask: does the next request need to see this? If yes, it has to be externalized regardless of cost. If no — best-effort cache, computed-once derived value, parsed config — then process-scoped is fine. The performance answer is almost never to ignore the architectural constraint.
 
 ## Wiring process-scoped state in `main()`
 
-The C++ instinct for "one of these per process" is the singleton pattern — typically a Meyers singleton with `static T& instance()`. This is wrong for service code, for reasons developed in detail in Doc 06. The short version: singletons hide construction order, conflate ownership with access, defeat testability, and make graceful shutdown harder. The replacement is plain construction in `main()`, with references passed down explicitly.
+The C++ instinct for "one of these per process" is the singleton pattern — typically a Meyers singleton with `static T& instance()`. This is wrong for service code, for reasons developed in detail in [Doc 06](../06-twelve-factor/). The short version: singletons hide construction order, conflate ownership with access, defeat testability, and make graceful shutdown harder. The replacement is plain construction in `main()`, with references passed down explicitly.
 
 A skeleton wiring for a service that uses the OTel provider, a gRPC channel cache, and a Redis pool:
 
@@ -161,9 +161,9 @@ Process-scoped state has to fit inside an OS container's resource budget. The bu
 
 **There is no `GOMEMLIMIT` for C++.** Go has runtime-level memory-limit awareness — it can read the cgroup limit and adjust GC behaviour to stay under it. C++ has no language-level equivalent. The closest is allocator-level: configure jemalloc, tcmalloc, or mimalloc to respect a soft cap, and instrument RSS via OTel metrics so dashboards alert before the kernel kills the process.
 
-**CPU limits constrain throughput, not correctness.** A CPU limit means the kernel throttles the process when it exceeds the quota (the CFS quota / period mechanism). The process keeps running, just slower. From a state-sizing perspective the impact is indirect: under throttling, request latency spikes, in-flight requests queue, and memory pressure rises from the queue. Plan headroom. The thread-pool-sizing consequences are Doc 05's subject.
+**CPU limits constrain throughput, not correctness.** A CPU limit means the kernel throttles the process when it exceeds the quota (the CFS quota / period mechanism). The process keeps running, just slower. From a state-sizing perspective the impact is indirect: under throttling, request latency spikes, in-flight requests queue, and memory pressure rises from the queue. Plan headroom. The thread-pool-sizing consequences are [Doc 05](../05-threading/)'s subject.
 
-**Ephemeral-storage limits cap log volume.** Kubernetes `resources.limits.ephemeral-storage` caps the writable layer plus `emptyDir` plus container logs. A C++ service that writes verbose logs to stdout can blow this budget under unexpected load. Mitigations are structured log levels, rate-sampling noisy events, and aggressive shipping to Loki so logs don't accumulate locally. Doc 08 covers the ephemeral-storage angle in detail.
+**Ephemeral-storage limits cap log volume.** Kubernetes `resources.limits.ephemeral-storage` caps the writable layer plus `emptyDir` plus container logs. A C++ service that writes verbose logs to stdout can blow this budget under unexpected load. Mitigations are structured log levels, rate-sampling noisy events, and aggressive shipping to Loki so logs don't accumulate locally. [Doc 08 (ephemeral filesystem)](../08-ephemeral-filesystem/) covers the ephemeral-storage angle in detail.
 
 **Podman vs Kubernetes syntax.** Same semantics, different spellings.
 
@@ -189,7 +189,7 @@ Allocate the budget across the categories:
 - **Connection pools** for Redis or PostgreSQL: each pooled connection takes 1–4 MB depending on buffers. A pool of 20 connections budgets 20–80 MB. Tune the pool size to actual concurrency, not to maximum theoretical concurrency.
 - **Prepared-statement cache** is typically a few KB per statement, bounded, rarely dominant.
 - **In-process caches** are where most of the remaining budget goes, if you use them. Size in bytes, not entries — entries can have variable size, and a count limit is a poor proxy for memory pressure.
-- **PMR upstream resource** backs arena overflow. Sizing depends on overflow rate; if the inline buffers are well-sized (Doc 03), the upstream sees little traffic.
+- **PMR upstream resource** backs arena overflow. Sizing depends on overflow rate; if the inline buffers are well-sized ([Doc 03](../03-pmr/)), the upstream sees little traffic.
 
 The arithmetic is approximate, and the right answer is to instrument: export RSS, allocator stats, cache hit rates, and pool checkout latency as OTel metrics; alert on RSS approaching the limit; tune from observed behaviour.
 
@@ -252,7 +252,7 @@ The point is not this specific implementation — production code reaches for a 
 
 ## `std::` container choices for process-scoped state
 
-The choice rules from Doc 03 carry over with two modifications: process-scoped containers don't get the PMR arena treatment (they live for the process, not the request), and the choice criterion shifts from "what destroys cheaply" to "what gives bounded memory under workload."
+The choice rules from [Doc 03](../03-pmr/) carry over with two modifications: process-scoped containers don't get the PMR arena treatment (they live for the process, not the request), and the choice criterion shifts from "what destroys cheaply" to "what gives bounded memory under workload."
 
 For caches and lookup tables with small N (under ~64 entries), `std::flat_map<K, V>` (C++23) is usually best. Contiguous storage, cache-friendly, no per-entry allocation. The O(N) insertion cost matters only if the table churns; for steady-state lookups it's a clear win.
 
@@ -268,13 +268,13 @@ For things that genuinely don't grow — prepared-statement caches with a known 
 
 ## CPU limits as a sizing consideration
 
-A brief note that connects to Doc 05's deeper coverage. Process-scoped state sizing interacts with CPU limits in two ways.
+A brief note that connects to [Doc 05](../05-threading/)'s deeper coverage. Process-scoped state sizing interacts with CPU limits in two ways.
 
-First, thread pools are themselves process-scoped state, sized in part from the CPU budget. gRPC's internal pools, application worker pools, and allocator arenas all consume process memory proportional to their thread count. Sizing them too high wastes memory; sizing them too low underuses CPU. Doc 05 covers the sizing algorithm and the `std::thread::hardware_concurrency()` trap.
+First, thread pools are themselves process-scoped state, sized in part from the CPU budget. gRPC's internal pools, application worker pools, and allocator arenas all consume process memory proportional to their thread count. Sizing them too high wastes memory; sizing them too low underuses CPU. [Doc 05](../05-threading/) covers the sizing algorithm and the `std::thread::hardware_concurrency()` trap.
 
 Second, throttling under CPU pressure raises memory pressure indirectly. When CFS throttles the process, in-flight requests queue, each holding a per-request arena. The queue depth multiplies the request-scoped memory footprint, which can push the process into the OOM zone. The mitigations are to bound queue depth (gRPC's `ServerBuilder::SetResourceQuota` and `MaxThreads` settings, an explicit semaphore in the handler), shed load early via `RESOURCE_EXHAUSTED` rather than queue indefinitely, and run with CPU headroom so throttling is rare.
 
-The deep treatment of CPU limits — CFS quota mechanics, throttling tail latency, allocator arena configuration, the cgroup detection code — lives in Doc 05. From Doc 04's angle, CPU limits matter because they shape how much process-scoped concurrency you can afford to maintain.
+The deep treatment of CPU limits — CFS quota mechanics, throttling tail latency, allocator arena configuration, the cgroup detection code — lives in [Doc 05](../05-threading/). From Doc 04's angle, CPU limits matter because they shape how much process-scoped concurrency you can afford to maintain.
 
 ## Recommendation summary
 

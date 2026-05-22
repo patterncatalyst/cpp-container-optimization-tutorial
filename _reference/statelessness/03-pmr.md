@@ -10,9 +10,9 @@ sectionid: reference
 
 ## Thesis
 
-Doc 02 established the discipline: bundle per-request state into a `RequestContext` RAII type, destroy at scope exit, no manual cleanup. The arena member of that context — a `std::pmr::monotonic_buffer_resource` backed by an inline buffer — is the in-language realization of "request brings its own memory, all releases together, no allocation crosses the boundary." Construct an arena at request entry, allocate everything from it via `std::pmr::polymorphic_allocator`, destroy at request exit. The arena *is* the statelessness boundary, mechanized in the type system and enforced by the C++ destruction model.
+[Doc 02 (RAII)](../02-raii/) established the discipline: bundle per-request state into a `RequestContext` RAII type, destroy at scope exit, no manual cleanup. The arena member of that context — a `std::pmr::monotonic_buffer_resource` backed by an inline buffer — is the in-language realization of "request brings its own memory, all releases together, no allocation crosses the boundary." Construct an arena at request entry, allocate everything from it via `std::pmr::polymorphic_allocator`, destroy at request exit. The arena *is* the statelessness boundary, mechanized in the type system and enforced by the C++ destruction model.
 
-This document covers PMR for service handlers: how `monotonic_buffer_resource` works, the layered-resource pattern that's become the canonical recipe, how the `std::pmr::*` container family integrates, the choice of `std::` container types over PMR, and the lifetime traps that catch people the first few times. The performance angle from Doc 02 — the asymmetry between O(N) per-entry destruction and O(1) arena release — gets its concrete realization here.
+This document covers PMR for service handlers: how `monotonic_buffer_resource` works, the layered-resource pattern that's become the canonical recipe, how the `std::pmr::*` container family integrates, the choice of `std::` container types over PMR, and the lifetime traps that catch people the first few times. The performance angle from [Doc 02](../02-raii/) — the asymmetry between O(N) per-entry destruction and O(1) arena release — gets its concrete realization here.
 
 {% include excalidraw.html name="statelessness/03-pmr" caption="PMR monotonic_buffer_resource: bump-pointer per request, single bulk free at scope-end." %}
 
@@ -101,7 +101,7 @@ private:
 };
 ```
 
-The `RequestContext` from Doc 02 already has this as a member; the standalone class above is for cases where the arena is wanted alone. Sizing the inline buffer to 64 KB is a reasonable starting point — large enough that most handlers stay heap-free, small enough that 1,000 in-flight requests fit in 64 MB. Tune from a profile.
+The `RequestContext` from [Doc 02](../02-raii/) already has this as a member; the standalone class above is for cases where the arena is wanted alone. Sizing the inline buffer to 64 KB is a reasonable starting point — large enough that most handlers stay heap-free, small enough that 1,000 in-flight requests fit in 64 MB. Tune from a profile.
 
 A handler that uses it through the standard library:
 
@@ -244,7 +244,7 @@ grpc::ServerUnaryReactor* MyService::Cache(
 
 The compiler is happy. AddressSanitizer catches this immediately if the memory has been overwritten; without ASan, the bug manifests as inconsistent cache reads under load. The mental rule: anything stored in process-scoped state must own its memory or have a documented lifetime at least as long as the process-scoped state. An arena-allocated string is owned by the arena; storing a view into it past the arena's death is a bug.
 
-The fix is either to copy out — allocate a regular `std::string` into the cache — or to design the cache around arena ownership (rarely worth it for cross-request state). Doc 07 covers the externalized-cache pattern that sidesteps the problem entirely.
+The fix is either to copy out — allocate a regular `std::string` into the cache — or to design the cache around arena ownership (rarely worth it for cross-request state). [Doc 07 (state externalization)](../07-state-externalization/) covers the externalized-cache pattern that sidesteps the problem entirely.
 
 ## Other pitfalls
 
@@ -262,7 +262,7 @@ Arena `release()` is callable on a `monotonic_buffer_resource` to reclaim all bu
 
 gRPC's callback API includes a hook for per-method memory allocation. The generated code exposes `SetMessageAllocatorFor_<Method>` and `SetContextAllocator` on the server. A user-supplied allocator can satisfy the request, response, and `CallbackServerContext` allocations from a chosen resource.
 
-This is the direct hook for per-RPC PMR. Implementing it well requires a per-method allocator that constructs a fresh arena per call and tears it down when the call finishes; the gRPC proposal `L67-cpp-callback-api.md` covers the interface in detail. Doc 10 walks through wiring a per-RPC arena into a complete service.
+This is the direct hook for per-RPC PMR. Implementing it well requires a per-method allocator that constructs a fresh arena per call and tears it down when the call finishes; the gRPC proposal `L67-cpp-callback-api.md` covers the interface in detail. [Doc 10 (gRPC capstone)](../10-grpc-microservices/) walks through wiring a per-RPC arena into a complete service.
 
 The lighter-touch approach — and the one this document leans on — is to leave the protobuf request/response objects on the default allocator and use the request arena only for handler-internal scratch. The overhead of letting protobuf allocate via the global heap is small compared to the wins from arena-allocating intermediate computations. Reach for the per-RPC allocator hook only when profiling shows protobuf allocation as a measurable fraction of handler time.
 
@@ -281,7 +281,7 @@ void log_error(const RequestContext& rc, std::string_view what) {
 
 `std::flat_map`, `std::flat_set`, `std::flat_multimap`, and `std::flat_multiset` bring sorted-contiguous-storage container types into the standard. The PMR variants under `std::pmr::*` accept a resource pointer the same way `pmr::vector` does. For small handler-scoped maps these are usually the right default in C++23 code.
 
-GCC 14 and Clang 18 with libc++ support both; Doc 11 covers the build-tooling specifics for enabling them under Conan and CMake.
+GCC 14 and Clang 18 with libc++ support both; [Doc 11 (build tooling)](../11-build-tooling/) covers the build-tooling specifics for enabling them under Conan and CMake.
 
 ## A note on benchmarks
 
@@ -291,13 +291,13 @@ The honest answer is: measure. PMR's biggest practical win is usually the predic
 
 ## Recommendation summary
 
-Bundle a request arena into the `RequestContext` from Doc 02. Pass its resource pointer through the call graph to any handler-scoped container.
+Bundle a request arena into the `RequestContext` from [Doc 02](../02-raii/). Pass its resource pointer through the call graph to any handler-scoped container.
 
 Use the layered monotonic + unsynchronized_pool pattern unless the handler is purely additive, in which case the bottom monotonic alone is fine. Size the inline buffer for the typical case.
 
 Reach for `std::pmr::vector` with `reserve()` for growing sequences. Use `std::pmr::flat_map` (C++23) for small maps, `std::pmr::unordered_map` for larger ones, `std::pmr::flat_set`/`pmr::unordered_set` similarly for sets. Avoid `std::pmr::deque` and `std::pmr::list` in handlers.
 
-Make the arena/external boundary explicit. Anything stored in process-scoped state (Doc 04), in a protobuf response, or captured into an async continuation must not hold a view into arena memory. Copy out, or use ownership types from the start.
+Make the arena/external boundary explicit. Anything stored in process-scoped state ([Doc 04 (process-scoped state)](../04-process-scoped-state/)), in a protobuf response, or captured into an async continuation must not hold a view into arena memory. Copy out, or use ownership types from the start.
 
 Profile before reaching for the gRPC per-RPC allocator hook. Handler-internal PMR is the high-leverage refactor; protobuf-level PMR is finer-grained tuning that's rarely the bottleneck.
 

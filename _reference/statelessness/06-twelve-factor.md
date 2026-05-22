@@ -22,11 +22,11 @@ This document covers all twelve factors briefly, lingers on the three that colli
 
 Eight of the twelve factors map cleanly to C++ practice and warrant short treatment.
 
-**Factor I (Codebase).** One codebase tracked in version control, many deploys. Same in C++ as anywhere — a monorepo or per-service repo, deploys distinguished by build-time and runtime configuration. Doc 11 covers the build-tooling side (Conan, CMake).
+**Factor I (Codebase).** One codebase tracked in version control, many deploys. Same in C++ as anywhere — a monorepo or per-service repo, deploys distinguished by build-time and runtime configuration. [Doc 11 (build tooling)](../11-build-tooling/) covers the build-tooling side (Conan, CMake).
 
 **Factor II (Dependencies).** Explicitly declare and isolate dependencies. C++ has historically been bad at this; Conan and vcpkg have largely fixed it for new code. A `conanfile.txt` or `conanfile.py` declaring every external dependency by name and version, with locked transitive dependencies, satisfies the spirit of the factor. The container image is the isolation boundary — system libraries the binary links against are part of the image, not the host.
 
-**Factor IV (Backing services).** Treat backing services as attached resources. C++ services connect to Redis, PostgreSQL, Kafka, other gRPC services via configuration-driven endpoints; swapping a development Redis for a production Redis cluster is a config change, not a code change. Doc 04 (process-scoped state) and Doc 07 (externalization) develop this in detail.
+**Factor IV (Backing services).** Treat backing services as attached resources. C++ services connect to Redis, PostgreSQL, Kafka, other gRPC services via configuration-driven endpoints; swapping a development Redis for a production Redis cluster is a config change, not a code change. [Doc 04](../04-process-scoped-state/) (process-scoped state) and [Doc 07](../07-state-externalization/) (externalization) develop this in detail.
 
 **Factor V (Build, release, run).** Strict separation of build, release, run stages. C++ builds produce a binary; release combines the binary with config to produce an image; run executes the image. CI/CD pipelines enforce the separation. Same as elsewhere.
 
@@ -34,19 +34,19 @@ Eight of the twelve factors map cleanly to C++ practice and warrant short treatm
 
 **Factor X (Dev/prod parity).** Keep development, staging, and production as similar as possible. Podman locally and Kubernetes in production give acceptable parity for most cases. `podman generate kube` produces a Kubernetes manifest from a compose file when literal parity is needed.
 
-**Factor XI (Logs).** Treat logs as event streams. Write structured JSON to stdout; let the orchestrator (Podman's logging driver, Kubernetes' container runtime, then Loki) collect and route. Do not write log files inside the container. Doc 08 covers this from the ephemeral-filesystem angle.
+**Factor XI (Logs).** Treat logs as event streams. Write structured JSON to stdout; let the orchestrator (Podman's logging driver, Kubernetes' container runtime, then Loki) collect and route. Do not write log files inside the container. [Doc 08 (ephemeral filesystem)](../08-ephemeral-filesystem/) covers this from the ephemeral-filesystem angle.
 
 **Factor XII (Admin processes).** Run admin and management tasks as one-off processes. In C++ services, this typically means a separate binary (or the same binary with a different command-line subcommand) for database migrations, cache priming, scheduled jobs. Same image, different entry point.
 
-That leaves Factors III (Config), VI (Processes), VIII (Concurrency), and IX (Disposability). Concurrency was covered substantially in Doc 05; this document touches on the parts specific to the 12-factor framing. The other three get the rest of the document.
+That leaves Factors III (Config), VI (Processes), VIII (Concurrency), and IX (Disposability). Concurrency was covered substantially in [Doc 05 (threading)](../05-threading/); this document touches on the parts specific to the 12-factor framing. The other three get the rest of the document.
 
 ## Factor VIII: Concurrency, briefly
 
 The 12-factor formulation says "scale out via the process model" — run more processes to handle more load, distinguish process types by workload (web, worker, scheduler). For a C++ service this is mostly the same, with one wrinkle: C++ has true in-process multi-threading, which the 12-factor canon downplays because the target languages either don't (Ruby MRI's GIL, Python's GIL) or do but expensively (Node.js cluster mode).
 
-The right reading for C++ is that *scaling out* is via the process model — more replicas, more pods, more containers — while *internal concurrency* is via threads, coroutines, or fibers within each process. The two are not in conflict. A C++ service that uses C++20 coroutines on a small thread pool for in-process concurrency, replicated horizontally for load, is fully 12-factor compliant. Doc 05 covers the in-process side in depth.
+The right reading for C++ is that *scaling out* is via the process model — more replicas, more pods, more containers — while *internal concurrency* is via threads, coroutines, or fibers within each process. The two are not in conflict. A C++ service that uses C++20 coroutines on a small thread pool for in-process concurrency, replicated horizontally for load, is fully 12-factor compliant. [Doc 05](../05-threading/) covers the in-process side in depth.
 
-The one place this matters operationally: the unit of scaling is the process, not the thread. When the orchestrator decides to add capacity, it adds another OS container. Each container has its own thread pool, its own connection pool, its own arena resources. State that needs to be shared across replicas is in external storage (Doc 07). State that's per-replica is process-scoped (Doc 04). Threads do not cross replica boundaries.
+The one place this matters operationally: the unit of scaling is the process, not the thread. When the orchestrator decides to add capacity, it adds another OS container. Each container has its own thread pool, its own connection pool, its own arena resources. State that needs to be shared across replicas is in external storage ([Doc 07](../07-state-externalization/)). State that's per-replica is process-scoped ([Doc 04](../04-process-scoped-state/)). Threads do not cross replica boundaries.
 
 ## Factor III: Config and the compile-time/runtime split
 
@@ -97,7 +97,7 @@ Config parse_config(int argc, char** argv) {
 
 > **Opinion.** The single most useful refactor in a legacy C++ service migrating to containers is to eliminate every `std::getenv` outside `main()` and replace them with `Config` references plumbed through the construction graph. This is mechanical, low-risk, and pays back immediately in testability — `parse_config` is replaced with a test fixture, every subsystem becomes testable in isolation.
 
-For compile-time config — the dimensions that genuinely cannot move to runtime — keep it explicit. A template parameter or `if constexpr` branch on `Policy` is fine; a `#ifdef` strewn through implementation files is not. Doc 11 covers the Conan/CMake side of managing build variants.
+For compile-time config — the dimensions that genuinely cannot move to runtime — keep it explicit. A template parameter or `if constexpr` branch on `Policy` is fine; a `#ifdef` strewn through implementation files is not. [Doc 11](../11-build-tooling/) covers the Conan/CMake side of managing build variants.
 
 For runtime-fetched config — the rare case where config genuinely needs to change mid-process — fetch via a dedicated subsystem that exposes the same `Config&`-style interface to the rest of the code. The handlers should not know whether the value came from an env var read at startup or a control plane fetched five seconds ago.
 
@@ -133,7 +133,7 @@ Third, the singleton is hard to test. A test that wants a different `Logger` con
 
 Fourth, the singleton makes dependency wiring implicit. The code that calls `Logger::instance()` doesn't declare its dependency on the logger; the dependency is hidden in the implementation. Refactoring becomes harder because every singleton access is a hidden coupling.
 
-The replacement is dependency injection — pass dependencies as constructor arguments from `main()`. Doc 04 showed the wiring pattern; the short version is that every process-scoped object is constructed by name in `main()`, held by a local variable, and passed by reference to the things that need it.
+The replacement is dependency injection — pass dependencies as constructor arguments from `main()`. [Doc 04](../04-process-scoped-state/) showed the wiring pattern; the short version is that every process-scoped object is constructed by name in `main()`, held by a local variable, and passed by reference to the things that need it.
 
 ```cpp
 int main(int argc, char** argv) {
@@ -153,7 +153,7 @@ int main(int argc, char** argv) {
 
 > **Opinion.** Use Meyers singletons only when an external API requires global access — the OTel `Provider::SetTracerProvider`/`GetTracerProvider` pattern is the canonical case. Even then, the *ownership* lives in `main()`; the global is just an access mechanism the framework imposes. Everywhere else, dependency injection. The verbosity is the price; the testability and shutdown sanity are the return.
 
-The 12-factor "stateless processes" principle in C++ terms means: process-scoped state is fine (Doc 04 covered this), but its *ownership* should be explicit in `main()`, not hidden in singletons. The process is killable because every process-scoped object is reconstructible from configuration; the construction graph is visible at the entry point. Hidden singletons defeat both properties.
+The 12-factor "stateless processes" principle in C++ terms means: process-scoped state is fine ([Doc 04](../04-process-scoped-state/) covered this), but its *ownership* should be explicit in `main()`, not hidden in singletons. The process is killable because every process-scoped object is reconstructible from configuration; the construction graph is visible at the entry point. Hidden singletons defeat both properties.
 
 For things that genuinely need to be globally available before `main()` runs — a small number of cases involving compile-time constants used in static initialization elsewhere — C++20's `constinit` is the right tool. It enforces compile-time initialization without forcing `const`:
 
@@ -166,7 +166,7 @@ This avoids the SIOF (static initialization order fiasco) for the constant, give
 
 ## Factor IX: Disposability and the C++ startup tax
 
-The 12-factor formulation says: "Maximize robustness with fast startup and graceful shutdown." The principle is that processes should start quickly (so scaling out is fast) and shut down cleanly (so deploys and node failures don't lose data). C++ has a graceful-shutdown story that is straightforward (Doc 09 covers it); the fast-startup story has a problem the 12-factor canon doesn't anticipate.
+The 12-factor formulation says: "Maximize robustness with fast startup and graceful shutdown." The principle is that processes should start quickly (so scaling out is fast) and shut down cleanly (so deploys and node failures don't lose data). C++ has a graceful-shutdown story that is straightforward ([Doc 09 (health checks)](../09-health-checks/) covers it); the fast-startup story has a problem the 12-factor canon doesn't anticipate.
 
 The problem is the C++ startup tax. Before `main()` runs, every global and namespace-scope object with a non-trivial constructor is constructed. The order is the SIOF: deterministic within a translation unit, undefined across translation units. Every shared library the binary links against runs its own static constructors when loaded. The dynamic loader resolves symbols. Initialization-on-first-use guards inside Meyers singletons aren't run yet, but the storage and the type information are.
 
@@ -216,11 +216,11 @@ int main() {
 }
 ```
 
-The pseudocode is rough — gRPC's `ServerBuilder` requires services to be registered before `BuildAndStart()`, so the actual pattern involves more care — but the principle is real: separate "process is alive" from "process is ready to serve real traffic." Kubernetes startup, liveness, and readiness probes are designed for exactly this split. Doc 09 covers the probe model in detail.
+The pseudocode is rough — gRPC's `ServerBuilder` requires services to be registered before `BuildAndStart()`, so the actual pattern involves more care — but the principle is real: separate "process is alive" from "process is ready to serve real traffic." Kubernetes startup, liveness, and readiness probes are designed for exactly this split. [Doc 09](../09-health-checks/) covers the probe model in detail.
 
-> **Opinion.** Most C++ services pay an unnecessary startup tax from globals that didn't need to be globals. The first pass at fixing cold start is not optimization tricks — it is eliminating non-essential static constructors. The build-tooling appendix (Doc 11) covers tools like `nm -C --size-sort` and the linker `--gc-sections` flag for finding the offenders.
+> **Opinion.** Most C++ services pay an unnecessary startup tax from globals that didn't need to be globals. The first pass at fixing cold start is not optimization tricks — it is eliminating non-essential static constructors. The build-tooling appendix ([Doc 11](../11-build-tooling/)) covers tools like `nm -C --size-sort` and the linker `--gc-sections` flag for finding the offenders.
 
-The Disposability factor's other half — graceful shutdown — is C++'s strength rather than weakness. Destructors run in reverse construction order, RAII ensures cleanup is exception-safe, `std::stop_token` from Doc 05 propagates cancellation to in-flight work. The shutdown sequence in `main()` looks like the reverse of the startup sequence: signal arrives, flip health to NOT_SERVING, drain in-flight RPCs with a deadline, server `Shutdown()`, destructors run in reverse, process exits cleanly. Doc 09 develops this end-to-end.
+The Disposability factor's other half — graceful shutdown — is C++'s strength rather than weakness. Destructors run in reverse construction order, RAII ensures cleanup is exception-safe, `std::stop_token` from [Doc 05](../05-threading/) propagates cancellation to in-flight work. The shutdown sequence in `main()` looks like the reverse of the startup sequence: signal arrives, flip health to NOT_SERVING, drain in-flight RPCs with a deadline, server `Shutdown()`, destructors run in reverse, process exits cleanly. [Doc 09](../09-health-checks/) develops this end-to-end.
 
 ## Recommendation summary
 

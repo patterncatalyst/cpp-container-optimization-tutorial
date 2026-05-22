@@ -10,7 +10,7 @@ sectionid: reference
 
 ## Thesis
 
-Threading is the dimension of statelessness that catches C++ developers off-guard. Doc 04 covered process-scoped state and its memory budget; threading infrastructure — thread pools, executors, fiber schedulers, the allocator arenas underneath them — is part of that process-scoped state, but it interacts with the request/process boundary in ways that need their own treatment. Thread-local storage looks request-scoped and isn't. Stackless coroutines can resume on different threads than they started on, breaking TLS-based assumptions across `co_await`. gRPC's handler thread pool forbids blocking. OS container CPU limits constrain not just throughput but pool sizing, and `std::thread::hardware_concurrency()` will lie to you about what those limits are.
+Threading is the dimension of statelessness that catches C++ developers off-guard. [Doc 04 (process-scoped state)](../04-process-scoped-state/) covered process-scoped state and its memory budget; threading infrastructure — thread pools, executors, fiber schedulers, the allocator arenas underneath them — is part of that process-scoped state, but it interacts with the request/process boundary in ways that need their own treatment. Thread-local storage looks request-scoped and isn't. Stackless coroutines can resume on different threads than they started on, breaking TLS-based assumptions across `co_await`. gRPC's handler thread pool forbids blocking. OS container CPU limits constrain not just throughput but pool sizing, and `std::thread::hardware_concurrency()` will lie to you about what those limits are.
 
 Doing concurrency correctly in a stateless service requires understanding which concurrency primitives carry which state across which scope, and arranging for that state to be either cleared at request boundaries or kept legitimately process-scoped. This document covers the operative cases: TLS as process-scoped state, the three concurrency families (OS threads, stackless coroutines, fibers) and their TLS interactions, the gRPC threading model, the CPU and memory limits that constrain everything, and the cooperative cancellation pattern that ties cleanup back to request scope.
 
@@ -82,7 +82,7 @@ The guard restores the previous value rather than clearing to empty. This compos
 
 > **Opinion.** Anywhere a codebase uses `thread_local` for "the current X" — span, user, request, trace — there should be a corresponding RAII guard type. Bare `thread_local` writes are a code-review red flag; they imply someone is treating TLS as request-scoped storage, and the bug is usually one rotation away.
 
-The OpenTelemetry C++ SDK uses TLS internally for the active span. This is a correct choice for the framework — span-context propagation needs ambient access — but it means user code interacting with OTel must respect the scope. The `opentelemetry::trace::Scope` type is a TLS guard: constructing one makes a span active, destructing one restores the previous active span. The `RequestContext` from Doc 02 holds a `Scope` member, so the active span clears automatically when the context destructs.
+The OpenTelemetry C++ SDK uses TLS internally for the active span. This is a correct choice for the framework — span-context propagation needs ambient access — but it means user code interacting with OTel must respect the scope. The `opentelemetry::trace::Scope` type is a TLS guard: constructing one makes a span active, destructing one restores the previous active span. The `RequestContext` from [Doc 02 (RAII)](../02-raii/) holds a `Scope` member, so the active span clears automatically when the context destructs.
 
 ## Stack-based vs stackless concurrency
 
@@ -152,7 +152,7 @@ asio::awaitable<void> handle(MyService::ServerCtx ctx) {
 
 Asio's executor handles thread assignment; gRPC's `CompletionQueue` notifies completion; the coroutine frame holds request-scoped state. This is the modern shape, though it inherits all the stackless-coroutine TLS caveats from the previous section.
 
-The sync API is rarely the right choice for production but is worth knowing. It blocks a gRPC thread per inbound RPC. Under a low fan-in — a dozen concurrent RPCs at most — it is simple and adequate. Under high fan-in, the thread pool grows to match concurrency, which can be a lot of threads — and as Doc 04 covered, threads have memory cost. The completion-queue async API is the older alternative; it has more boilerplate than the callback API and is generally not recommended for new code.
+The sync API is rarely the right choice for production but is worth knowing. It blocks a gRPC thread per inbound RPC. Under a low fan-in — a dozen concurrent RPCs at most — it is simple and adequate. Under high fan-in, the thread pool grows to match concurrency, which can be a lot of threads — and as [Doc 04](../04-process-scoped-state/) covered, threads have memory cost. The completion-queue async API is the older alternative; it has more boilerplate than the callback API and is generally not recommended for new code.
 
 ## Inter-thread communication and I/O waits
 
@@ -181,7 +181,7 @@ For a C++ service, the practical answer is async I/O via coroutines on top of an
 
 {% include excalidraw.html name="11-cfs-throttling-timeline" caption="CFS quota throttling: a pool sized past the cgroup quota burns its budget early each period and the whole cgroup is descheduled to the period boundary — the p99 spike behind 'oversubscription buys no throughput.'" %}
 
-This is the section the project brief asked us to cover directly. Doc 04 covered CPU limits from the memory-budget angle (throttling raises queue depth, queue depth multiplies request-scoped memory). Doc 05 covers them from the threading angle, which is where most of the day-to-day pain lives.
+This is the section the project brief asked us to cover directly. [Doc 04](../04-process-scoped-state/) covered CPU limits from the memory-budget angle (throttling raises queue depth, queue depth multiplies request-scoped memory). Doc 05 covers them from the threading angle, which is where most of the day-to-day pain lives.
 
 The Linux CFS scheduler enforces CPU limits via a quota/period mechanism. A container with `--cpus=2` (Podman) or `resources.limits.cpu: "2"` (Kubernetes) is given a quota of 200 ms per 100 ms period — it can consume 200 ms of aggregate CPU time before being throttled until the next period boundary. Thread parallelism does not multiply the budget: eight threads each running 25 ms in a 100 ms period have already consumed the 200 ms quota, and the kernel suspends all of them until the next period boundary. The unlucky thread that was about to be scheduled when the quota was reached can wait up to roughly 75 ms.
 
@@ -244,7 +244,7 @@ std::optional<double> cgroup_v2_cpu_limit() {
 }
 ```
 
-A production version handles cgroup v1 (`cpu.cfs_quota_us` / `cpu.cfs_period_us`), detects whether we're actually in a container (via `/proc/1/cgroup` inspection), falls back to `sched_getaffinity()` when cgroup paths are unavailable, and treats a CPU limit smaller than 1.0 as a special case (round up to 1 thread minimum). Doc 11 covers vendoring the full helper.
+A production version handles cgroup v1 (`cpu.cfs_quota_us` / `cpu.cfs_period_us`), detects whether we're actually in a container (via `/proc/1/cgroup` inspection), falls back to `sched_getaffinity()` when cgroup paths are unavailable, and treats a CPU limit smaller than 1.0 as a special case (round up to 1 thread minimum). [Doc 11 (build tooling)](../11-build-tooling/) covers vendoring the full helper.
 
 The natural place to call this is in `main()`, before any pool is constructed:
 
@@ -314,7 +314,7 @@ asio::awaitable<Response> handle_with_deadline(
 
 The request scope holds the `stop_source`. Deadline expiry signals it. Workers — coroutines awaiting I/O, background threads doing batch work — check the token and unwind cleanly via RAII. The pattern composes with gRPC's `ServerContext::IsCancelled()`, which surfaces client-initiated cancellation as the same signal.
 
-On the process side, the same pattern drives graceful shutdown. A signal handler installs `stop.request_stop()` on a process-wide stop source; the gRPC server's `Wait()` returns; worker pools drain their queues with the token checked between items; threads join. Doc 09 develops the shutdown pattern in detail.
+On the process side, the same pattern drives graceful shutdown. A signal handler installs `stop.request_stop()` on a process-wide stop source; the gRPC server's `Wait()` returns; worker pools drain their queues with the token checked between items; threads join. [Doc 09 (health checks)](../09-health-checks/) develops the shutdown pattern in detail.
 
 ## Pressure Stall Information (sidebar)
 
@@ -322,7 +322,7 @@ The Linux kernel exposes pressure metrics at `/proc/pressure/cpu`, `/proc/pressu
 
 A service that monitors its own PSI can shed load, reduce concurrency, or back off when pressure rises — strictly better than waiting for OOM kill or throttle-induced latency spikes. The code shape is straightforward: open the pressure file, parse the `avg10`/`avg60`/`avg300` values, feed them into a backpressure controller that returns `RESOURCE_EXHAUSTED` to clients when pressure exceeds a threshold.
 
-Most services do not need this. For high-fan-in services running near their resource budget, PSI-aware backpressure is the difference between graceful degradation and a cliff-edge failure mode. Doc 11 covers a small helper library for parsing PSI files.
+Most services do not need this. For high-fan-in services running near their resource budget, PSI-aware backpressure is the difference between graceful degradation and a cliff-edge failure mode. [Doc 11](../11-build-tooling/) covers a small helper library for parsing PSI files.
 
 ## Boost.Fiber as middle ground
 

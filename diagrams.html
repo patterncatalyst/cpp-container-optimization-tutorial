@@ -77,12 +77,6 @@ permalink: /diagrams/
                 caption="io_uring SQ/CQ rings in shared memory." %}
 
             {% include diagram-card.html
-                file="08-deadline-budget-flow"
-                section="§8"
-                title="Deadline budget propagation"
-                caption="One deadline spent across every hop; each downstream call budgets against the time remaining and fails fast at zero." %}
-
-            {% include diagram-card.html
                 file="09-networking-veth-vs-host"
                 section="§9"
                 title="Container networking modes"
@@ -99,12 +93,6 @@ permalink: /diagrams/
                 section="§11"
                 title="cgroup v2 weight & cpuset"
                 caption="Two-tenant cgroup hierarchy with delegated controllers." %}
-
-            {% include diagram-card.html
-                file="11-cfs-throttling-timeline"
-                section="§11"
-                title="CFS quota throttling"
-                caption="Oversubscribing a CPU quota burns the budget early and stalls the whole cgroup to the period boundary — spiking p99." %}
 
             {% include diagram-card.html
                 file="11-numa-local-remote"

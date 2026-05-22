@@ -10,7 +10,7 @@ sectionid: reference
 
 ## Thesis
 
-Doc 01 set up the proposition: a stateless service cannot hold authoritative state in any single replica, because the orchestrator can kill that replica at any time. Doc 04 said: anything that needs to be replicated, persisted, or seen by other replicas lives externally. This document covers the C++ patterns for talking to that external state — connection pools (process-scoped), RAII checkout (request-scoped), idempotent operations, deadlines propagating to the backing service, retry strategy, and the patterns that get distributed-system consistency right when you need it (the Outbox pattern, in the C++ idiom).
+[Doc 01 (deployment posture)](../01-deployment-posture/) set up the proposition: a stateless service cannot hold authoritative state in any single replica, because the orchestrator can kill that replica at any time. [Doc 04 (process-scoped state)](../04-process-scoped-state/) said: anything that needs to be replicated, persisted, or seen by other replicas lives externally. This document covers the C++ patterns for talking to that external state — connection pools (process-scoped), RAII checkout (request-scoped), idempotent operations, deadlines propagating to the backing service, retry strategy, and the patterns that get distributed-system consistency right when you need it (the Outbox pattern, in the C++ idiom).
 
 The two main backing-service families are key-value stores (Redis, etcd, memcached) and relational databases (PostgreSQL, MySQL). Message buses (Kafka, NATS, RabbitMQ) and object stores (S3, MinIO) are also common but get brief coverage here; the patterns generalize. The C++ libraries are reasonable: redis-plus-plus for Redis, libpqxx for PostgreSQL, librdkafka for Kafka, the AWS C++ SDK for S3. None is perfect; all work.
 
@@ -29,11 +29,11 @@ The C++-specific concerns are: every network call may throw or hang, connection 
 
 ## What externalizes, and what doesn't
 
-The State Architecture Table from Doc 04 has a third column — "external" — that this document develops. The state categories that belong there:
+The State Architecture Table from [Doc 04](../04-process-scoped-state/) has a third column — "external" — that this document develops. The state categories that belong there:
 
 Authoritative session state — user sessions, login state, anything a client expects to persist across replicas or restarts. User-visible counters and rate-limit windows — a counter consistent across replicas cannot live in any one process. Durable workflow state — pending background work, scheduled jobs, multi-step transactions. Queue items between services — messages waiting to be processed, dead-letter queues, retry queues. Authoritative business data — users, orders, inventory, transactions, audit logs.
 
-What doesn't externalize — what stays process-scoped (Doc 04) — is anything best-effort and replica-local: a small in-process cache fronting authoritative lookups, computed-once derived values, parsed configuration, JIT-compiled artifacts. The rule is the one from Doc 04's opinion callout: if the next request needs to see this, it externalizes regardless of cost.
+What doesn't externalize — what stays process-scoped ([Doc 04](../04-process-scoped-state/)) — is anything best-effort and replica-local: a small in-process cache fronting authoritative lookups, computed-once derived values, parsed configuration, JIT-compiled artifacts. The rule is the one from [Doc 04](../04-process-scoped-state/)'s opinion callout: if the next request needs to see this, it externalizes regardless of cost.
 
 The cost of externalization is real. A Redis lookup at the same network proximity is single-digit milliseconds; a cross-AZ database query is tens of milliseconds; a remote API call is hundreds. Caching in front of these is fine and often necessary — best-effort, with explicit invalidation, never authoritative.
 
@@ -41,7 +41,7 @@ The cost of externalization is real. A Redis lookup at the same network proximit
 
 Every backing service is reached via one or more long-lived connections. Constructing a connection is expensive — TCP handshake, TLS handshake, authentication exchange, schema negotiation. Reusing connections across many requests is essential. The pattern is a process-scoped pool that hands out RAII checkout to handlers and reclaims on destruction.
 
-Sizing the pool is a function of the memory budget (Doc 04) and the expected concurrency. A pool of N connections supports N concurrent operations against the backing service; if the handler concurrency exceeds N, additional handlers wait at checkout. The right N is "enough that checkout wait is rare under expected load, not so large that idle connections waste memory."
+Sizing the pool is a function of the memory budget ([Doc 04](../04-process-scoped-state/)) and the expected concurrency. A pool of N connections supports N concurrent operations against the backing service; if the handler concurrency exceeds N, additional handlers wait at checkout. The right N is "enough that checkout wait is rare under expected load, not so large that idle connections waste memory."
 
 A Redis pool with redis-plus-plus:
 
@@ -113,7 +113,7 @@ private:
 };
 ```
 
-The `ScopedConn` is the RAII type that Doc 02's counterexample fix referred to. Acquisition is via the pool method; release happens automatically on destruction. The `invalidate()` method lets the handler mark the connection as unusable — for example, after a connection-reset error — so the pool drops it on release rather than returning it to the free list.
+The `ScopedConn` is the RAII type that [Doc 02 (RAII)](../02-raii/)'s counterexample fix referred to. Acquisition is via the pool method; release happens automatically on destruction. The `invalidate()` method lets the handler mark the connection as unusable — for example, after a connection-reset error — so the pool drops it on release rather than returning it to the free list.
 
 The alternative to writing this is to run PgBouncer or pgcat as an external pooler: the C++ service opens a small number of "real" connections to the pooler, the pooler multiplexes them onto many "logical" connections to PostgreSQL. This works well operationally; the in-process pool is still useful for non-blocking checkout semantics and for unit testing without an external pooler.
 
@@ -198,7 +198,9 @@ A subtlety: the "check then process" sequence above has a race window. Two concu
 
 ## Deadlines propagating to backing services
 
-Doc 02's `RequestContext` carries a deadline from the inbound gRPC request. That deadline has to propagate to every backing-service call inside the handler, or the handler can outlive its caller's patience while waiting on a slow backend.
+{% include excalidraw.html name="08-deadline-budget-flow" caption="Deadline budget propagation: the inbound gRPC deadline is spent across every hop — the connection checkout, the PostgreSQL statement_timeout set from the time remaining, and any outbound call — failing fast when the budget is gone." %}
+
+[Doc 02](../02-raii/)'s `RequestContext` carries a deadline from the inbound gRPC request. That deadline has to propagate to every backing-service call inside the handler, or the handler can outlive its caller's patience while waiting on a slow backend.
 
 For Redis with redis-plus-plus, the connection-level `socket_timeout` provides a default. For per-call deadlines, the explicit pattern is to compute remaining time and apply it. For PostgreSQL with libpqxx, the deadline maps to PostgreSQL's `statement_timeout` session parameter, set per-query or per-transaction:
 
@@ -260,15 +262,15 @@ auto with_retries(Op op, const RequestContext& rc, int max_attempts = 3) {
 }
 ```
 
-The example uses `std::this_thread::sleep_for` for simplicity; a real implementation in a coroutine handler uses `co_await asio::steady_timer` or similar non-blocking wait (Doc 05). Either way, the retry budget is the request's remaining deadline; never sleep past it.
+The example uses `std::this_thread::sleep_for` for simplicity; a real implementation in a coroutine handler uses `co_await asio::steady_timer` or similar non-blocking wait ([Doc 05 (threading)](../05-threading/)). Either way, the retry budget is the request's remaining deadline; never sleep past it.
 
 Circuit breakers are the next level up — if a downstream service is unhealthy, stop retrying and start failing fast for some window, then probe occasionally. The pattern is well-documented elsewhere; in C++ services, libraries like Hystrix-style implementations exist but the pattern is also easy to hand-roll with a per-upstream counter and timestamp.
 
 > **Opinion.** Default to fail-fast inside request handlers, and retry at the *system* level — via the orchestrator's restart policies, via the client library's automatic retry, via gRPC's built-in retry policy. Handler-internal retries are sometimes right but easy to overdo; every retry inside a handler is a deadline budget being consumed in a place the caller can't see.
 
-## The cache fix for Doc 01's counterexample
+## The cache fix for [Doc 01](../01-deployment-posture/)'s counterexample
 
-Doc 01 opened with a counterexample: a service that counted requests-per-user in a process-scoped `std::unordered_map`, which worked fine on one replica and broke on two. The fix is exactly the externalization pattern from this document — replace the in-memory map with a Redis lookup:
+[Doc 01](../01-deployment-posture/) opened with a counterexample: a service that counted requests-per-user in a process-scoped `std::unordered_map`, which worked fine on one replica and broke on two. The fix is exactly the externalization pattern from this document — replace the in-memory map with a Redis lookup:
 
 ```cpp
 // Doc 01's anti-pattern:

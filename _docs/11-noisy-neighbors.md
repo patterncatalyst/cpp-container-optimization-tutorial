@@ -27,8 +27,6 @@ By the end of this section you can:
 
 {% include excalidraw.html name="11-isolation-cgroup-tree" caption="Two-tenant cgroup hierarchy with delegated controllers." %}
 
-{% include excalidraw.html name="11-cfs-throttling-timeline" caption="CFS quota throttling: a pool sized past the quota burns its budget early and the whole cgroup stalls to the period boundary — spiking p99, not throughput." %}
-
 ## The setup
 
 Demo-05 runs two single-purpose containers on one host. `tenant-a`
