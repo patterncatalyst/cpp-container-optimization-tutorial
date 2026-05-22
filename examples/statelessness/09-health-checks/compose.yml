@@ -1,0 +1,37 @@
+# statelessness/09-health-checks — the gRPC standard health protocol.
+#
+# One service. The whole story is in the lifecycle of this single
+# container: staged startup, liveness vs readiness on two ports, a
+# signal-driven readiness toggle, and graceful shutdown.
+#
+#   :50051  gRPC — Echo + readiness via the standard health service
+#   :8080   HTTP — liveness (/healthz)
+#
+# Bring up:   podman compose -f compose.yml up --build
+# Drive it:   ./demo.sh
+# Tear down:  ./demo.sh --clean   (or: podman compose -f compose.yml down)
+
+services:
+  health-svc:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: cpp-tut/stateless-09-health-checks:latest
+    container_name: stateless-09hc-svc
+    ports:
+      - "127.0.0.1:50051:50051"   # gRPC (Echo + readiness)
+      - "127.0.0.1:18080:8080"    # HTTP liveness (/healthz)
+    # Liveness drives container restart. This is the cheap HTTP probe that
+    # survives gRPC overload; readiness (the gRPC health service) is checked
+    # separately and must NOT drive restarts (Doc 09 anti-pattern).
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/healthz || exit 1"]
+      interval: 5s
+      timeout: 2s
+      retries: 3
+      start_period: 10s
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - "no-new-privileges:true"

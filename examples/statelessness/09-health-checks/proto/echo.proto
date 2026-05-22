@@ -1,0 +1,23 @@
+// A deliberately trivial application service. The point of this example
+// is the health/lifecycle machinery around a service, not the service
+// itself — so EchoService does the minimum that lets us tell a real story:
+// it gives us a named service ("demo.health.EchoService") whose readiness
+// we can flip independently of the server-wide status, and a no-op RPC that
+// stands in for "real work" when we talk about draining in-flight requests
+// during graceful shutdown.
+
+syntax = "proto3";
+
+package demo.health;
+
+message EchoRequest {
+  string message = 1;
+}
+
+message EchoReply {
+  string message = 1;
+}
+
+service EchoService {
+  rpc Echo(EchoRequest) returns (EchoReply);
+}

@@ -23756,6 +23756,143 @@ so it applies cleanly on top of any prior state.) No host re-verification
 needed for the prose; the relay guard will be exercised on the next
 07-outbox run.
 
+### 2026-05-21 — r161: scaffold 09-health-checks (NOT yet host-verified)
+
+First runnable example for compendium Doc 09. Built in the sandbox from
+the doc as spec; **not yet built or run on host** — flagged here so the
+status is honest. Mirrors 07's scaffolding (Conan gRPC trio, the
+`--start-group` linker fix, multi-stage UBI Containerfile, hardened
+compose) but with NO system deps — no PostgreSQL, no Kafka, no EPEL — and
+adds `curl` to the runtime for the liveness HEALTHCHECK.
+
+Scope decisions (the elicitation widget returned no selection; each had a
+"you decide" option, so chosen by Claude and stated for veto):
+1. **Hybrid liveness/readiness on two ports.** HTTP `/healthz` on :8080
+   for liveness (cheap, survives gRPC overload); gRPC standard health
+   service on :50051 for readiness. Doc 09's recommended production shape
+   and the most instructive — the distinction is physical, not just prose.
+2. **SIGUSR1 toggles readiness.** Dependency-free
+   (`podman kill -s SIGUSR1`), symmetric with the SIGTERM handler.
+3. **Build our own `health-probe`** from a bundled standard health.proto
+   rather than fetch the upstream grpc_health_probe binary — hermetic (no
+   build-time network dep, the §14 lesson), and the Check RPC stays
+   visible. Liveness HEALTHCHECK uses curl on /healthz.
+
+Demonstrates: staged startup (server up reporting NOT_SERVING, ~3s
+simulated init, flip to SERVING); liveness vs readiness as distinct
+questions on distinct ports; SIGUSR1 readiness toggle (readiness drops,
+liveness stays green, no restart); the full graceful-shutdown sequence
+(SIGTERM → readiness NOT_SERVING → worker stop_token request_stop →
+server->Shutdown(deadline) → reverse-order teardown → exit 0).
+
+Two prose corrections vs the doc, baked into the code + README + example
+page:
+- `HealthCheckServiceInterface::SetServingStatus` uses the **bool**
+  overload (`true`/`false`), NOT the `grpc::health::v1` enum the doc
+  sketches; the bool form needs no generated health.pb.h on the server.
+  (Verified against the public interface for grpc 1.54; to be confirmed at
+  build time.)
+- Signal handlers set only a `volatile sig_atomic_t`; a dedicated control
+  thread does the SetServingStatus/Shutdown work — the async-signal-safe
+  refinement of the doc's in-handler illustration (signal-safety(7)).
+
+Files: examples/statelessness/09-health-checks/{CMakeLists.txt,
+Containerfile, conanfile.py, conan.lock(empty), compose.yml, demo.sh,
+README.md, proto/{echo,health}.proto, src/{health_svc,health_probe}.cpp}
+and _examples/statelessness-09-health-checks.md (order=210).
+
+Sandbox validation only (no compiler/podman here): demo.sh `bash -n`
+clean, compose.yml YAML parses, C++ brace/paren balance checked (the only
+per-line paren deltas are multi-line statements and comment prose),
+generated-header names + proto package names line up with source usage.
+
+HOST UNKNOWNS to settle on first build: (a) the SetServingStatus bool
+overload compiles as expected against grpc 1.54; (b) the hand-rolled HTTP
+liveness socket binds under `read_only: true` + tmpfs (it binds a port,
+writes nothing, so expected fine); (c) `curl` present/working on
+ubi-minimal:9.5 for the HEALTHCHECK; (d) `podman kill -s SIGUSR1` reaches
+the C++ process as PID 1 (signal delivery to PID 1 in a container needs
+the handler installed, which it is — but worth confirming the toggle
+fires); (e) graceful-shutdown exit code is 0 via `podman stop`.
+
+### 2026-05-21 — r162: 09-health-checks realigned to SAME-PORT (per user's elicitation answers)
+
+The user's selections to the r161 scope questions came back: same-port
+gRPC health for both liveness and readiness (NOT the hybrid two-port split
+r161 scaffolded), SIGUSR1 toggle (matched r161), build-our-own probe
+(matched r161). Realigned the example to same-port; the SIGUSR1 toggle and
+the hermetic health-probe are unchanged.
+
+Changes from r161:
+- **health_svc.cpp**: removed the hand-rolled HTTP liveness server
+  (run_liveness_http, the socket/netinet/arpa/unistd/cstring includes, the
+  liveness jthread, the HEALTH_HTTP_PORT env). Liveness is now the
+  server-wide ("") status on the gRPC health service; readiness is the
+  per-service status. The ""-vs-service-name split carries the distinction
+  on ONE port. Staged startup, worker, SIGUSR1 toggle, and the graceful-
+  shutdown sequence are unchanged — and shutdown still keeps "" SERVING
+  while flipping only the service status, so liveness does not trip
+  mid-drain (now doubly meaningful since "" IS liveness).
+- **Containerfile**: dropped curl from the runtime; EXPOSE 50051 only;
+  HEALTHCHECK is now `health-probe localhost:50051` (server-wide =
+  liveness). Removed HEALTH_HTTP_PORT.
+- **compose.yml**: single 50051 port; healthcheck test uses health-probe.
+- **demo.sh**: liveness queried via health-probe with no service arg
+  (server-wide); readiness with the service name. No curl.
+- **README + example page**: rewritten to the same-port model, with a
+  short trade-off note on when you'd reach for separate-port (honors
+  Doc 09's "separate-port vs same-port" section). Fixed the example-page
+  front-matter description ("separate ports" -> "one port").
+
+Same-port DROPS one capability the hybrid had: a liveness signal that
+survives gRPC-server saturation (Doc 09's argument (d) for separate-port).
+Recorded as a deliberate trade-off the user chose; the README note tells a
+reader when to revisit it.
+
+Still NOT host-verified (no compiler/podman in sandbox). Sandbox checks:
+demo.sh `bash -n` clean, compose.yml YAML parses, health_svc.cpp braces
+15/15, no socket headers remain, Containerfile has no curl and a single
+port. The r161 host-unknowns list now drops (b) the HTTP-socket-under-
+read_only question and (c) curl-on-ubi-minimal; the relevant remaining
+unknowns are (a) the SetServingStatus bool overload compiling against grpc
+1.54, (d) SIGUSR1 reaching PID 1 and firing the toggle, (e) clean exit 0
+on podman stop, plus NEW: (f) whether `health-probe` as a HEALTHCHECK CMD
+(exec form) resolves and returns 0/1 correctly as a Podman healthcheck.
+
+### 2026-05-21 — r163: 09-health-checks reverted to HYBRID (user's final call)
+
+After seeing it both ways, the user chose to keep the HYBRID two-port shape
+(r161), not the same-port realignment (r162). Restored r161's hybrid files
+verbatim — they were already validated — so no hand-rewrite risk.
+
+Final 09 shape (= r161): liveness is a tiny hand-rolled HTTP server on
+:8080 (GET /healthz -> 200 ok), readiness is the gRPC standard health
+service on :50051. The HTTP liveness is the point of the hybrid: it
+survives gRPC-server saturation, so a merely-busy replica is not restarted
+(Doc 09's argument (d) for separate-port). curl is back in the runtime
+image for the liveness HEALTHCHECK; our own health-probe still handles gRPC
+readiness, so both tools coexist (Q3's build-our-own-probe answer is
+preserved — the probe is the readiness checker, curl the liveness one).
+SIGUSR1 readiness toggle and the graceful-shutdown sequence unchanged.
+
+Files restored to r161 versions: examples/statelessness/09-health-checks/
+{Containerfile, compose.yml, demo.sh, README.md, src/health_svc.cpp} and
+_examples/statelessness-09-health-checks.md. Unchanged across r161/r162/
+r163: CMakeLists.txt, conanfile.py, conan.lock, proto/{echo,health}.proto,
+src/health_probe.cpp.
+
+Net effect of the r161->r162->r163 round trip: back to r161's hybrid. The
+r162 entry is left in the log as the record of the same-port version that
+was built and then set aside; this entry is the authoritative final state.
+
+Re-validated in sandbox after restore: health_svc.cpp braces 22/22 (HTTP
+path present), demo.sh `bash -n` clean, compose.yml YAML parses,
+Containerfile EXPOSE 50051 8080 + curl HEALTHCHECK. Still NOT host-verified
+(no compiler/podman here). Host-unknowns are r161's list: (a) SetServing-
+Status bool overload vs grpc 1.54; (b) the HTTP liveness socket binding
+under read_only + tmpfs; (c) curl on ubi-minimal:9.5; (d) SIGUSR1 reaching
+PID 1 and firing the toggle; (e) clean exit 0 on podman stop.
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from
