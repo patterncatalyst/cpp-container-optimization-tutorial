@@ -24025,6 +24025,48 @@ channel_cache.hpp, request_context.hpp, pg_pool.hpp, pricing_svc.cpp,
 tax_svc.cpp, pricing_client.cpp, health_probe.cpp}} and
 _examples/statelessness-10-grpc-microservices.md (order=211).
 
+### 2026-05-21 — r167: 10-grpc-microservices HOST-VERIFIED (green, first try)
+
+First host build + run of the capstone on Fedora 44 (rootless podman +
+compose). **Green on the first try — no fixes needed.** Both the build and
+the full three-act business path passed.
+
+Build/bring-up: the bigger pricing-svc link (gRPC + libpq + pricing.proto +
+tax.proto through the --start-group fix) compiled and linked clean; the
+sync-API PricingService compiled with no callback-API surprises (host-
+unknowns (a),(b) retired). All three containers healthy, and pricing came
+up only AFTER tax + postgres went healthy — the cross-service
+depends_on: service_healthy gating works with gRPC health-probe
+healthchecks on BOTH tax-svc and pricing-svc (unknown (d) retired). Staged
+startup textbook: `warming up (NOT_SERVING)` -> `schema ready + seed data`
+-> `ready (SERVING)`; migrate() seed ran once cleanly (unknown (e) retired).
+
+Demo (the business path, all correct):
+- Act 1 (alice US, taxable, 2x widget@1999 + 1x gadget@4950):
+  subtotal=8948, tax=626 (8948 * 700bps / 10000, integer-truncated),
+  total=9574. Proves the full composition fired: 2 PG product lookups +
+  customer lookup + OUTBOUND gRPC to tax-svc (deadline propagated via the
+  channel cache) + idempotency store, in one handler. pricing-client exec
+  returned parseable output (unknown (f) retired); arithmetic exactly as
+  predicted.
+- Act 2 (carol US, tax_exempt): tax=0, total=8948 — compute_tax short-
+  circuited, tax service NOT called. The conditional outbound path works.
+- Act 3 (replay act 1's key): returned the IDENTICAL order_id
+  (ord-cli-K1-...-0) as act 1, not a fresh one. The generate_order_id
+  process counter is the proof: act 1 minted -0, act 2 -1; a fresh compute
+  in act 3 would have minted -2, but the replay returned -0 — so it came
+  from the stored idempotency row, not recomputation. Dedup verified real.
+
+No code changes. Every r166 host-unknown (a)-(g) resolved green. The
+faithful-but-buildable scope held up end to end: libpq (not libpqxx),
+PG-direct price lookup (Redis as a noted seam), OTel as a documented seam,
+sync API — all composed correctly while staying on the verified trio.
+
+Host: Fedora 44, rootless podman + compose, ubi9/ubi:9.5 builder +
+ubi9/ubi-minimal:9.5 runtime, gRPC 1.54.3 trio via Conan, libpq system,
+postgresql-16-c9s. 10 joins 02-09 as host-verified. Only 11-build-tooling
+remains unbuilt in the statelessness arc.
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from
