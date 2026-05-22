@@ -43,9 +43,14 @@ services:
     # mode by formatting storage and starting the broker ourselves.
     image: quay.io/strimzi/kafka:latest-kafka-3.9.0
     container_name: stateless-07ob-kafka
+    # Override the entrypoint explicitly: the Strimzi image is built to be
+    # driven by the operator and may carry its own ENTRYPOINT, which would
+    # otherwise turn our command into mere arguments. `sh -c <script>`
+    # runs our KRaft format+start regardless. (JAVA_HOME etc. are image
+    # ENV and survive the override; kafka-server-start.sh sets its own
+    # classpath.)
+    entrypoint: ["/bin/sh", "-c"]
     command:
-      - /bin/sh
-      - -c
       - |
         set -e
         CLUSTER_ID="$$(/opt/kafka/bin/kafka-storage.sh random-uuid)"

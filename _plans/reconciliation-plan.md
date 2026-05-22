@@ -23623,6 +23623,21 @@ confirming all the host-only unknowns r155 flagged:
 
 No code changes were needed. PRD §11 row flipped to host-verified.
 
+### r156 — 07-outbox: harden the Strimzi kafka entrypoint (pre-host-build)
+
+Ahead of the first host build of 07-outbox-pattern, hardened the single
+most likely failure point. The kafka service previously ran its KRaft
+format+start via `command: ["/bin/sh","-c", <script>]`. If the Strimzi
+image carries its own `ENTRYPOINT`, that command becomes mere arguments
+to the entrypoint and our script never runs. Changed to an explicit
+`entrypoint: ["/bin/sh","-c"]` with `command:` as a single-string script,
+so the container runs `/bin/sh -c <script>` regardless of the image's
+ENTRYPOINT/CMD. JAVA_HOME and friends are image ENV and survive the
+override; kafka-server-start.sh sets its own classpath. YAML re-validated.
+No other changes. This is the only pre-emptive fix; the remaining 07
+host unknowns (EPEL/librdkafka on the ubi-minimal runtime, the image tag,
+pkg_check_modules finding rdkafka.pc) can only be settled by building.
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from
