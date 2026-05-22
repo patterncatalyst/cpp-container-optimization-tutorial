@@ -706,6 +706,9 @@ Test with GoogleTest (or Catch2) for unit tests. Use testcontainers-cpp or podma
 
 ## Annotated bibliography
 
+_The works below are collected, with reading guidance and a cross-reference matrix, on the project [bibliography]({{ '/bibliography/' | relative_url }}) page._
+
+
 **Conan 2 documentation ([docs.conan.io](https://docs.conan.io)).** The reference for `conanfile.py` syntax, profile management, and CMake integration. Worth reading the migration-from-1.x section if you have a v1 codebase.
 
 **CMake documentation ([cmake.org/cmake/help/latest/](https://cmake.org/cmake/help/latest/)).** The `cmake.tools.cmake.cmaketoolchain` and `cmake.tools.cmake.cmakedeps` Conan generators are documented under the CMake side as well; reading both sides clarifies which tool owns what.

@@ -269,17 +269,20 @@ Run a small startup self-check that verifies the filesystem assumptions match re
 
 ## Cross-references
 
-Doc 01 set up the deployment-posture vocabulary; this document operationalizes one of its implications (containers are interchangeable; their filesystem is too).
+[Doc 01](../01-deployment-posture/) set up the deployment-posture vocabulary; this document operationalizes one of its implications (containers are interchangeable; their filesystem is too).
 
-Doc 04 covers ephemeral-storage limits as a category of resource budget, including the Kubernetes accounting model.
+[Doc 04](../04-process-scoped-state/) covers ephemeral-storage limits as a category of resource budget, including the Kubernetes accounting model.
 
-Doc 06 covers the 12-factor logs-as-event-streams principle; this document covers the operational mechanics.
+[Doc 06](../06-twelve-factor/) covers the 12-factor logs-as-event-streams principle; this document covers the operational mechanics.
 
-Doc 09 covers health checks and the restart semantics that depend on filesystem ephemerality being respected.
+[Doc 09](../09-health-checks/) covers health checks and the restart semantics that depend on filesystem ephemerality being respected.
 
-Doc 11 (build tooling appendix) covers the Conan recipes and CMake configuration for spdlog and the OTel logging exporter.
+[Doc 11](../11-build-tooling/) (build tooling appendix) covers the Conan recipes and CMake configuration for spdlog and the OTel logging exporter.
 
 ## Annotated bibliography
+
+_The works below are collected, with reading guidance and a cross-reference matrix, on the project [bibliography]({{ '/bibliography/' | relative_url }}) page._
+
 
 **The Twelve-Factor App, Factor XI (Logs).** The canonical statement that logs are event streams, not files. Short, direct, worth reading once.
 

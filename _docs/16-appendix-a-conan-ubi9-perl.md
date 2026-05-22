@@ -334,6 +334,6 @@ reconciliation plan as gotchas:
 - **G-17** — Autotools (libcurl's build chain) needs four more
   perl modules; or skip the consumer.
 
-§13 (Reproducibility & ABI) is the curriculum's chapter on Conan
+[§13 (Reproducibility & ABI)](../13-reproducibility-abi/) is the curriculum's chapter on Conan
 and hermetic builds. This appendix is the operational survival
 guide that complements the theoretical material there.

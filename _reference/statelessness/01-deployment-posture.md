@@ -381,27 +381,30 @@ Treat threading infrastructure — pools, executors, fiber schedulers — as pro
 
 ## Cross-references
 
-Doc 02 develops the RAII discipline that keeps request-scoped state contained, and the performance side of construction and destruction in hot paths.
+[Doc 02](../02-raii/) develops the RAII discipline that keeps request-scoped state contained, and the performance side of construction and destruction in hot paths.
 
-Doc 03 covers the PMR per-request arena pattern that gives request scope its operational efficiency, and the choice of `std::` container types in handlers.
+[Doc 03](../03-pmr/) covers the PMR per-request arena pattern that gives request scope its operational efficiency, and the choice of `std::` container types in handlers.
 
-Doc 04 expands the process-scoped state column of the architecture table and covers OS container requests/limits in detail, including the CPU-limit gotcha around `std::thread::hardware_concurrency()`.
+[Doc 04](../04-process-scoped-state/) expands the process-scoped state column of the architecture table and covers OS container requests/limits in detail, including the CPU-limit gotcha around `std::thread::hardware_concurrency()`.
 
-Doc 05 covers threading and concurrency in a stateless service — thread pools, TLS as process-scoped state, stack-based vs stackless concurrency, gRPC's threading model, I/O waits, and cooperative cancellation.
+[Doc 05](../05-threading/) covers threading and concurrency in a stateless service — thread pools, TLS as process-scoped state, stack-based vs stackless concurrency, gRPC's threading model, I/O waits, and cooperative cancellation.
 
-Doc 06 examines what 12-factor means for C++ specifically — especially around config (compile-time vs runtime), the singleton problem, and startup cost.
+[Doc 06](../06-twelve-factor/) examines what 12-factor means for C++ specifically — especially around config (compile-time vs runtime), the singleton problem, and startup cost.
 
-Doc 07 covers externalization of state to Redis, PostgreSQL, and similar backing services, including the cache-fix for the counterexample above.
+[Doc 07](../07-state-externalization/) covers externalization of state to Redis, PostgreSQL, and similar backing services, including the cache-fix for the counterexample above.
 
-Doc 08 covers the ephemeral filesystem and why disk writes are different in containers, including Podman `read_only` and Kubernetes `readOnlyRootFilesystem`.
+[Doc 08](../08-ephemeral-filesystem/) covers the ephemeral filesystem and why disk writes are different in containers, including Podman `read_only` and Kubernetes `readOnlyRootFilesystem`.
 
-Doc 09 covers health checks — Podman `HEALTHCHECK` and Kubernetes probes — which are the orchestrator's view of whether your service is doing its job.
+[Doc 09](../09-health-checks/) covers health checks — Podman `HEALTHCHECK` and Kubernetes probes — which are the orchestrator's view of whether your service is doing its job.
 
-Doc 10 is the integrating gRPC C++ document where the patterns from all prior docs land in a single working service.
+[Doc 10](../10-grpc-microservices/) is the integrating gRPC C++ document where the patterns from all prior docs land in a single working service.
 
-Doc 11 (build tooling appendix) covers the Conan and CMake setup behind the code samples in this and other documents.
+[Doc 11](../11-build-tooling/) (build tooling appendix) covers the Conan and CMake setup behind the code samples in this and other documents.
 
 ## Annotated bibliography
+
+_The works below are collected, with reading guidance and a cross-reference matrix, on the project [bibliography]({{ '/bibliography/' | relative_url }}) page._
+
 
 **Iglberger, *C++ Software Design*.** Particularly the chapters on the Single-Responsibility Principle and on dependency management. The framing of "who owns this state, and what is its lifetime" is core to the request/process/deploy-time scope vocabulary used throughout this doc set. The Singleton chapter (covered more in Doc 06) is also relevant background here for the discussion of in-process state.
 

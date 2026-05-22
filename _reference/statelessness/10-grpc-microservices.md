@@ -678,27 +678,30 @@ This shape extends to every gRPC service in the stack. New services replace `Pri
 
 ## Cross-references
 
-Doc 01 set up the deployment-posture vocabulary that this document operationalizes.
+[Doc 01](../01-deployment-posture/) set up the deployment-posture vocabulary that this document operationalizes.
 
-Doc 02 covers RAII discipline and the `RequestContext` pattern shown above.
+[Doc 02](../02-raii/) covers RAII discipline and the `RequestContext` pattern shown above.
 
-Doc 03 covers PMR and the per-request arena in the `RequestContext` member.
+[Doc 03](../03-pmr/) covers PMR and the per-request arena in the `RequestContext` member.
 
-Doc 04 covers process-scoped state and the `main()`-owned wiring pattern shown in the example.
+[Doc 04](../04-process-scoped-state/) covers process-scoped state and the `main()`-owned wiring pattern shown in the example.
 
-Doc 05 covers the threading model and the cgroup-detection helper used in `main()`.
+[Doc 05](../05-threading/) covers the threading model and the cgroup-detection helper used in `main()`.
 
-Doc 06 covers 12-factor adaptation and the `Config` struct pattern.
+[Doc 06](../06-twelve-factor/) covers 12-factor adaptation and the `Config` struct pattern.
 
-Doc 07 covers backing-service pools and the `fetch_customer`/`compute_tax` helper patterns.
+[Doc 07](../07-state-externalization/) covers backing-service pools and the `fetch_customer`/`compute_tax` helper patterns.
 
-Doc 08 covers the ephemeral filesystem and the `read_only: true` configuration.
+[Doc 08](../08-ephemeral-filesystem/) covers the ephemeral filesystem and the `read_only: true` configuration.
 
-Doc 09 covers health checks and the graceful-shutdown sequence at the bottom of `main()`.
+[Doc 09](../09-health-checks/) covers health checks and the graceful-shutdown sequence at the bottom of `main()`.
 
-Doc 11 (build tooling appendix) covers the Conan recipes for grpc, protobuf, opentelemetry-cpp, libpqxx, redis-plus-plus, spdlog, and the CMake configuration that builds the whole binary.
+[Doc 11](../11-build-tooling/) (build tooling appendix) covers the Conan recipes for grpc, protobuf, opentelemetry-cpp, libpqxx, redis-plus-plus, spdlog, and the CMake configuration that builds the whole binary.
 
 ## Annotated bibliography
+
+_The works below are collected, with reading guidance and a cross-reference matrix, on the project [bibliography]({{ '/bibliography/' | relative_url }}) page._
+
 
 This document is the integration of the patterns developed in the prior nine; the bibliography there covers the underlying material. A few references are specifically relevant to gRPC C++ service design as a whole.
 

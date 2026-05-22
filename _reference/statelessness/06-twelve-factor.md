@@ -236,23 +236,26 @@ For the other nine factors, follow the 12-factor canon directly. Conan for depen
 
 ## Cross-references
 
-Doc 02 covers RAII discipline, which underpins the destruction-order guarantees that make `main()`-owned construction work correctly.
+[Doc 02](../02-raii/) covers RAII discipline, which underpins the destruction-order guarantees that make `main()`-owned construction work correctly.
 
-Doc 03 covers PMR, which is one of the compile-time vs runtime decisions: the allocator strategy is chosen at compile-time (template parameter or PMR resource type), the actual resource is chosen at runtime (which `memory_resource` instance backs the arena).
+[Doc 03](../03-pmr/) covers PMR, which is one of the compile-time vs runtime decisions: the allocator strategy is chosen at compile-time (template parameter or PMR resource type), the actual resource is chosen at runtime (which `memory_resource` instance backs the arena).
 
-Doc 04 covers process-scoped state and the `main()`-owned wiring pattern in concrete detail; this document develops the philosophy behind that pattern.
+[Doc 04](../04-process-scoped-state/) covers process-scoped state and the `main()`-owned wiring pattern in concrete detail; this document develops the philosophy behind that pattern.
 
-Doc 05 covers the threading model that the concurrency factor implies for C++ services.
+[Doc 05](../05-threading/) covers the threading model that the concurrency factor implies for C++ services.
 
-Doc 07 covers state externalization — the backing-services factor in concrete C++ terms.
+[Doc 07](../07-state-externalization/) covers state externalization — the backing-services factor in concrete C++ terms.
 
-Doc 08 covers ephemeral filesystems and the logs-as-event-streams factor.
+[Doc 08](../08-ephemeral-filesystem/) covers ephemeral filesystems and the logs-as-event-streams factor.
 
-Doc 09 covers health checks, startup probes, and the disposability factor's shutdown half.
+[Doc 09](../09-health-checks/) covers health checks, startup probes, and the disposability factor's shutdown half.
 
-Doc 11 covers Conan and CMake — the build-tooling side of dependencies, builds, and compile-time configuration.
+[Doc 11](../11-build-tooling/) covers Conan and CMake — the build-tooling side of dependencies, builds, and compile-time configuration.
 
 ## Annotated bibliography
+
+_The works below are collected, with reading guidance and a cross-reference matrix, on the project [bibliography]({{ '/bibliography/' | relative_url }}) page._
+
 
 **The Twelve-Factor App (`12factor.net`).** The canonical reference. Worth reading once end-to-end before this document; the factors as written are short and clear, and the translation to C++ goes faster when the original is fresh.
 

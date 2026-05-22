@@ -305,19 +305,22 @@ Adopt PMR for the architectural shape — request-scope memory tied to request-s
 
 ## Cross-references
 
-Doc 02 establishes the RAII discipline that the arena participates in, and the performance angle on construction and destruction that PMR concretely realizes.
+[Doc 02](../02-raii/) establishes the RAII discipline that the arena participates in, and the performance angle on construction and destruction that PMR concretely realizes.
 
-Doc 04 covers process-scoped memory — the PMR upstream resource, prepared-statement caches, connection pools — and how it interacts with OS container memory limits.
+[Doc 04](../04-process-scoped-state/) covers process-scoped memory — the PMR upstream resource, prepared-statement caches, connection pools — and how it interacts with OS container memory limits.
 
-Doc 05 covers threading; the `unsynchronized_pool_resource` choice above assumes single-threaded handler use. Coroutines that hop threads across `co_await` need to be careful about which thread's arena they're operating on.
+[Doc 05](../05-threading/) covers threading; the `unsynchronized_pool_resource` choice above assumes single-threaded handler use. Coroutines that hop threads across `co_await` need to be careful about which thread's arena they're operating on.
 
-Doc 07 covers state externalization, including the cache fix for the lifetime-trap counterexample above.
+[Doc 07](../07-state-externalization/) covers state externalization, including the cache fix for the lifetime-trap counterexample above.
 
-Doc 10 (gRPC microservices) shows the per-RPC allocator hook wired into a complete service, including the `SetMessageAllocatorFor_<Method>` plumbing.
+[Doc 10](../10-grpc-microservices/) (gRPC microservices) shows the per-RPC allocator hook wired into a complete service, including the `SetMessageAllocatorFor_<Method>` plumbing.
 
-Doc 11 (build tooling appendix) covers the GCC/Clang versions and standard-library flags needed for C++23 PMR types like `std::pmr::stacktrace` and `std::pmr::flat_map`.
+[Doc 11](../11-build-tooling/) (build tooling appendix) covers the GCC/Clang versions and standard-library flags needed for C++23 PMR types like `std::pmr::stacktrace` and `std::pmr::flat_map`.
 
 ## Annotated bibliography
+
+_The works below are collected, with reading guidance and a cross-reference matrix, on the project [bibliography]({{ '/bibliography/' | relative_url }}) page._
+
 
 **"C++ High Performance" (2nd edition).** The memory chapter explicitly covers PMR and is the closest the book gets to direct guidance on the patterns in this document. Worth re-reading before applying PMR to a new codebase. The chapter on cache-friendly data structures is the entry point for understanding why `flat_map` beats `unordered_map` on small N.
 

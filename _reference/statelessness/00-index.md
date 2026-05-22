@@ -181,6 +181,8 @@ A few topics the compendium deliberately doesn't cover. They're worth flagging s
 
 The books referenced across the compendium, with the chapters most often cited.
 
+_Annotated reading guidance and a cross-reference matrix for the core works live on the project [bibliography]({{ '/bibliography/' | relative_url }}) page._
+
 **Iglberger, *C++ Software Design* (Addison-Wesley, 2022).** Chapters on the Single Responsibility Principle, value semantics, dependency injection, strategy pattern, type erasure, and the critique of Singleton. Cited in nearly every document; the strongest single reference for service-architecture decisions in modern C++.
 
 **Yonts, *100 C++ Mistakes and How to Avoid Them* (Manning, 2024).** Catalog of common errors, including throwing destructors, raw `new`/`delete`, missing `noexcept` on moves, exception safety, `thread_local` misuse. Useful as a code-review checklist. Cited in [Doc 02](../02-raii/), 03, 05, 07.

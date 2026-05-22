@@ -319,23 +319,26 @@ Test the shutdown path locally with `podman stop` before deploying. The pattern 
 
 ## Cross-references
 
-Doc 02 establishes the RAII discipline that underpins the destruction-order guarantees of the shutdown sequence.
+[Doc 02](../02-raii/) establishes the RAII discipline that underpins the destruction-order guarantees of the shutdown sequence.
 
-Doc 04 covers process-scoped state, including the `main()`-owned wiring pattern that the shutdown sequence destroys in reverse.
+[Doc 04](../04-process-scoped-state/) covers process-scoped state, including the `main()`-owned wiring pattern that the shutdown sequence destroys in reverse.
 
-Doc 05 covers `std::stop_token` and `std::jthread` cooperative cancellation, which the shutdown sequence uses to drain background workers cleanly.
+[Doc 05](../05-threading/) covers `std::stop_token` and `std::jthread` cooperative cancellation, which the shutdown sequence uses to drain background workers cleanly.
 
-Doc 06 covers the disposability factor of 12-factor, including the staged-startup pattern for cold-start latency and the destruction-order story for shutdown.
+[Doc 06](../06-twelve-factor/) covers the disposability factor of 12-factor, including the staged-startup pattern for cold-start latency and the destruction-order story for shutdown.
 
-Doc 07 covers backing-service connection pools and the outbox poller, both of which participate in the graceful-shutdown sequence.
+[Doc 07](../07-state-externalization/) covers backing-service connection pools and the outbox poller, both of which participate in the graceful-shutdown sequence.
 
-Doc 08 covers ephemeral filesystem, which interacts with restart semantics — shutdown should not depend on writes to ephemeral storage surviving.
+[Doc 08](../08-ephemeral-filesystem/) covers ephemeral filesystem, which interacts with restart semantics — shutdown should not depend on writes to ephemeral storage surviving.
 
-Doc 10 (gRPC microservices) shows the complete `main()` wiring with health checks, signal handlers, and the shutdown sequence end-to-end.
+[Doc 10](../10-grpc-microservices/) (gRPC microservices) shows the complete `main()` wiring with health checks, signal handlers, and the shutdown sequence end-to-end.
 
-Doc 11 (build tooling appendix) covers the gRPC, OTel, and signal-handling library dependencies via Conan.
+[Doc 11](../11-build-tooling/) (build tooling appendix) covers the gRPC, OTel, and signal-handling library dependencies via Conan.
 
 ## Annotated bibliography
+
+_The works below are collected, with reading guidance and a cross-reference matrix, on the project [bibliography]({{ '/bibliography/' | relative_url }}) page._
+
 
 **gRPC health checking protocol documentation (`grpc.io/docs/guides/health-checking/`).** The canonical reference for the standard health protocol. Short, direct, worth reading once. Linked from there is the `grpc_health_probe` repository on GitHub.
 

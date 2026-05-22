@@ -326,17 +326,20 @@ Reach for `std::expected<T, E>` (C++23) for the expected-failure paths inside a 
 
 ## Cross-references
 
-Doc 03 develops the PMR pattern specifically — `monotonic_buffer_resource`, layered pool resources, per-handler arenas, and the `std::` container choices that work well over them.
+[Doc 03](../03-pmr/) develops the PMR pattern specifically — `monotonic_buffer_resource`, layered pool resources, per-handler arenas, and the `std::` container choices that work well over them.
 
-Doc 04 covers process-scoped state and how its lifetime differs from request-scoped state — the State Architecture Table makes the distinction explicit and shows what belongs in each column.
+[Doc 04](../04-process-scoped-state/) covers process-scoped state and how its lifetime differs from request-scoped state — the State Architecture Table makes the distinction explicit and shows what belongs in each column.
 
-Doc 05 covers threading and the `thread_local`-is-process-scope trap, which interacts with the RAII discipline: a TLS guard is itself an RAII type, but its scope is the handler, not the thread.
+[Doc 05](../05-threading/) covers threading and the `thread_local`-is-process-scope trap, which interacts with the RAII discipline: a TLS guard is itself an RAII type, but its scope is the handler, not the thread.
 
-Doc 07 covers state externalization and the `ScopedConnection` RAII pattern for connection-pool checkout, referenced in the counterexample above.
+[Doc 07](../07-state-externalization/) covers state externalization and the `ScopedConnection` RAII pattern for connection-pool checkout, referenced in the counterexample above.
 
-Doc 10 (gRPC microservices) shows the `RequestContext` and friends wired into a complete callback-API service skeleton.
+[Doc 10](../10-grpc-microservices/) (gRPC microservices) shows the `RequestContext` and friends wired into a complete callback-API service skeleton.
 
 ## Annotated bibliography
+
+_The works below are collected, with reading guidance and a cross-reference matrix, on the project [bibliography]({{ '/bibliography/' | relative_url }}) page._
+
 
 **Iglberger, *C++ Software Design*.** The chapters on value semantics, on ownership, and on the strategy pattern are directly relevant. The Strategy chapter is particularly useful for understanding how RAII types compose — a resource type plus its release strategy, separated cleanly. The dependency-injection chapter applies to how `RequestContext` and similar types are constructed and passed through the call graph rather than reached for via global state.
 

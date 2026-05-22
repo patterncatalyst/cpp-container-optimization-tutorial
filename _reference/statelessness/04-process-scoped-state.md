@@ -292,21 +292,24 @@ Use Podman's `--memory` and `--cpus` flags, or compose `deploy.resources` blocks
 
 ## Cross-references
 
-Doc 02 covers the RAII discipline for request-scoped state; this document is the complement on the process-scoped side. The two together exhaust the language-level state categories; anything else goes to external storage.
+[Doc 02](../02-raii/) covers the RAII discipline for request-scoped state; this document is the complement on the process-scoped side. The two together exhaust the language-level state categories; anything else goes to external storage.
 
-Doc 03 covers PMR for request-scoped arenas; the PMR upstream resource (process-scoped) is the heap source those arenas fall through to when their inline buffers overflow.
+[Doc 03](../03-pmr/) covers PMR for request-scoped arenas; the PMR upstream resource (process-scoped) is the heap source those arenas fall through to when their inline buffers overflow.
 
-Doc 05 covers threading and concurrency, including the CPU-limit consequences for thread pool sizing, allocator arena counts, and the `std::thread::hardware_concurrency()` gotcha — the threading-specific complement to this document's memory-sizing focus.
+[Doc 05](../05-threading/) covers threading and concurrency, including the CPU-limit consequences for thread pool sizing, allocator arena counts, and the `std::thread::hardware_concurrency()` gotcha — the threading-specific complement to this document's memory-sizing focus.
 
-Doc 06 develops the `main()`-owned wiring pattern further in the context of 12-factor configuration, and explains why the Meyers singleton is the wrong default for service code.
+[Doc 06](../06-twelve-factor/) develops the `main()`-owned wiring pattern further in the context of 12-factor configuration, and explains why the Meyers singleton is the wrong default for service code.
 
-Doc 07 covers state externalization — the third column of the State Architecture Table, where authoritative state lives — and the `ScopedConnection` RAII pattern for checking pooled connections out of process-scoped pools.
+[Doc 07](../07-state-externalization/) covers state externalization — the third column of the State Architecture Table, where authoritative state lives — and the `ScopedConnection` RAII pattern for checking pooled connections out of process-scoped pools.
 
-Doc 08 covers the ephemeral-storage budget and why C++ services should write logs to stdout rather than to files.
+[Doc 08](../08-ephemeral-filesystem/) covers the ephemeral-storage budget and why C++ services should write logs to stdout rather than to files.
 
-Doc 09 covers graceful shutdown, including the destruction order for process-scoped state at process exit.
+[Doc 09](../09-health-checks/) covers graceful shutdown, including the destruction order for process-scoped state at process exit.
 
 ## Annotated bibliography
+
+_The works below are collected, with reading guidance and a cross-reference matrix, on the project [bibliography]({{ '/bibliography/' | relative_url }}) page._
+
 
 **Iglberger, *C++ Software Design*.** The chapters on dependency injection and on the strategy pattern frame the `main()`-owned wiring pattern. The Singleton chapter argues against Meyers singletons for service code on essentially the same grounds developed here.
 

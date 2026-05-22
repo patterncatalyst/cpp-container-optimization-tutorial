@@ -352,21 +352,24 @@ Use `std::stop_token`/`std::jthread` and the cancellation pattern to tie deadlin
 
 ## Cross-references
 
-Doc 02 establishes the RAII discipline that the TLS guard and `std::stop_token` patterns build on.
+[Doc 02](../02-raii/) establishes the RAII discipline that the TLS guard and `std::stop_token` patterns build on.
 
-Doc 03 covers PMR; the `unsynchronized_pool_resource` choice in that document assumes single-threaded handler use, which interacts with the threading model discussed here.
+[Doc 03](../03-pmr/) covers PMR; the `unsynchronized_pool_resource` choice in that document assumes single-threaded handler use, which interacts with the threading model discussed here.
 
-Doc 04 covers process-scoped state and the memory-budget angle on resource limits; this document covers the same limits from the threading angle.
+[Doc 04](../04-process-scoped-state/) covers process-scoped state and the memory-budget angle on resource limits; this document covers the same limits from the threading angle.
 
-Doc 06 covers 12-factor implications, including singleton vs DI for thread pools and other process-scoped concurrency infrastructure.
+[Doc 06](../06-twelve-factor/) covers 12-factor implications, including singleton vs DI for thread pools and other process-scoped concurrency infrastructure.
 
-Doc 09 covers graceful shutdown, including the full signal-handler-to-pool-join sequence.
+[Doc 09](../09-health-checks/) covers graceful shutdown, including the full signal-handler-to-pool-join sequence.
 
-Doc 10 (gRPC microservices) shows the callback API and asio-grpc patterns wired into a complete service.
+[Doc 10](../10-grpc-microservices/) (gRPC microservices) shows the callback API and asio-grpc patterns wired into a complete service.
 
-Doc 11 (build tooling appendix) covers the helper libraries — the cgroup reader, PSI parser, asio-grpc integration — and their Conan recipes.
+[Doc 11](../11-build-tooling/) (build tooling appendix) covers the helper libraries — the cgroup reader, PSI parser, asio-grpc integration — and their Conan recipes.
 
 ## Annotated bibliography
+
+_The works below are collected, with reading guidance and a cross-reference matrix, on the project [bibliography]({{ '/bibliography/' | relative_url }}) page._
+
 
 **"C++ High Performance" (2nd edition).** The chapters on concurrency, coroutines, and executors are directly relevant. The book's treatment of move semantics and value categories underpins the coroutine-frame discussion. Worth re-reading before designing the threading model of a new service.
 

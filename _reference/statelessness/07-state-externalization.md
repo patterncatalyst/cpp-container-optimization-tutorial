@@ -376,23 +376,26 @@ For PostgreSQL specifically, run PgBouncer in front of the database with a small
 
 ## Cross-references
 
-Doc 01 set up the externalization requirement with the request-count counterexample; this document closes the loop by showing the fix.
+[Doc 01](../01-deployment-posture/) set up the externalization requirement with the request-count counterexample; this document closes the loop by showing the fix.
 
-Doc 02 covers the RAII discipline that `ScopedConnection` participates in, and the exception-safety guarantees that hold across the network boundary.
+[Doc 02](../02-raii/) covers the RAII discipline that `ScopedConnection` participates in, and the exception-safety guarantees that hold across the network boundary.
 
-Doc 04 covers the process-scoped pool as a category of state, with sizing guidance against the memory budget.
+[Doc 04](../04-process-scoped-state/) covers the process-scoped pool as a category of state, with sizing guidance against the memory budget.
 
-Doc 05 covers cooperative cancellation and `std::stop_token`, which compose with the deadline-propagation pattern for backing-service calls — the same machinery drives the outbox poller's graceful shutdown.
+[Doc 05](../05-threading/) covers cooperative cancellation and `std::stop_token`, which compose with the deadline-propagation pattern for backing-service calls — the same machinery drives the outbox poller's graceful shutdown.
 
-Doc 06 covers the 12-factor backing-services principle in philosophical terms; this document covers the C++ implementation.
+[Doc 06](../06-twelve-factor/) covers the 12-factor backing-services principle in philosophical terms; this document covers the C++ implementation.
 
-Doc 09 covers graceful shutdown, including draining the outbox poller and closing pool connections cleanly.
+[Doc 09](../09-health-checks/) covers graceful shutdown, including draining the outbox poller and closing pool connections cleanly.
 
-Doc 10 (gRPC microservices) shows the pool, retry, and deadline-propagation patterns wired into a complete service.
+[Doc 10](../10-grpc-microservices/) (gRPC microservices) shows the pool, retry, and deadline-propagation patterns wired into a complete service.
 
-Doc 11 (build tooling appendix) covers the Conan recipes for redis-plus-plus, libpqxx, librdkafka, and the AWS C++ SDK.
+[Doc 11](../11-build-tooling/) (build tooling appendix) covers the Conan recipes for redis-plus-plus, libpqxx, librdkafka, and the AWS C++ SDK.
 
 ## Annotated bibliography
+
+_The works below are collected, with reading guidance and a cross-reference matrix, on the project [bibliography]({{ '/bibliography/' | relative_url }}) page._
+
 
 **Geewax, *API Design Patterns*.** The chapters on idempotency, on standard methods, and on long-running operations directly inform the idempotency-key and retry patterns above. The book is the strongest available reference on the cross-cutting concerns of API design that this document operationalizes in C++.
 
