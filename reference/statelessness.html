@@ -89,13 +89,19 @@ permalink: /reference/statelessness/
     <div class="container">
         <h2 class="section-heading">Where this fits in the tutorial</h2>
         <p>
-            The main tutorial sections — <code>_docs/01</code> through
-            <code>_docs/16</code> — cover modern-C++ performance work
-            inside containers: image strategy, compile-time wins,
-            STL/layout, allocators, I/O, observability, isolation,
-            quality. This reference set goes wider on a single
-            architectural concern that touches all of those: what makes
-            a C++ service safe to deploy as a replaceable replica.
+            The <a href="{{ '/docs/00-outline/' | relative_url }}">main tutorial</a>
+            covers modern-C++ performance work inside containers:
+            <a href="{{ '/docs/04-image-strategy/' | relative_url }}">image strategy</a>,
+            <a href="{{ '/docs/05-compile-time-wins/' | relative_url }}">compile-time wins</a>,
+            <a href="{{ '/docs/06-stl-layout/' | relative_url }}">STL/layout</a>,
+            <a href="{{ '/docs/07-memory-management/' | relative_url }}">allocators</a>,
+            <a href="{{ '/docs/08-io-latency/' | relative_url }}">I/O</a>,
+            <a href="{{ '/docs/10-observability-profiling/' | relative_url }}">observability</a>,
+            <a href="{{ '/docs/11-noisy-neighbors/' | relative_url }}">isolation</a>, and
+            <a href="{{ '/docs/12-analysis-debugging/' | relative_url }}">quality</a>.
+            This reference set goes wider on a single architectural
+            concern that touches all of those: what makes a C++ service
+            safe to deploy as a replaceable replica.
         </p>
         <p>
             Cross-references go both directions. The main tutorial's
