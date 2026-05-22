@@ -23603,6 +23603,26 @@ tmpfs scratch works, ephemerality) do not depend on the default.
   first build: spdlog/1.14.1 + fmt resolving cleanly under the gnu17-deps
   profile; `--tmpfs /tmp:rw,size=16m` syntax accepted by the host podman.
 
+### r155.1 — 08-ephemeral-filesystem host-verified (clean first-try pass)
+
+`./demo.sh` ran on the Fedora host with every act behaving as designed,
+confirming all the host-only unknowns r155 flagged:
+
+- Act 1 (trap): `app log-file /var/log/app.log` under `--read-only`
+  failed with `Failed opening file ... : Read-only file system` (EROFS),
+  non-zero exit. The spdlog/fmt Conan build worked.
+- Act 2 (fix): `app log-stdout` under `--read-only` emitted the real
+  spdlog structured JSON with the `{}` args filled (order_id=42,
+  latency_ms=213, level "warning"), confirming the pattern and build.
+- Act 3 (ephemerality): a writable-rootfs `log-file` write succeeded;
+  a fresh container's `check-file` reported absent.
+- Act 4 (scratch): `--read-only --read-only-tmpfs=false` left `/tmp`
+  genuinely read-only (EROFS, the flag is supported and behaves as the
+  README describes); `--read-only --tmpfs /tmp:rw,size=16m` succeeded
+  and read back. The `--tmpfs ...:rw,size=16m` syntax is accepted.
+
+No code changes were needed. PRD §11 row flipped to host-verified.
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from

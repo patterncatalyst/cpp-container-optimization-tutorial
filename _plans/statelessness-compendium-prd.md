@@ -345,7 +345,7 @@ diagram for that doc is often sufficient.
 | 2 | `05-threading` example | 6-8 hours | [x] (host-verified r152.2 — 22-core host vs 2.0 quota; pool=2 best throughput+p99, pool=8 p99 72x worse) |
 | 2 | `07-state-externalization` example | 8-10 hours | [x] (host-verified r153.3 — libpq; K1 insert/replay same order_id, K2 distinct + read-back; 295s build) |
 | 2 | `07-outbox-pattern` example (multi-service) | 12-16 hours | [x] (authored r154 — producer + relay + idempotent consumer; Strimzi KRaft broker + librdkafka C API + libpq; `relay.cpp`/`consumer.cpp` sandbox-compiled, linked, smoke-run against fakes; `order_svc.cpp` gRPC is host-only; OTel tracing deferred to keep parity with the other runnable examples; **not yet host-built**) |
-| 2 | `08-ephemeral-filesystem` example | 4-6 hours | [x] (authored r155 — read-only rootfs trap; spdlog `basic_logger_mt` EROFS + stdout-sink fix + ephemerality + tmpfs scratch; `app.cpp` sandbox-compiled against a fake spdlog and the pure-stdlib modes run with correct exit codes; **not yet host-built**) |
+| 2 | `08-ephemeral-filesystem` example | 4-6 hours | [x] (host-verified r155.1 — clean first-try pass: Act 1 EROFS trap (`Read-only file system`, non-zero); Act 2 real spdlog JSON to stdout with `{}` args filled; Act 3 writable write then fresh-container absent; Act 4 `--read-only-tmpfs=false` genuinely read-only then `--tmpfs /tmp:rw,size=16m` succeeds) |
 | 2 | `09-health-checks` example | 6-8 hours | [ ] |
 | 3 | Bidirectional cross-references | Folded into Phase 2 | [ ] |
 | 4 | `test-all-stateless-demos.sh` aggregator + per-demo test scripts | 2-3 hours | [ ] |
