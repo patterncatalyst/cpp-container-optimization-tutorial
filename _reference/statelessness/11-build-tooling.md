@@ -16,6 +16,20 @@ The toolchain landscape moves quickly. C++23 features that were partial a year a
 
 {% include excalidraw.html name="statelessness/11-build-tooling" caption="Conan dev vs release profiles: same sources, same lockfile, two parallel build flows producing two binaries." %}
 
+> **Run the helpers.** This document is a reference appendix, not a service,
+> so its runnable companion is a focused slice: the two self-contained
+> vendored helpers below — `cgroup_helper` and `psi_reader` — built as
+> static libraries, unit-tested with GoogleTest over their pure parsers, and
+> exercised by a binary you run under different cgroup caps. It lives at
+> [`examples/statelessness/11-build-tooling/`]({{ '/examples/statelessness-11-build-tooling/' | relative_url }});
+> `./demo.sh` runs the tests, then sweeps `--cpus` / `--memory` so you can
+> watch `cpu_limit_cores()` track the cgroup while `hardware_concurrency()`
+> does not. The third helper, `otel_propagator`, needs opentelemetry-cpp,
+> which this tutorial deliberately doesn't build, so it stays reference-only
+> here. The Conan profiles, library inventory, toolchain matrix, and
+> Containerfile patterns in the rest of this document are the prose
+> reference they accompany.
+
 ## Conan 2.x setup
 
 A typical `conanfile.py` for a service in this stack:

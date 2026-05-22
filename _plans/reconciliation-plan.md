@@ -24072,6 +24072,71 @@ ubi9/ubi-minimal:9.5 runtime, gRPC 1.54.3 trio via Conan, libpq system,
 postgresql-16-c9s. 10 joins 02-09 as host-verified. Only 11-build-tooling
 remains unbuilt in the statelessness arc.
 
+### 2026-05-22 — r172: scaffold 11-build-tooling, vendored-helpers demo (NOT yet host-verified)
+
+The last unbuilt statelessness example. Doc 11 is a build-tooling REFERENCE
+appendix (Conan profiles, library inventory, C++23 toolchain matrix,
+multi-stage Containerfile pattern, full source for three vendored helpers),
+not a service. User chose Option 1 (lean): build the two self-contained
+helpers as real static libs + a gtest suite + a main that prints detected
+values, run under cgroup caps so the readings are demonstrably correct.
+Built in the sandbox; **not yet built or run on host.**
+
+Scope: the two Conan-free helpers from Doc 11 — cgroup_helper (Doc 05's
+cgroup cpu/mem reader) and psi_reader (Doc 05's PSI parser). Refinement vs
+the doc's source: each helper splits the PARSE from the file I/O so the
+logic is unit-testable without a live cgroup — parse_cpu_max / parse_cpu_v1
+/ parse_mem_max / parse_line are pure and gtest-tested against fixture
+strings; cpu_limit_cores / memory_limit_bytes / read_some wrap them around
+the real /sys/fs/cgroup and /proc/pressure files. The doc's behaviour is
+unchanged. The third helper, otel_propagator, needs opentelemetry-cpp (not
+built in this project) — left reference-only, noted in README + page + the
+doc's new companion note.
+
+Mirrors demo-07-quality-pipeline's verified gtest-under-Conan pattern:
+gtest/1.14.0 as the only Conan dep (test-only), find_package(GTest CONFIG),
+gtest_discover_tests. Two STATIC libs (cgroup_helper, psi_reader) +
+helper-demo + helper-tests; BUILD_TESTING gate.
+
+Containerfile: ubi9/ubi:9.5 builder (gcc-toolset-14 + cmake + ninja + conan
+~=2.0), RUNS `ctest` at build time as a gate (deterministic parser tests —
+a failing test fails the image), strips both binaries; ubi9/ubi-minimal:9.5
+runtime + libstdc++ ships BOTH binaries. Leanest example in the set — no
+gRPC, no system packages, no EPEL.
+
+demo.sh acts: (1) run helper-tests in-container (gtest green); (2)
+unconstrained (cpu falls back to host nproc, mem unbounded); (3) --cpus=1.5
+(cpu_limit_cores() -> 1.5 from cgroup v2 cpu.max "150000 100000"); (4)
+--cpus=0.5 --memory=256m (cpu 0.5, mem ~256MiB, while hardware_concurrency()
+still reports full host count — the Doc 05 trap). Uses `podman run` for the
+cap sweep (compose fixes per-service limits, so the sweep lives in the
+script). compose.yml builds the image + a default unconstrained run.
+
+Sandbox validation only (no compiler/podman/cgroup here): all C++ brace-
+balanced (main 7/7, tests 15/15, cgroup_helper.cpp 29/29, psi_reader.cpp
+10/10, headers fine), demo.sh bash -n clean, compose.yml YAML parses,
+main + tests include the vendored headers which CMake provides via
+target_include_directories PUBLIC on both static libs.
+
+HOST UNKNOWNS for first build: (a) GoogleTest builds under Conan on this
+toolchain (demo-07 proved it, but this is gcc-toolset-14 + gnu17 profile
+cppstd like 09/10); (b) the ctest build-gate passes (parser tests are
+deterministic, should be fine); (c) cgroup v2 cpu.max IS readable in-
+container under --cpus on Fedora 44 rootless podman — demo-05-isolation
+proved cgroup readability, so high confidence cpu_limit_cores() reads
+1.5/0.5; (d) memory.max readable under --memory=256m -> 268435456; (e) PSI:
+/proc/pressure/cpu may be absent or unreadable in the container — main
+handles this gracefully ("unavailable"), and the gtest tests use fixture
+strings not the live file, so PSI absence does NOT fail anything (designed
+for this). Expect (e) to likely show "unavailable", which is fine.
+
+Files: examples/statelessness/11-build-tooling/{CMakeLists.txt,
+Containerfile, conanfile.py, conan.lock(empty), compose.yml, demo.sh,
+README.md, vendor/cgroup_helper/{cgroup_helper.h,.cpp},
+vendor/psi_reader/{psi_reader.h,.cpp}, src/main.cpp, tests/test_helpers.cpp}
+and _examples/statelessness-11-build-tooling.md (order=212). Companion note
+added to _reference/statelessness/11-build-tooling.md.
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from
