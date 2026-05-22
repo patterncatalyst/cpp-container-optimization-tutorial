@@ -23893,6 +23893,64 @@ Status bool overload vs grpc 1.54; (b) the HTTP liveness socket binding
 under read_only + tmpfs; (c) curl on ubi-minimal:9.5; (d) SIGUSR1 reaching
 PID 1 and firing the toggle; (e) clean exit 0 on podman stop.
 
+### 2026-05-21 — r164 + r165: 09-health-checks HOST-VERIFIED (green); curl conflict + staged-startup ordering fixed
+
+First host build + run of 09 on Fedora 44 (rootless podman + compose).
+Two fixes, then a full green three-act run. **09 is now host-verified.**
+
+**r164 — runtime curl conflict.** The runtime stage did
+`microdnf install libstdc++ curl` and failed: `curl-minimal-7.76.1-31.el9`
+(preinstalled on ubi-minimal) conflicts with `curl` (both provide
+/usr/bin/curl). The r161 comment even noted curl-minimal is preinstalled,
+then installed full curl anyway — the bug. Fix: install only `libstdc++`;
+the preinstalled curl-minimal already provides the `curl` the liveness
+HEALTHCHECK uses. Generalizable trap (worth a future §14 line): on
+ubi-minimal, `microdnf install curl` is a conflict, not a no-op — the
+*-minimal variant already owns the binary.
+
+Big win banked the same build: the C++ LINKED CLEAN, so the
+`HealthCheckServiceInterface::SetServingStatus` BOOL overload compiles
+against grpc 1.54 (host-unknown (a) retired) — the r161 doc-correction
+holds. Container then came up `Up (healthy)`: the HTTP liveness socket
+binds under read_only + tmpfs and the curl HEALTHCHECK passes
+(unknowns (b),(c) retired).
+
+**r165 — staged-startup ordering + a demo grep bug.** First demo run was
+green in acts 2 and 3 but act 1 never showed the NOT_SERVING window. Two
+causes:
+1. (server) The liveness HTTP jthread was started AFTER the 3s init sleep,
+   so during init there was no liveness endpoint at all — and the demo's
+   "wait for liveness 200" gate therefore didn't return until init had
+   already flipped readiness to SERVING. Fix: start the liveness server
+   BEFORE the init sleep. This is also more correct — a process IS alive
+   during init, so liveness should answer 200 throughout the NOT_SERVING
+   window. That live-but-not-ready separation IS the staged-startup story.
+2. (demo.sh) The act-1 wait loop used `grep -q "SERVING"`, which matches
+   "NOT_SERVING" as a substring and broke instantly. Fix: `grep -qw SERVING`
+   (word match — "SERVING" inside "NOT_SERVING" is preceded by "_", a word
+   char, so -w correctly does not match it).
+
+Host run after both fixes — all three acts green:
+- Act 1: liveness 200 throughout; readiness NOT_SERVING during ~3s init,
+  then SERVING. (Demonstrable now that liveness is up during init.)
+- Act 2: `podman kill -s SIGUSR1` flipped readiness NOT_SERVING while
+  liveness stayed 200 (no restart), second SIGUSR1 restored SERVING.
+  Host-unknown (d) retired — SIGUSR1 reaches PID 1 and the control-thread
+  toggle fires.
+- Act 3: `podman stop` (SIGTERM) ran the ordered drain — readiness
+  NOT_SERVING (liveness still SERVING) -> server->Shutdown(deadline) ->
+  Wait() returned -> worker drained -> exit code 0. Host-unknown (e)
+  retired.
+
+Files changed: examples/statelessness/09-health-checks/{Containerfile (r164),
+src/health_svc.cpp (r165 ordering), demo.sh (r165 grep)}.
+
+Host: Fedora 44, rootless podman + compose, ubi9/ubi:9.5 builder +
+ubi9/ubi-minimal:9.5 runtime, gRPC 1.54.3 trio via Conan. Every r161/r162/
+r163 host-unknown (a)-(f) now resolved green. 09 joins 02-08 as
+host-verified; remaining unbuilt examples are 10-grpc-microservices
+(capstone) and 11-build-tooling.
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from

@@ -74,15 +74,15 @@ RUN cmake -S . -B build -G Ninja \
     && strip --strip-all build/health-svc build/health-probe
 
 # ════════════════════════════════════════════════════════════════════════
-# Runtime — ubi-minimal + libstdc++ + curl (for the liveness HEALTHCHECK).
+# Runtime — ubi-minimal + libstdc++. ubi-minimal already ships
+# `curl-minimal`, which provides the `curl` command our liveness HEALTHCHECK
+# uses — installing full `curl` here would CONFLICT with curl-minimal (both
+# provide /usr/bin/curl), so we don't. libstdc++ is the only addition.
 # ════════════════════════════════════════════════════════════════════════
 FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
 
-# curl-minimal is preinstalled on ubi-minimal, but install curl explicitly
-# so the liveness HEALTHCHECK below is self-evidently satisfied.
 RUN microdnf install -y --setopt=install_weak_deps=0 \
         libstdc++ \
-        curl \
     && microdnf clean all \
     && rm -rf /var/cache/yum
 

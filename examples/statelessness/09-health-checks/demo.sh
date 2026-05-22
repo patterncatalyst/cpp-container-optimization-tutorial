@@ -49,7 +49,7 @@ echo "    liveness  /healthz : $(live)        (process is up)"
 echo "    readiness $SVC : $(ready | sed 's/^health-probe[^:]*: //')   (still initializing)"
 echo "    ... waiting for init to complete ..."
 for _ in $(seq 1 20); do
-    ready | grep -q "SERVING" && break
+    ready | grep -qw SERVING && break
     sleep 0.5
 done
 echo "    liveness  /healthz : $(live)"

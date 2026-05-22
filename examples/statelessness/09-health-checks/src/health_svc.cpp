@@ -201,18 +201,25 @@ int main() {
     health->SetServingStatus(kServiceName, false);   // the app service
     log_line("status NOT_SERVING; doing expensive init ...");
 
-    // 3. Simulate the expensive init a real service does here (Doc 04
+    // 3. Start the liveness HTTP endpoint NOW, before init. Liveness asks
+    //    "is the process alive?" — and it is, throughout startup. Bringing
+    //    it up first means a liveness probe answers 200 during the whole
+    //    NOT_SERVING window, while readiness (the gRPC per-service status)
+    //    stays NOT_SERVING until init finishes. That separation — live but
+    //    not ready — is the staged-startup story. The HTTP server's
+    //    stop_token is requested during shutdown.
+    std::jthread liveness(run_liveness_http, health_port);
+
+    // 4. Simulate the expensive init a real service does here (Doc 04
     //    process-scoped state, Doc 07 pools, channel caches, config parse).
     std::this_thread::sleep_for(std::chrono::seconds(3));
 
-    // 4. Flip to SERVING. Startup probe now succeeds; readiness goes green.
+    // 5. Flip to SERVING. Startup probe now succeeds; readiness goes green.
     health->SetServingStatus("", true);
     health->SetServingStatus(kServiceName, true);
     log_line("init complete; status SERVING (live + ready)");
 
-    // 5. Start the liveness HTTP endpoint and the background worker. Both
-    //    are jthreads: their stop_token is requested during shutdown.
-    std::jthread liveness(run_liveness_http, health_port);
+    // 6. Start the background worker (only meaningful once we're serving).
     std::jthread worker(run_worker);
 
     // 6. Control thread: react to signals OFF the handler. server->Wait()
