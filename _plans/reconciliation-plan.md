@@ -24226,6 +24226,52 @@ Reproducible on the host with: ./tools/build-statelessness-deck.sh
 (prereqs identical to the main deck: python-pptx, Pillow, soffice,
 poppler-utils).
 
+### 2026-05-22 — r176-r178: statelessness example pages rebuilt to the main-demo format; deck made self-contained
+
+User review of the published site found the statelessness example pages
+(1) looked sparse, (2) didn't follow the main demo-NN page format, and
+(3) were missing links to the main tutorial sections and the bibliography.
+Diagnosis confirmed: the statelessness pages averaged ~78 lines with only
+3 sections (What it demonstrates / Running it / Where it sits), vs the main
+demos' ~266 lines and 9 canonical sections. Critically, NONE of the ten had
+a "What you'll see" representative-output block — the biggest sparseness
+driver — and they linked only to compendium Docs, never to /docs/ sections
+or /bibliography/.
+
+Fix (r176 = 02-raii as the approved template; r178 = the other nine). All
+ten pages rebuilt to the canonical main-demo structure, header-for-header:
+Why this matters / What this demo shows / How to run / What you'll see /
+How to read the output / Files / Caveats and gotchas / Source materials /
+Linked tutorial sections, plus the compendium-specific "Where it sits"
+retained. Line counts went 776 -> 2122 total (~78 -> ~210 avg).
+
+Per-page tutorial-section mapping (user-approved): 02->§3,§7; 03->§7,§6,§12;
+04->§3,§7; 05->§11,§8; 07-ext->§8,§9; 07-outbox->§8,§9; 08->§4;
+09->§9,§8; 10->§8,§9; 11->§13,§12. Every page now also has a Source
+materials block citing the three books (Andrist & Sehr, Iglberger, Enberg)
+with per-topic chapters, and a /bibliography/ link.
+
+Output blocks: 10 and 11 use the EXACT host-verified output from this
+session (alice subtotal=8948 tax=626 total=9574; carol tax=0; idempotent
+replay returns identical order_id; the 4-act cgroup sweep with
+cpu_limit_cores 1.5 then 0.5 and 256MiB while hardware_concurrency stays
+22). The other eight use representative output matching each demo's verified
+behaviour — the same "Representative output" convention the main demo pages
+use. User explicitly approved representative ("representative is fine").
+
+Verified in sandbox: all 10 pages have 9/9 canonical sections; YAML
+front-matter parses on all 10; every /docs/, /examples/, /reference/, and
+/bibliography/ link resolves to a real file; no bare "(Doc N)" parentheticals
+remain (every Doc reference is either a topic name or a proper markdown link).
+
+Also r177 (deck, separate from the pages): user noted the statelessness
+PPTX referenced "Doc 07" etc. inline, which is out of context for a live
+audience not looking at the site. Replaced all ~29 inline (Doc N) cross-
+references in slide bullets/body/notes with topic names (e.g. "(Doc 7)" ->
+"(state externalization)"), and switched the corner-pill labels from
+"Doc 0N" to "§N" to match the section dividers — no "Doc" chrome visible
+anywhere. Deck rebuilt, still 67 slides.
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from
