@@ -24137,6 +24137,53 @@ vendor/psi_reader/{psi_reader.h,.cpp}, src/main.cpp, tests/test_helpers.cpp}
 and _examples/statelessness-11-build-tooling.md (order=212). Companion note
 added to _reference/statelessness/11-build-tooling.md.
 
+### 2026-05-22 — r173/r174: 11-build-tooling HOST-VERIFIED; statelessness arc 02-11 COMPLETE
+
+First host build + run on Fedora 44 (rootless podman). One fix needed
+(r173): demo.sh's run() helper put args before the image, but Act 1 passes
+a COMMAND (helper-tests) which must come AFTER the image — podman read the
+binary path as the image ref ("invalid reference format"). Split into run()
+(cap flags before image) + run_cmd() (command after image). No rebuild;
+image had already built green (the ctest gate passed at build time).
+
+Re-run after the fix — all four acts correct:
+- Act 1: 15/15 gtest green (cpu.max / cpu-v1 / mem.max / PSI parsers), both
+  at the build-time gate and again in-container.
+- Act 2 (unconstrained): cpu_limit_cores()=22 (host nproc fallback), memory
+  unbounded.
+- Act 3 (--cpus=1.5): cpu_limit_cores()=1.5 — read straight from cgroup v2
+  cpu.max "150000 100000". (host-unknown (c) retired.)
+- Act 4 (--cpus=0.5 --memory=256m): cpu=0.5, memory=268435456 (256.0 MiB).
+  (host-unknown (d) retired.)
+- In all capped acts hardware_concurrency() still reports 22 — the Doc 05
+  trap made vivid (a naive pool oversubscribes 22:1 against half a core).
+- PSI: better than predicted — /proc/pressure/cpu WAS exposed and parsed
+  (avg10=0.41 avg60=2.37 avg300=2.59); the graceful "unavailable" fallback
+  (host-unknown (e)) wasn't needed but is good insurance. GoogleTest built
+  clean under Conan on gcc-toolset-14 (host-unknown (a),(b) retired).
+
+KNOWN CAVEAT (not a defect): in_container() reported `false` despite running
+in a container. Rootless podman's /proc/1/cgroup under a user namespace
+often reads `0::/` with none of the docker/libpod/.scope/kubepods markers
+the heuristic sniffs for, so the heuristic underreports. This does NOT
+affect limit detection — cpu_limit_cores()/memory_limit_bytes() read
+cpu.max/memory.max directly and work perfectly. Documented as a caveat in
+the README + a code comment so it isn't mistaken for a bug; cgroup-path
+sniffing is inherently unreliable under rootless and the limit readers are
+the load-bearing path regardless.
+
+Also r173: linked the 11 doc's Cross-references ([Doc NN](../NN-slug/), the
+00-index house pattern, 9 links) and linkified the 7 real bibliography URLs
+(leaving the cmake.tools.cmake.* config-var names and the bare
+libstdc++.html filename as backticked text, and the two book refs unlinked).
+
+Host: Fedora 44, rootless podman + compose, ubi9/ubi:9.5 builder +
+ubi9/ubi-minimal:9.5 runtime, gtest/1.14.0 via Conan (test-only), 22-core
+host, cgroup v2. **11 joins 02-10 as host-verified. The entire statelessness
+example arc (02-11) is now built and host-verified end to end** — RAII, PMR,
+process-scoped state, threading, state externalization, outbox, ephemeral
+filesystem, health checks, the gRPC capstone, and the build-tooling helpers.
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from

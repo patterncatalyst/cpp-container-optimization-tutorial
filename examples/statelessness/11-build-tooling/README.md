@@ -65,6 +65,16 @@ podman compose -f compose.yml build   # build + run the gtest gate
 
 The first build compiles GoogleTest (~30s); the helpers and demo are tiny.
 
+> **A note on `in_container()`.** Under rootless podman you'll likely see
+> `in_container() : false` *even inside the container* — its
+> `/proc/1/cgroup` reads `0::/` with none of the docker/libpod/`.scope`
+> markers the heuristic sniffs for. That's a known limitation of
+> cgroup-path detection under rootless user namespaces, not a bug here. It
+> does **not** affect the limit readers: `cpu_limit_cores()` and
+> `memory_limit_bytes()` read `cpu.max` / `memory.max` directly and track
+> the caps exactly (as the sweep shows). Treat `in_container()` as a
+> best-effort hint, not an authority.
+
 ## Files
 
 | Path | Role |
