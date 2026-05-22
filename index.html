@@ -1,7 +1,7 @@
 ---
 layout: default
 title: "Optimizing Modern C++ with Containers"
-description: "A 1.5–3 hour PPTX presentation, an untimed companion Jekyll site, and seven runnable Podman demos that teach modern-C++ performance under realistic container constraints."
+description: "A 1.5–3 hour PPTX presentation, an untimed companion Jekyll site, and runnable Podman demos that teach modern-C++ performance under realistic container constraints."
 ---
 
 <section class="hero">
@@ -9,7 +9,7 @@ description: "A 1.5–3 hour PPTX presentation, an untimed companion Jekyll site
         <span class="hero__eyebrow">Hands-on tutorial</span>
         <h1>Modern C++ performance,&nbsp;in&nbsp;containers.</h1>
         <p class="hero__lead">
-            Fifteen tutorial sections, seven runnable Podman demos, an
+            Fifteen tutorial sections, runnable Podman demos, an
             instrumented Grafana stack, and diagrams that explain
             where C++20/23 performance work actually lives once your
             code is shipping in an OCI image.
@@ -64,8 +64,7 @@ description: "A 1.5–3 hour PPTX presentation, an untimed companion Jekyll site
         <p class="section-sub">
             Read in order the first time. Each section ends with a
             prev/next pager. Per-section duration is reading time for
-            the site; the PPTX deck has its own talk-time pacing — see
-            <a href="{{ '/plans/reconciliation-plan/' | relative_url }}">the plan</a>.
+            the site; the PPTX deck has its own talk-time pacing.
         </p>
         <div class="cards">
             {%- assign tutorial_docs = site.docs | sort: "order" -%}
@@ -125,13 +124,6 @@ description: "A 1.5–3 hour PPTX presentation, an untimed companion Jekyll site
                     <span class="doc-card__desc">Podman 5.x rootless, GCC 14 / Clang 18, Conan 2, CMake, Ninja, hey, jq — full install.</span>
                 </span>
             </a>
-            <a class="doc-card" href="{{ '/plans/reconciliation-plan/' | relative_url }}">
-                <span class="doc-card__icon" aria-hidden="true">📋</span>
-                <span>
-                    <span class="doc-card__title">Reconciliation plan</span>
-                    <span class="doc-card__desc">What's verified end-to-end vs. what's drafted but still needs validation on Fedora 44.</span>
-                </span>
-            </a>
             <a class="doc-card" href="{{ '/diagrams/' | relative_url }}">
                 <span class="doc-card__icon" aria-hidden="true">📐</span>
                 <span>
@@ -142,7 +134,7 @@ description: "A 1.5–3 hour PPTX presentation, an untimed companion Jekyll site
             <a class="doc-card" href="{{ '/examples/' | relative_url }}">
                 <span class="doc-card__icon" aria-hidden="true">📦</span>
                 <span>
-                    <span class="doc-card__title">Seven runnable demos</span>
+                    <span class="doc-card__title">Runnable demos</span>
                     <span class="doc-card__desc">image strategy · STL &amp; layout · io_uring + gRPC · observability · noisy neighbors · memory &amp; allocators · quality pipeline.</span>
                 </span>
             </a>
