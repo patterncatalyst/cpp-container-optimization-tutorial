@@ -1,0 +1,24 @@
+// The tax-calculation service — the outbound gRPC upstream (Doc 10).
+//
+// In the doc this is an external service the pricing handler calls via the
+// channel cache, propagating deadline and trace context. Here it is a real
+// second service in the same compose, so the outbound-call, channel-reuse,
+// and deadline-propagation story is demonstrated end to end rather than
+// mocked.
+
+syntax = "proto3";
+
+package tax.v1;
+
+service TaxService {
+  rpc CalculateTax(CalculateTaxRequest) returns (CalculateTaxResponse);
+}
+
+message CalculateTaxRequest {
+  string country = 1;
+  int64  subtotal_cents = 2;
+}
+
+message CalculateTaxResponse {
+  int64 tax_cents = 1;
+}

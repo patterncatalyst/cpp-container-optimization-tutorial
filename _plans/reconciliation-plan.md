@@ -23951,6 +23951,80 @@ r163 host-unknown (a)-(f) now resolved green. 09 joins 02-08 as
 host-verified; remaining unbuilt examples are 10-grpc-microservices
 (capstone) and 11-build-tooling.
 
+### 2026-05-21 — r166: scaffold 10-grpc-microservices, the capstone (NOT yet host-verified)
+
+The integration example for Doc 10: an order-pricing gRPC service composing
+every prior pattern, calling a second tax gRPC service. Built in the sandbox
+from the doc; **not yet built or run on host.**
+
+Scope decision (the user said "do 10 per your recommendation"; the
+elicitation widget again returned no selection): **faithful-but-buildable +
+two services.** Doc 10's literal feature set pulls in libpqxx (rejected,
+G-67), opentelemetry-cpp (never built in this project — all examples stay on
+the verified gRPC trio), redis-plus-plus, and jemalloc tuning. Building four
+unproven heavy deps into the CAPSTONE at once is the multi-layer-failure
+trap that made 07 a five-round slog, quadrupled. So the example keeps Doc
+10's architecture/composition exactly and realizes it on the verified stack,
+representing the rest as documented seams.
+
+Divergences from Doc 10 (each noted in README + example page + code):
+- PostgreSQL via libpq (reuses 07's verified pg_pool.hpp, namespace renamed
+  statelessoutbox -> pricing), not libpqxx (G-67).
+- No Redis: price lookup goes straight to PG; cache-aside marked as a seam
+  in fetch_price.
+- No OpenTelemetry: RequestContext span/scope is a documented seam (the PMR
+  arena + deadline + correlation_id are real; the OTel members are commented
+  insertion points).
+- sync gRPC API (grpc::Status methods), not the callback API the doc
+  sketches — sync is what 07/09 verified. Composition identical.
+- No jemalloc MALLOC_CONF tuning (orthogonal to the composition story).
+
+Composes (all real): Config parsed once (Doc 06); process-scoped PgPool +
+ChannelCache owned by main() (Doc 04); RequestContext per-request RAII with
+a real PMR arena (Doc 03); handler throwing grpc::Status with RAII cleanup
++ boundary translation (Doc 02); deadline-propagated PG (statement_timeout
+from remaining budget) and outbound gRPC tax call via the channel cache
+(Doc 07); idempotency store on the client key (Doc 07); staged startup +
+signal-safe graceful shutdown (Doc 09, the flag+control-thread pattern).
+
+Topology: 3 compose services — postgres (sclorg) + tax-svc + pricing-svc.
+tax-svc and pricing-svc are the same image (built once) running different
+commands, like 07. pricing-svc owns its schema + seed data via migrate() at
+startup (customers alice/US, bob/DE, carol/US-exempt; products widget/gadget/
+gizmo). 4 binaries: pricing-svc, tax-svc, health-probe (reused from 09),
+pricing-client (drives PriceOrder for the demo via podman exec — no host
+gRPC tooling needed).
+
+demo.sh acts: (1) price a taxable order for alice (PG lookups + outbound tax
+gRPC); (2) tax-exempt carol (compute_tax short-circuits, tax=0, no outbound
+call); (3) idempotent replay of act 1's key (stored result, same order_id,
+no recompute).
+
+Sandbox validation only (no compiler/podman here): all sources brace-
+balanced (pricing_svc 64/64, etc.), demo.sh bash -n clean, compose.yml YAML
+parses (3 services), 4 CMake targets all stripped + COPY'd in the
+Containerfile, generated-header includes + proto package names line up,
+TAX_SERVICE_ADDR=tax-svc:50052 matches the compose service name. Added
+<optional> include after first writing check_idempotency.
+
+HOST UNKNOWNS for first build: (a) the bigger link — pricing-svc pulls
+gRPC + libpq + 2 generated protos through the --start-group fix; (b) the
+sync-API PricingService compiles clean (no callback-API surprises); (c)
+PMR unsynchronized_pool_resource + monotonic_buffer over a 64KB on-stack
+array behaves under -O2 (verified in 03, should be fine); (d) the inter-
+service call pricing-svc -> tax-svc:50052 resolves over the compose network
+and the depends_on service_healthy gating works with the gRPC health-probe
+healthchecks on BOTH services; (e) migrate() seed runs once cleanly; (f)
+the pricing-client exec path returns parseable output; (g) graceful drain
+exit 0 on podman stop. Expect at least one to need a fix.
+
+Files: examples/statelessness/10-grpc-microservices/{CMakeLists.txt,
+Containerfile, conanfile.py, conan.lock(empty), compose.yml, demo.sh,
+README.md, proto/{pricing,tax,health}.proto, src/{config.hpp,
+channel_cache.hpp, request_context.hpp, pg_pool.hpp, pricing_svc.cpp,
+tax_svc.cpp, pricing_client.cpp, health_probe.cpp}} and
+_examples/statelessness-10-grpc-microservices.md (order=211).
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from

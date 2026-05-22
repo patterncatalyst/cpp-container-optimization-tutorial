@@ -1,0 +1,104 @@
+# statelessness/10-grpc-microservices — the gRPC capstone.
+#
+# Builds three binaries from one image:
+#   pricing-svc    the capstone: PriceOrder over gRPC; PostgreSQL via libpq;
+#                  outbound gRPC to the tax service; health + graceful drain.
+#   tax-svc        the outbound upstream the pricing service calls.
+#   health-probe   our own minimal grpc_health_probe (from proto/health.proto)
+#
+# Dependencies:
+#   gRPC + protobuf + abseil   via Conan (the verified G-22..G-30 trio)
+#   libpq                      system, UBI AppStream (libpq-devel)
+#
+# No EPEL, no Kafka, no Redis, no OpenTelemetry, no libpqxx — see the README
+# for what the buildable capstone represents structurally vs Doc 10. The
+# first build compiles the gRPC chain (~5 min cold); a warm Conan cache is
+# far faster.
+
+FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
+
+# libpq-devel is in UBI AppStream. The perl list satisfies gRPC/boringssl
+# build scripts (G-30).
+RUN dnf install -y --quiet --setopt=install_weak_deps=False \
+        gcc-toolset-14 \
+        cmake ninja-build git python3-pip \
+        pkgconf-pkg-config \
+        libpq-devel \
+        perl-FindBin perl-IPC-Cmd perl-Data-Dumper perl-Pod-Html \
+        perl-Pod-Usage perl-File-Compare perl-File-Copy perl-File-Path \
+        perl-Time-Piece perl-Getopt-Long perl-Digest-SHA \
+        perl-threads perl-threads-shared perl-Thread-Queue \
+        perl-Term-ANSIColor \
+        which \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf/*
+
+ENV PATH="/opt/rh/gcc-toolset-14/root/usr/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
+ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
+
+RUN pip install --quiet "conan~=2.0"
+
+RUN conan profile detect --force && \
+    sed -i 's|^compiler.cppstd=.*|compiler.cppstd=gnu17|' \
+        /root/.conan2/profiles/default
+
+WORKDIR /src
+
+COPY conanfile.py conan.lock ./
+RUN if [ -s conan.lock ]; then \
+        echo "==> Using committed conan.lock with --lockfile-partial"; \
+        conan install . --output-folder=build/conan \
+                        -s build_type=Release \
+                        --lockfile=conan.lock \
+                        --lockfile-partial \
+                        --build=missing ; \
+    else \
+        echo "==> conan.lock is empty placeholder; resolving graph fresh"; \
+        rm -f conan.lock ; \
+        conan install . --output-folder=build/conan \
+                        -s build_type=Release \
+                        --build=missing ; \
+    fi
+
+COPY src/   ./src/
+COPY proto/ ./proto/
+COPY CMakeLists.txt ./
+
+RUN cmake -S . -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_TOOLCHAIN_FILE=build/conan/conan_toolchain.cmake \
+    && cmake --build build -j"$(nproc)" \
+    && strip --strip-all build/pricing-svc build/tax-svc build/health-probe \
+                         build/pricing-client
+
+# ════════════════════════════════════════════════════════════════════════
+# Runtime — ubi-minimal + libstdc++ + libpq (shared). curl-minimal is
+# already present; we don't add full curl (it would conflict). Liveness is
+# gRPC, checked by our own health-probe.
+# ════════════════════════════════════════════════════════════════════════
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
+
+RUN microdnf install -y --setopt=install_weak_deps=0 \
+        libstdc++ \
+        libpq \
+    && microdnf clean all \
+    && rm -rf /var/cache/yum
+
+COPY --from=builder /src/build/pricing-svc  /usr/local/bin/pricing-svc
+COPY --from=builder /src/build/tax-svc      /usr/local/bin/tax-svc
+COPY --from=builder /src/build/health-probe /usr/local/bin/health-probe
+COPY --from=builder /src/build/pricing-client /usr/local/bin/pricing-client
+
+# pricing-svc :50051, tax-svc :50052
+EXPOSE 50051 50052
+
+ENV LISTEN_ADDR="0.0.0.0:50051"
+ENV PG_CONNINFO="postgresql://pricing:pricing@postgres:5432/pricing"
+ENV PG_POOL_SIZE="8"
+ENV TAX_SERVICE_ADDR="tax:50052"
+ENV DEFAULT_DEADLINE_MS="2000"
+
+# CMD (not ENTRYPOINT): compose selects which binary each service runs by
+# passing it as the command. A bare run starts the pricing service.
+CMD ["/usr/local/bin/pricing-svc"]

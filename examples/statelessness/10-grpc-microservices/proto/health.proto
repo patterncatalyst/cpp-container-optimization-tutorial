@@ -1,0 +1,40 @@
+// The standard gRPC health-checking protocol, grpc.health.v1.
+//
+// This is the canonical, well-known service definition from the gRPC
+// project itself (https://grpc.io/docs/guides/health-checking/). It is
+// reproduced here verbatim so the example is hermetic: the server uses
+// gRPC's BUILT-IN default health service (grpc::EnableDefaultHealthCheck-
+// Service), which implements exactly this protocol on the wire, and our
+// own little health-probe client (src/health_probe.cpp) is generated from
+// this file to speak to it. Generating our own client rather than fetching
+// the grpc_health_probe release binary keeps the build free of any network
+// dependency — see §14's note on build-time surprises.
+
+syntax = "proto3";
+
+package grpc.health.v1;
+
+message HealthCheckRequest {
+  string service = 1;
+}
+
+message HealthCheckResponse {
+  enum ServingStatus {
+    UNKNOWN = 0;
+    SERVING = 1;
+    NOT_SERVING = 2;
+    SERVICE_UNKNOWN = 3;  // Used only by the Watch method.
+  }
+  ServingStatus status = 1;
+}
+
+service Health {
+  // Check the serving status of a named service. The empty service name
+  // ("") is the server-wide status. Returns SERVICE_UNKNOWN if the named
+  // service is not registered with the health server.
+  rpc Check(HealthCheckRequest) returns (HealthCheckResponse);
+
+  // Stream status changes. Not used by this example (the probe does a
+  // one-shot Check), but part of the standard protocol.
+  rpc Watch(HealthCheckRequest) returns (stream HealthCheckResponse);
+}
