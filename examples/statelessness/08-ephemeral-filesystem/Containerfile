@@ -1,0 +1,73 @@
+# statelessness/08-ephemeral-filesystem — read-only rootfs demo.
+#
+# One small binary (`app`) with a single Conan dependency (spdlog, which
+# pulls fmt). No gRPC chain and no system C libraries, so the build is a
+# quick compile — seconds once the Conan cache is warm, not minutes.
+#
+# The image itself is NOT read-only; the demo applies `--read-only` and
+# `--tmpfs` at run time to show how the binary behaves under each.
+
+FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
+
+RUN dnf install -y --quiet --setopt=install_weak_deps=False \
+        gcc-toolset-14 \
+        cmake ninja-build python3-pip \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf/*
+
+ENV PATH="/opt/rh/gcc-toolset-14/root/usr/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
+# Future-proofing for a future UBI CMake 4.x (rejects deps declaring
+# cmake_minimum_required < 3.5). Honored from the environment by CMake
+# 3.31+; harmless today (G-67).
+ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
+
+RUN pip install --quiet "conan~=2.0"
+
+RUN conan profile detect --force && \
+    sed -i 's|^compiler.cppstd=.*|compiler.cppstd=gnu17|' \
+        /root/.conan2/profiles/default
+
+WORKDIR /src
+
+COPY conanfile.py conan.lock ./
+RUN if [ -s conan.lock ]; then \
+        echo "==> Using committed conan.lock with --lockfile-partial"; \
+        conan install . --output-folder=build/conan \
+                        -s build_type=Release \
+                        --lockfile=conan.lock \
+                        --lockfile-partial \
+                        --build=missing ; \
+    else \
+        echo "==> conan.lock is empty placeholder; resolving graph fresh"; \
+        rm -f conan.lock ; \
+        conan install . --output-folder=build/conan \
+                        -s build_type=Release \
+                        --build=missing ; \
+    fi
+
+COPY src/ ./src/
+COPY CMakeLists.txt ./
+
+RUN cmake -S . -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_TOOLCHAIN_FILE=build/conan/conan_toolchain.cmake \
+    && cmake --build build -j"$(nproc)" \
+    && strip --strip-all build/app
+
+# ════════════════════════════════════════════════════════════════════════
+# Runtime — ubi-minimal + libstdc++ (spdlog/fmt are statically linked).
+# ════════════════════════════════════════════════════════════════════════
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
+
+RUN microdnf install -y --setopt=install_weak_deps=0 \
+        libstdc++ \
+    && microdnf clean all \
+    && rm -rf /var/cache/yum
+
+COPY --from=builder /src/build/app /usr/local/bin/app
+
+# One binary, several modes selected by the command. CMD (not ENTRYPOINT)
+# so a passed command REPLACES the default (G-66): `podman run IMG app
+# log-file /var/log/x` runs that mode; a bare run logs to stdout.
+CMD ["/usr/local/bin/app", "log-stdout"]

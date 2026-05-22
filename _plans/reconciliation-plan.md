@@ -23531,6 +23531,78 @@ backed by PostgreSQL and a Kafka broker.
   `rdkafka.pc`; and `podman compose` honoring `depends_on:
   service_healthy`.
 
+### r155 — Compendium example 7: statelessness/08-ephemeral-filesystem (the read-only rootfs)
+
+The seventh compendium example, the runnable companion to Doc 08. A
+focused, light example in the shape of 05-threading: one small binary
+run under different `podman run` flags, no compose, no gRPC. It makes
+Doc 08's central trap concrete.
+
+**What it demonstrates** (`src/app.cpp`, four modes)
+
+- **The spdlog file-sink trap** (`log-file <path>`). spdlog's
+  `basic_logger_mt` opens the file in its constructor; under a read-only
+  rootfs the open fails with EROFS and spdlog throws `spdlog_ex`,
+  crashing the service at startup. This is exactly the
+  `basic_logger_mt("name","logs/log.txt")` trap Doc 08 calls out.
+- **The fix** (`log-stdout`). A `stdout_color_sink_mt` with a structured
+  pattern (mirroring Doc 08's configure_logging). Writes nothing to
+  disk, so it runs cleanly under `--read-only`.
+- **Ephemerality** (`check-file <path>`). After a writable-rootfs
+  `log-file` write, a fresh container's `check-file` reports the file
+  absent — the prior container's ephemeral layer is gone.
+- **Scratch needs a tmpfs** (`scratch <dir>`). Fails under a read-only
+  rootfs with no tmpfs; succeeds with `--tmpfs /tmp`.
+
+**Dependency / build**
+
+- One light Conan dependency: `spdlog/1.14.1` (pulls fmt), both static,
+  so the runtime image needs only libstdc++. No gRPC chain, no system C
+  libraries — a quick one-binary compile. `CMAKE_POLICY_VERSION_MINIMUM=3.5`
+  set in the builder as future-proofing (G-67), consistent with r154.
+- `podman run` (not compose), like 05-threading, because the lesson is
+  per-container runtime flags (`--read-only`, `--tmpfs`,
+  `--read-only-tmpfs`).
+
+**Podman `--read-only-tmpfs` nuance.** Podman auto-mounts a tmpfs on
+`/tmp`, `/run`, `/var/tmp` under `--read-only` (default true). The demo
+disables it (`--read-only-tmpfs=false`) to show the bare behavior, then
+mounts a tmpfs explicitly. The file-logger act targets `/var/log`, which
+is never auto-tmpfs'd, so it fails reliably regardless of that default.
+The test's "scratch fails without a tmpfs" check is therefore kept SOFT
+(warns, never fails CI); the hard assertions (trap fails, stdout works,
+tmpfs scratch works, ephemerality) do not depend on the default.
+
+**Wiring (consistent example schema)**
+
+- Directory `examples/statelessness/08-ephemeral-filesystem/` (src/app.cpp,
+  CMakeLists, conanfile, conan.lock, Containerfile, demo.sh, README).
+- Jekyll page `_examples/statelessness-08-ephemeral-filesystem.md`
+  (order 209, permalink `/examples/statelessness-08-ephemeral-filesystem/`).
+- examples.html card after the 07-outbox card.
+- "Run this pattern" callout in Doc 08's *classic C++ traps* section,
+  right after the logging-defaults paragraph.
+- Test `scripts/test-stateless-demo-08-ephemeral-filesystem.sh` (build;
+  trap exits non-zero; stdout logging exits 0 with output; check-file
+  reports absent in a fresh container; tmpfs scratch succeeds; soft
+  no-tmpfs check). Aggregator now discovers seven stateless tests.
+- PRD §11 timeline row marked authored.
+
+**Verification status**
+
+- Sandbox: `app.cpp` compiled clean (`-Wall -Wextra`) against a minimal
+  fake spdlog header, and the pure-stdlib modes were RUN — `log-stdout`
+  emits the lines; `scratch /tmp` writes and reads back; `scratch /proc`
+  fails with exit 3; `check-file` on a missing path reports absent with
+  exit 2; `log-file` on an unwritable path hits the trap with exit 1.
+  Exit codes 0/1/2/3 are distinct and correct. Both scripts pass
+  `bash -n`; check-liquid clean.
+- Host-only (NOT yet built): the actual EROFS behavior under
+  `--read-only`, the real spdlog stdout JSON formatting, the
+  `--read-only-tmpfs` default, and the spdlog/fmt Conan build. Watch on
+  first build: spdlog/1.14.1 + fmt resolving cleanly under the gnu17-deps
+  profile; `--tmpfs /tmp:rw,size=16m` syntax accepted by the host podman.
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from

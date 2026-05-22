@@ -133,6 +133,15 @@ Several patterns common in C++ codebases produce writes that fail (under read-on
 
 The first is **logging library defaults**. spdlog's `basic_logger_mt("name", "logs/log.txt")` writes to a file; the file path is relative to the working directory; the working directory inside a container is usually `/`. The first write fails with `EROFS`. Other logging libraries — glog, log4cplus, even custom wrappers around `std::ofstream` — have the same trap. Configure to stdout explicitly; do not rely on defaults.
 
+> **Run this pattern.** A runnable companion lives at
+> [`examples/statelessness/08-ephemeral-filesystem/`]({{ '/examples/statelessness-08-ephemeral-filesystem/' | relative_url }}).
+> One spdlog binary run under different `podman run` flags: `log-file`
+> hits exactly the `basic_logger_mt` `EROFS` trap above under
+> `--read-only`; `log-stdout` is the `stdout_color_sink_mt` fix and runs
+> cleanly; `check-file` in a fresh container shows a writable-rootfs
+> write did not survive; and `scratch` succeeds only with a tmpfs mounted
+> (`--tmpfs /tmp`). Clone the repo, `cd` in, and `./demo.sh`.
+
 The second is **crash dumps**. Code that installs a signal handler to write a stacktrace or core dump to `/var/crash/` fails under read-only rootfs. The fix is either to write to a mounted volume (acceptable but requires deployment cooperation) or to stream the stacktrace to stderr, where the logging pipeline picks it up. C++23's `<stacktrace>` makes the latter cleaner:
 
 ```cpp
