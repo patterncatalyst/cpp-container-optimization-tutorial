@@ -32,7 +32,8 @@ fi
 echo "==> Building the image (compiles GoogleTest + runs the gtest gate)"
 $COMPOSE build
 
-run() { podman run --rm "$@" "$IMAGE"; }
+run() { podman run --rm "$@" "$IMAGE"; }            # cap flags BEFORE image (default CMD = helper-demo)
+run_cmd() { podman run --rm "$IMAGE" "$@"; }          # command AFTER image
 
 # ── Act 1: unit tests ─────────────────────────────────────────────────
 echo
@@ -40,7 +41,7 @@ echo "==> Act 1: unit tests (gtest over the pure parsers, in-container)"
 echo "    These pin the parsing logic deterministically — cpu.max / memory.max"
 echo "    / PSI strings — without needing a live cgroup filesystem."
 echo
-run /usr/local/bin/helper-tests 2>&1 | sed 's/^/    /'
+run_cmd /usr/local/bin/helper-tests 2>&1 | sed 's/^/    /'
 
 # ── Act 2: unconstrained ──────────────────────────────────────────────
 echo

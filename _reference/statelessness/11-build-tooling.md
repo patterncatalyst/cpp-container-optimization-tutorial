@@ -686,37 +686,37 @@ Test with GoogleTest (or Catch2) for unit tests. Use testcontainers-cpp or podma
 
 ## Cross-references
 
-Doc 02 referenced `std::expected` and `std::pmr::stacktrace` (C++23). The toolchain table in this document covers the GCC/Clang version requirements.
+[Doc 02](../02-raii/) referenced `std::expected` and `std::pmr::stacktrace` (C++23). The toolchain table in this document covers the GCC/Clang version requirements.
 
-Doc 03 referenced `std::flat_map` (C++23). Until libstdc++ GCC 15 / libc++ catches up, Abseil's `flat_hash_map` or `btree_map` is the fallback.
+[Doc 03](../03-pmr/) referenced `std::flat_map` (C++23). Until libstdc++ GCC 15 / libc++ catches up, Abseil's `flat_hash_map` or `btree_map` is the fallback.
 
-Doc 04 referenced the cgroup-detection helper. Full source in this document under `vendor/cgroup_helper/`.
+[Doc 04](../04-process-scoped-state/) referenced the cgroup-detection helper. Full source in this document under `vendor/cgroup_helper/`.
 
-Doc 05 referenced the PSI reader as a sidebar helper. Full interface in this document under `vendor/psi_reader/`.
+[Doc 05](../05-threading/) referenced the PSI reader as a sidebar helper. Full interface in this document under `vendor/psi_reader/`.
 
-Doc 06 covered the C++ startup tax and `constinit`; the toolchain table in this document confirms the version requirements.
+[Doc 06](../06-twelve-factor/) covered the C++ startup tax and `constinit`; the toolchain table in this document confirms the version requirements.
 
-Doc 07 referenced the backing-service Conan recipes. This document lists them in the library inventory.
+[Doc 07](../07-state-externalization/) referenced the backing-service Conan recipes. This document lists them in the library inventory.
 
-Doc 08 referenced spdlog configuration for stdout logging. This document covers the Conan recipe and CMake wiring.
+[Doc 08](../08-ephemeral-filesystem/) referenced spdlog configuration for stdout logging. This document covers the Conan recipe and CMake wiring.
 
-Doc 09 referenced `grpc_health_probe` for the `HEALTHCHECK` directive. The Containerfile in this document shows the install step.
+[Doc 09](../09-health-checks/) referenced `grpc_health_probe` for the `HEALTHCHECK` directive. The Containerfile in this document shows the install step.
 
-Doc 10 referenced the OTel context propagator. Full source in this document under `vendor/otel_propagator/`.
+[Doc 10](../10-grpc-microservices/) referenced the OTel context propagator. Full source in this document under `vendor/otel_propagator/`.
 
 ## Annotated bibliography
 
-**Conan 2 documentation (`docs.conan.io`).** The reference for `conanfile.py` syntax, profile management, and CMake integration. Worth reading the migration-from-1.x section if you have a v1 codebase.
+**Conan 2 documentation ([docs.conan.io](https://docs.conan.io)).** The reference for `conanfile.py` syntax, profile management, and CMake integration. Worth reading the migration-from-1.x section if you have a v1 codebase.
 
-**CMake documentation (`cmake.org/cmake/help/latest/`).** The `cmake.tools.cmake.cmaketoolchain` and `cmake.tools.cmake.cmakedeps` Conan generators are documented under the CMake side as well; reading both sides clarifies which tool owns what.
+**CMake documentation ([cmake.org/cmake/help/latest/](https://cmake.org/cmake/help/latest/)).** The `cmake.tools.cmake.cmaketoolchain` and `cmake.tools.cmake.cmakedeps` Conan generators are documented under the CMake side as well; reading both sides clarifies which tool owns what.
 
-**GCC release notes for versions 12, 13, 14, 15.** Each release adds C++23 features; the release notes are the authoritative source for "which version has what." Linked from `gcc.gnu.org/projects/cxx-status.html` (and `libstdc++.html` for the standard-library side).
+**GCC release notes for versions 12, 13, 14, 15.** Each release adds C++23 features; the release notes are the authoritative source for "which version has what." Linked from [gcc.gnu.org/projects/cxx-status.html](https://gcc.gnu.org/projects/cxx-status.html) (and `libstdc++.html` for the standard-library side).
 
-**Clang C++ Status (`clang.llvm.org/cxx_status.html`) and libc++ status (`libcxx.llvm.org/Status/Cxx23.html`).** The Clang/libc++ counterpart of GCC's pages. Useful for cross-checking feature availability.
+**Clang C++ Status ([clang.llvm.org/cxx_status.html](https://clang.llvm.org/cxx_status.html)) and libc++ status ([libcxx.llvm.org/Status/Cxx23.html](https://libcxx.llvm.org/Status/Cxx23.html)).** The Clang/libc++ counterpart of GCC's pages. Useful for cross-checking feature availability.
 
-**OCI Image Specification (`github.com/opencontainers/image-spec`).** Background reading for the Containerfile pattern; understanding the layered image model informs decisions about what goes in build stages vs runtime stages.
+**OCI Image Specification ([github.com/opencontainers/image-spec](https://github.com/opencontainers/image-spec)).** Background reading for the Containerfile pattern; understanding the layered image model informs decisions about what goes in build stages vs runtime stages.
 
-**The gRPC ecosystem `grpc_health_probe` repository (`github.com/grpc-ecosystem/grpc-health-probe`).** Documentation for the health-probe binary used in the Containerfile. The releases page is where the prebuilt binary comes from.
+**The gRPC ecosystem `grpc_health_probe` repository ([github.com/grpc-ecosystem/grpc-health-probe](https://github.com/grpc-ecosystem/grpc-health-probe)).** Documentation for the health-probe binary used in the Containerfile. The releases page is where the prebuilt binary comes from.
 
 **Google's "Software Engineering at Google" (Winters, Manshreck, Wright).** Not directly about C++ build tooling, but the chapters on dependency management and on build systems frame the Conan-vs-system-packages tradeoffs that this document operationalizes.
 
