@@ -24184,6 +24184,48 @@ example arc (02-11) is now built and host-verified end to end** — RAII, PMR,
 process-scoped state, threading, state externalization, outbox, ephemeral
 filesystem, health checks, the gRPC capstone, and the build-tooling helpers.
 
+### 2026-05-22 — r175: second PPTX — the statelessness compendium deck
+
+Built a SECOND presentation deck dedicated to the statelessness compendium
+(Docs 01–11), companion to the main 71-slide performance deck. The existing
+deck (tools/build-pptx.py + tools/sections.py + presentation/
+cpp-container-tutorial.pptx) is UNTOUCHED — this is additive.
+
+New files:
+- tools/sections_statelessness.py — the SECTIONS content data (11 sections =
+  Docs 01–11), same schema as sections.py (num/label/title/tagline/
+  divider_notes/slides[]; slide kinds content / content-code / diagram /
+  stat-row / demo-cue; para()/bullet()/heading() helpers; same C colour
+  class).
+- tools/build-statelessness-pptx.py — the generator. Loads build-pptx.py via
+  importlib (its filename has a hyphen, so it can't be imported normally) and
+  reuses ALL of its slide builders, theme, fonts and primitives. Supplies its
+  own statelessness title / agenda / closing slides; reads SECTIONS from
+  sections_statelessness; writes presentation/cpp-statelessness-compendium
+  .pptx + presentation/build-notes-statelessness.md.
+- tools/build-statelessness-deck.sh — convert diagrams/statelessness/*.svg →
+  /tmp/diagrams-png/*.jpg (soffice + pdftoppm, same cache as build-deck.sh,
+  no filename collisions) then run the generator. chmod +x.
+- presentation/cpp-statelessness-compendium.pptx — 67 slides (the main deck
+  is 71; "same length"). 1 stat-row, 39 content, 5 content-code, 8 demo-cue,
+  + 11 section dividers + title/agenda/closing. All 11 compendium diagrams
+  (diagrams/statelessness/01..11) embedded, one on each section's opening
+  content slide. 8 demo cues — the runnable companions for examples 02, 03,
+  05, 07, 08, 09, 10, 11 — each with the green DEMO badge, the ./demo.sh
+  command, and the site URL.
+
+Built AND visually QA'd entirely in the sandbox (which has python-pptx 1.0.2,
+Pillow, soffice and pdftoppm): rendered the deck to JPGs and eyeballed the
+title, stat-row, content+diagram, content-code, demo-cue, and divider slides
+— all on-brand and correct. Two fixes during the build: stat-row colours must
+be RGBColor constants (C.ACCENT_*), not raw (r,g,b) tuples — a tuple makes
+add_text raise; and §9's title was shortened to "Health checks & graceful
+shutdown" so it doesn't clip in the content-slide header bar.
+
+Reproducible on the host with: ./tools/build-statelessness-deck.sh
+(prereqs identical to the main deck: python-pptx, Pillow, soffice,
+poppler-utils).
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from
