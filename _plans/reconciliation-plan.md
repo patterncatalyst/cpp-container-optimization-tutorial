@@ -23717,6 +23717,45 @@ the retry loop swallows (the same run later logs `published 1 event(s)`).
 Optionally silenced later with a relay-side schema guard or a brief
 retry-quiet window.
 
+### 2026-05-21 — r160: 07-outbox follow-ups — relay schema-race guard, F_COPY pitfall prose, next-example survey
+
+Three follow-ups after the r159 green run, no new failures.
+
+1. **Relay cold-start race silenced (relay.cpp).** The carryover noted
+   in r159 — relay logging `relation "outbox" does not exist` before the
+   producer's migration runs — fixed by having the relay WAIT for the
+   table rather than create it. Added `wait_for_outbox_table()`: polls
+   `SELECT to_regclass('outbox')` (returns NULL, not an error, for a
+   missing table) every 500ms, bounded to 60 attempts, called after pool
+   connect and before the poll loop. Deliberately does NOT create the
+   table — the producer owns the schema (order_svc.cpp::migrate), and
+   duplicating the DDL in the relay would blur the ownership story the
+   example teaches. Header-only change to a .cpp; rebuilds the relay
+   object on next build.
+
+2. **F_COPY trap written up as a §14 pitfall (_docs/14-pitfalls.md).**
+   Added "The async-buffer lifetime trap" between "Silent abstraction
+   overhead" and "Container build slowness": the librdkafka non-copying
+   produce + caller-local buffer use-after-free, generalized to the rule
+   "when a C API takes a pointer and defers the read, you own the buffer
+   until the API is done — not until your function returns." Covers the
+   three pitfall-properties (compiles + passes naive same-scope test;
+   SSO masks it for short keys; corruption surfaces components downstream
+   at the Postgres UTF-8 check). Cross-referenced from the "why these are
+   pitfalls" framing list and the Demo table (pointing at the 07 example).
+
+3. **Next-example survey.** Compendium reference docs exist through 11;
+   runnable examples exist + are host-verified through 08
+   (08-ephemeral was r155.1, a clean first-try pass). Remaining to build:
+   09-health-checks (NEXT), 10-grpc-microservices (the capstone), and
+   11-build-tooling. No example dirs exist for 09/10/11 yet.
+
+Files changed: `src/relay.cpp`, `_docs/14-pitfalls.md`, this plan.
+(r160 tarball also re-ships the r159 `src/kafka.hpp` and `compose.yml`
+so it applies cleanly on top of any prior state.) No host re-verification
+needed for the prose; the relay guard will be exercised on the next
+07-outbox run.
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from

@@ -232,6 +232,95 @@ function you didn't intend to be visible (`std::function::operator()`,
 `__atomic_fetch_add`, `Shape::~Shape()`). Once you know what to
 look for, the gap closes quickly.
 
+## The async-buffer lifetime trap
+
+This one is subtler than the abstraction taxes above, because it
+isn't a *cost* — it's a *correctness* bug that only appears once
+the timing is wrong, which makes it a textbook pitfall. It bit
+the [outbox-pattern reference example](../../reference/statelessness/07-state-externalization/)
+during host verification, and the failure mode is worth studying
+because the same shape recurs across every C API that takes a
+buffer "by reference now, reads it later."
+
+The C API in question was librdkafka, but the pattern is general.
+A producer wrapper enqueues a Kafka message:
+
+```cpp
+// Looks fine. Pass the payload's bytes and length; send later.
+void produce(const std::string& topic, const std::string& key,
+             const std::string& value) {
+    rd_kafka_producev(
+        rk_, RD_KAFKA_V_TOPIC(topic.c_str()),
+        RD_KAFKA_V_KEY(key.data(), key.size()),
+        RD_KAFKA_V_VALUE(const_cast<char*>(value.data()), value.size()),
+        RD_KAFKA_V_END);
+}
+```
+
+And the caller — a relay loop — looks equally fine:
+
+```cpp
+for (int i = 0; i < n; ++i) {
+    const std::string event_id = PQgetvalue(rows, i, 1);
+    const std::string payload  = PQgetvalue(rows, i, 2);
+    producer.produce(topic, event_id, payload);   // enqueue
+}                                                  // payload destroyed HERE
+producer.flush(5000);                              // ...but the send happens HERE
+```
+
+The bug: `rd_kafka_producev` does **not** copy the payload by
+default. It stores the caller's pointer and reads the bytes
+*later*, asynchronously, when `flush()` actually transmits to the
+broker. But `payload` is a loop-local `std::string` that is
+destroyed at the end of each iteration — long before `flush()`.
+By send time, librdkafka dereferences freed heap memory and ships
+whatever now occupies it. Downstream, PostgreSQL rejected the
+garbage with `invalid byte sequence for encoding "UTF8": 0xde
+0x1f` — bytes that are simply reused heap, not anything the
+program ever wrote.
+
+Three properties make it a pitfall, not an ordinary bug:
+
+1. **It compiles cleanly and passes a naive test.** Send one
+   message and flush immediately, inside the same scope, and the
+   buffer is still alive — it works. The bug needs the buffer to
+   die *between* enqueue and send, which only the batch-then-flush
+   shape produces.
+2. **Short strings hide it.** The `event_id` survived where the
+   `payload` didn't, purely because of `std::string`'s small-string
+   optimization: a short key lives inline in the string object's
+   own storage, so it isn't on the heap that got reused. The
+   longer payload spilled to the heap and was corrupted. Same code,
+   two different outcomes, decided by string length.
+3. **The corruption surfaces three components away.** The relay
+   produced it, Kafka transported it, the consumer read it, and
+   PostgreSQL was the one that finally complained. Nothing in the
+   relay's own logs looked wrong — it cheerfully reported
+   `published 1 event(s)`.
+
+The fix is one flag — tell librdkafka to copy at enqueue:
+
+```cpp
+rd_kafka_producev(
+    rk_, RD_KAFKA_V_TOPIC(topic.c_str()),
+    RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),   // copy now; caller's buffer can die
+    RD_KAFKA_V_KEY(key.data(), key.size()),
+    RD_KAFKA_V_VALUE(const_cast<char*>(value.data()), value.size()),
+    RD_KAFKA_V_END);
+```
+
+The general rule: **when a C API takes a pointer and defers the
+read, you own the buffer until the API is done with it — not until
+your function returns.** Either keep the buffer alive across the
+deferred operation (hoist it out of the loop, or store it in a
+container that outlives `flush()`), or tell the API to take its
+own copy. The default for most "enqueue now, transmit later" APIs
+is no-copy, precisely because the copy is the expensive part they
+want to let you avoid; that performance default is also the
+lifetime trap. ASan with a heap-use-after-free report points
+straight at it; without ASan, the symptom is corrupted-but-
+plausible data appearing somewhere far downstream.
+
 ## Container build slowness
 
 "The CI build takes 7 minutes and the bare-metal build takes
@@ -440,6 +529,8 @@ That's the shape of a pitfall:
   cache to invalidate.
 - Tutorial-default security works in development because there's
   no policy enforcement.
+- The async-buffer lifetime trap works in a smoke test that sends
+  and flushes in one scope, because the buffer hasn't died yet.
 
 The defense against each is **measure on something closer to
 the deployment target**. Run benchmarks on hardware that
@@ -469,6 +560,7 @@ illustrated by a demo elsewhere in the tutorial:
 | EPERM/EACCES security rubric | demo-03 (the io_uring + container security story) |
 | Tutorial vs production security | demo-03's `compose.production.yml` |
 | perf symbol resolution | demo-04 + demo-06 (perf record against containerized processes) |
+| Async-buffer lifetime (librdkafka F_COPY) | [statelessness/07-outbox-pattern](../../reference/statelessness/07-state-externalization/) (caught live during host verification) |
 
 ## For deeper coverage
 

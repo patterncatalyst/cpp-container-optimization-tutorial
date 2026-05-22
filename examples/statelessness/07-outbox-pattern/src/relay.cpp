@@ -60,6 +60,29 @@ const char* topic() {
     return t ? t : "orders";
 }
 
+// Wait until the outbox table exists before polling. The PRODUCER owns
+// the schema (order_svc.cpp::migrate creates orders/outbox/projection);
+// the relay must not create it, or the "who owns the schema" story blurs.
+// On a cold start the relay can connect before the producer has run its
+// migration, so its first SELECT would hit `relation "outbox" does not
+// exist`. to_regclass() returns NULL (not an error) for a missing table,
+// so we poll it until the producer's migration lands. Bounded so a truly
+// absent table still surfaces rather than hanging forever.
+void wait_for_outbox_table(PgPool& pool) {
+    for (int attempt = 1; attempt <= 60 && !g_stop; ++attempt) {
+        ScopedConnection conn = pool.acquire(std::chrono::milliseconds(1000));
+        PgResultPtr r(PQexec(conn.get(), "SELECT to_regclass('outbox')"));
+        if (r && PQresultStatus(r.get()) == PGRES_TUPLES_OK &&
+            PQntuples(r.get()) == 1 && !PQgetisnull(r.get(), 0, 0)) {
+            return;  // table exists
+        }
+        if (attempt == 1) {
+            log_line("waiting for the producer to create the outbox table ...");
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
+}
+
 // One pass of the poller. Returns the number of events published.
 int publish_batch(PgPool& pool, KafkaProducer& producer) {
     ScopedConnection conn = pool.acquire(std::chrono::milliseconds(1000));
@@ -130,6 +153,9 @@ int run_poller() {
     if (!pool) { log_line("could not connect to PostgreSQL; giving up"); return 1; }
     log_line("connected; publishing topic=" + std::string(topic()) +
              " brokers=" + brokers);
+
+    // Avoid the cold-start race against the producer's migration.
+    wait_for_outbox_table(*pool);
 
     KafkaProducer producer(brokers);
 
