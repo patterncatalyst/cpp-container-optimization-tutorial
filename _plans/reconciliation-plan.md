@@ -23638,6 +23638,85 @@ No other changes. This is the only pre-emptive fix; the remaining 07
 host unknowns (EPEL/librdkafka on the ubi-minimal runtime, the image tag,
 pkg_check_modules finding rdkafka.pc) can only be settled by building.
 
+### 2026-05-21 — r159: 07-outbox host-verified; three traps fixed (broker ×2, librdkafka use-after-free)
+
+First host build + run of 07-outbox-pattern on Fedora 44 (rootless
+podman + podman compose). The r156 pre-emptive unknowns all came back
+clean: the Conan gRPC/protobuf chain built (~330s cold), all four
+binaries linked, and the EPEL `librdkafka` install on the ubi-minimal
+runtime stage worked — `librdkafka-1.6.1` and `libpq-13.23` both
+resolved from UBI AppStream + EPEL, and `pkg_check_modules` found
+`rdkafka.pc`. The r156 entrypoint override held. Three NEW failures
+surfaced, each gated the next, and each is an instructive trap:
+
+1. **KRaft `advertised.listeners` rejected `0.0.0.0`.** `StorageTool`
+   (the `kafka-storage.sh format` step, before the broker even starts)
+   died with `advertised.listeners cannot use the nonroutable
+   meta-address 0.0.0.0`. Cause: the `CONTROLLER` listener was declared
+   in `listeners` (bind `0.0.0.0:9093`, correct) and named via
+   `controller.listener.names`, but had no entry in
+   `advertised.listeners` — so Kafka fell back to advertising the bind
+   address. Fix: add `CONTROLLER://kafka:9093` to `advertised.listeners`.
+   (You don't normally advertise a controller listener, but for a
+   single-node standalone KRaft broker a routable entry silences the
+   validator cleanly.) The `0.0.0.0` entries in `listeners` are correct
+   and stay — those are bind addresses.
+
+2. **JVM fatal: GC log dir not writable.** With the config fixed,
+   StorageTool formatted storage, then the broker exited 1:
+   `mkdir: cannot create directory '/opt/kafka/bin/../logs': Permission
+   denied` → `Invalid -Xlog option ... Could not create the Java Virtual
+   Machine`. Cause: the Strimzi image runs as a non-root user and
+   `/opt/kafka` is read-only (correct hardening), but Kafka's launch
+   scripts default to writing server + GC logs under `/opt/kafka/logs`,
+   and a bad `-Xlog` target is fatal to the JVM. Fix: set
+   `GC_LOG_ENABLED=false` (removes the `-Xlog` flag entirely) and
+   `LOG_DIR=/tmp/kafka-logs` (redirects the log4j server log onto the
+   writable `/tmp` tmpfs the container already mounts). Both env vars on
+   the kafka service.
+
+3. **librdkafka use-after-free → invalid UTF-8 in the consumer.** With
+   the broker healthy, Act 1 succeeded but Act 2 failed: the consumer's
+   projection insert errored `invalid byte sequence for encoding "UTF8":
+   0xde 0x1f` on `$2` (the payload). Root cause was NOT in the consumer
+   or the SQL — it was in `kafka.hpp::produce()`. `rd_kafka_producev`
+   does not copy the payload by default; it holds the caller's pointer
+   and reads it later, asynchronously, at flush() time. The relay's call
+   site (relay.cpp) passes loop-local `std::string`s for `event_id` and
+   `payload`, which are destroyed at the end of each loop iteration —
+   while the actual send happens at `producer.flush()` AFTER the loop.
+   So librdkafka shipped freed-heap bytes (`0xde 0x1f`), which Postgres
+   then rejected as non-UTF-8. The `event_id` survived only via
+   std::string SSO (short, stored inline, not on the heap), masking the
+   bug for the key while corrupting the longer payload. Fix: add
+   `RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY)` so librdkafka copies at
+   enqueue and the caller's buffer can die immediately. This is a
+   textbook async-lifetime trap and a strong teaching example for the
+   tutorial's memory/lifetime material.
+
+After all three: full green run. Act 1 atomic order+outbox write
+(order_id=1). Act 2 relay published, consumer applied, projection row
+held the clean JSON payload, outbox flipped to published, kcat confirmed
+the well-formed message on the topic from the host. Act 3 injected a
+duplicate event_id; consumer logged `applied` then `duplicate ... ignored
+(idempotent)`; projection held exactly one row — at-least-once delivery +
+idempotent consumer = exactly-once effect, demonstrated live.
+
+Files changed: `compose.yml` (kafka: advertised.listeners + LOG_DIR/
+GC_LOG_ENABLED), `src/kafka.hpp` (F_COPY). No changes to relay.cpp,
+consumer.cpp, order_svc.cpp, or the SQL — the C++ logic and schema were
+correct; the bug was purely in the producer wrapper's buffer lifetime.
+
+Host: Fedora 44, rootless podman + podman compose, Strimzi kafka
+`latest-kafka-3.9.0` (KRaft, single-node), ubi9/ubi-minimal:9.5 runtime.
+
+Carryover (cosmetic, not yet fixed): on a cold start the relay can log
+`relation "outbox" does not exist` once or twice before the producer's
+startup `CREATE TABLE IF NOT EXISTS` runs — a harmless first-pass race
+the retry loop swallows (the same run later logs `published 1 event(s)`).
+Optionally silenced later with a relay-side schema guard or a brief
+retry-quiet window.
+
 ## Known divergences from the PRD
 
 A running list of things the shipped tutorial does differently from

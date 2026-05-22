@@ -43,6 +43,15 @@ services:
     # mode by formatting storage and starting the broker ourselves.
     image: quay.io/strimzi/kafka:latest-kafka-3.9.0
     container_name: stateless-07ob-kafka
+    # The Strimzi image runs as a non-root user and /opt/kafka is not
+    # writable (correct hardening). Kafka's launch scripts default to
+    # writing server + GC logs under /opt/kafka/logs, which fails with
+    # "Permission denied" — and a bad -Xlog target is fatal to the JVM.
+    # Send logs to the writable /tmp tmpfs and turn off GC logging so the
+    # -Xlog flag is never added.
+    environment:
+      LOG_DIR: "/tmp/kafka-logs"
+      GC_LOG_ENABLED: "false"
     # Override the entrypoint explicitly: the Strimzi image is built to be
     # driven by the operator and may carry its own ENTRYPOINT, which would
     # otherwise turn our command into mere arguments. `sh -c <script>`
@@ -59,7 +68,7 @@ services:
         node.id=1
         controller.quorum.voters=1@localhost:9093
         listeners=INTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:19092
-        advertised.listeners=INTERNAL://kafka:9092,EXTERNAL://localhost:19092
+        advertised.listeners=INTERNAL://kafka:9092,CONTROLLER://kafka:9093,EXTERNAL://localhost:19092
         controller.listener.names=CONTROLLER
         listener.security.protocol.map=CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
         inter.broker.listener.name=INTERNAL

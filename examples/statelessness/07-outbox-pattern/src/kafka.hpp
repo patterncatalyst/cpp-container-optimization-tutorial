@@ -63,10 +63,20 @@ public:
     KafkaProducer& operator=(const KafkaProducer&) = delete;
 
     // Enqueue a message. Delivery is confirmed by flush().
+    //
+    // RD_KAFKA_MSG_F_COPY is essential here: by default rd_kafka_producev
+    // does NOT copy the payload — it holds the caller's pointer and reads
+    // it later, asynchronously, at send/flush time. The relay's call site
+    // passes loop-local std::strings that are destroyed at the end of each
+    // iteration, well before flush(), so without F_COPY librdkafka reads
+    // freed memory and ships garbage bytes (which then fail Postgres's
+    // UTF-8 validation in the consumer). F_COPY makes librdkafka take its
+    // own copy at enqueue, so the caller's buffer can die immediately.
     void produce(const std::string& topic, const std::string& key,
                  const std::string& value) {
         const rd_kafka_resp_err_t err = rd_kafka_producev(
             rk_, RD_KAFKA_V_TOPIC(topic.c_str()),
+            RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
             RD_KAFKA_V_KEY(key.data(), key.size()),
             RD_KAFKA_V_VALUE(const_cast<char*>(value.data()), value.size()),
             RD_KAFKA_V_END);
