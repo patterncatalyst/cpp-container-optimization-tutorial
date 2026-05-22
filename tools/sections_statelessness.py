@@ -60,12 +60,12 @@ SECTIONS = [
 # ============================================================================
 {
     "num": 1,
-    "label": "Doc 01",
+    "label": "§1",
     "title": "Statelessness as deployment posture",
     "tagline": "Statelessness is not a code property — it's what the orchestrator can assume.",
     "divider_notes": (
         "This compendium is the architectural spine under the performance "
-        "talk. The thesis of Doc 1 sets the vocabulary for everything that "
+        "talk. The thesis here sets the vocabulary for everything that "
         "follows: statelessness isn't something you can read off a source "
         "file. The same C++ binary can be stateless or stateful depending on "
         "what state it holds and where. What makes a service 'stateless' is a "
@@ -111,10 +111,10 @@ SECTIONS = [
             "notes": (
                 "The three-scope vocabulary is used in every later document, "
                 "so it's worth fixing now. Request scope is the per-RPC "
-                "lifetime — RAII makes this concrete (Doc 2). Process scope is "
+                "lifetime — RAII makes this concrete (the RAII section). Process scope is "
                 "the process lifetime — pools, channels, parsed config, owned "
-                "in main() (Doc 4). Deploy-time scope is everything outside the "
-                "process — the externalized authoritative state (Doc 7).\n\n"
+                "in main() (process scope). Deploy-time scope is everything outside the "
+                "process — the externalized authoritative state (state externalization).\n\n"
                 "The litmus test for statelessness: if you SIGKILL a replica, "
                 "is anything authoritative lost? If the answer is no, the "
                 "service is stateless regardless of how much process-scoped "
@@ -128,10 +128,10 @@ SECTIONS = [
                         color=C.ACCENT_RED),
                 bullet("\"The box has N cores\" — the cgroup quota does not equal nproc"),
                 bullet("\"Memory is the machine's RAM\" — memory.max is the real ceiling"),
-                bullet("\"The filesystem persists\" — the rootfs is ephemeral (Doc 8)"),
-                bullet("\"My thread pool should match the CPU count\" — it should match the cgroup (Doc 5)"),
-                bullet("\"Local cache is free\" — it desyncs across replicas (Doc 7)"),
-                bullet("\"Restart is exceptional\" — under orchestration it's routine (Doc 9)"),
+                bullet("\"The filesystem persists\" — the rootfs is ephemeral (ephemeral filesystem)"),
+                bullet("\"My thread pool should match the CPU count\" — it should match the cgroup (threading)"),
+                bullet("\"Local cache is free\" — it desyncs across replicas (state externalization)"),
+                bullet("\"Restart is exceptional\" — under orchestration it's routine (health & shutdown)"),
             ],
             "notes": (
                 "Each of these intuitions is correct on a dedicated box and "
@@ -157,7 +157,7 @@ SECTIONS = [
                      size=Pt(15), italic=True, color=C.TEXT_MUTED),
             ],
             "notes": (
-                "The State Architecture Table is the practical heart of Doc 4, "
+                "The State Architecture Table is the practical heart of the process-scope section, "
                 "introduced here. The exercise is mechanical and clarifying: "
                 "list every piece of state your service touches, and for each "
                 "one decide its scope deliberately. Anything authoritative goes "
@@ -174,7 +174,7 @@ SECTIONS = [
 # ============================================================================
 {
     "num": 2,
-    "label": "Doc 02",
+    "label": "§2",
     "title": "RAII as the foundation",
     "tagline": "Bind resource lifetime to scope; the destructor is the contract.",
     "divider_notes": (
@@ -214,7 +214,7 @@ SECTIONS = [
                 bullet("Raw owning pointers — leak on the exception path"),
                 bullet("Manual try/catch cleanup — misses paths RAII wouldn't"),
                 bullet("Missing noexcept moves — silent pessimization or UB"),
-                bullet("Locks held across co_await — UB after suspension (Doc 5)"),
+                bullet("Locks held across co_await — UB after suspension (the threading section)"),
             ],
             "code": (
                 "// The shape that always cleans up:\n"
@@ -304,7 +304,7 @@ SECTIONS = [
 # ============================================================================
 {
     "num": 3,
-    "label": "Doc 03",
+    "label": "§3",
     "title": "PMR: request brings its own memory",
     "tagline": "monotonic_buffer_resource as architectural statelessness.",
     "divider_notes": (
@@ -339,7 +339,7 @@ SECTIONS = [
                 heading("The one rule PMR makes easy to break", color=C.ACCENT_RED),
                 bullet("A pmr container must not outlive its memory_resource"),
                 bullet("Return a pmr::string built in a request arena → dangling after the arena dies"),
-                bullet("Caught immediately under AddressSanitizer (dev profile, Doc 11)"),
+                bullet("Caught immediately under AddressSanitizer (the dev profile)"),
                 para("Fix: return owning std:: types across the scope "
                      "boundary, or keep the value inside the arena's lifetime.",
                      size=Pt(15), italic=True, color=C.TEXT_MUTED),
@@ -350,7 +350,7 @@ SECTIONS = [
                 "the RequestContext; if you hand a pmr::string built in it back "
                 "to a caller that outlives the request, you've got a "
                 "use-after-free. ASan catches it on the first run — which is "
-                "why the dev profile in Doc 11 wires ASan in by default."),
+                "why the dev profile wires ASan in by default."),
         },
         {
             "kind": "content",
@@ -419,7 +419,7 @@ SECTIONS = [
 # ============================================================================
 {
     "num": 4,
-    "label": "Doc 04",
+    "label": "§4",
     "title": "Process-scoped state, owned in main()",
     "tagline": "Some state legitimately lives for the process — own it explicitly.",
     "divider_notes": (
@@ -455,7 +455,7 @@ SECTIONS = [
                 heading("The cgroup is the budget", color=C.ACCENT_ORANGE),
                 bullet("Bounded caches sized against memory.max, not host RAM"),
                 bullet("An unbounded cache is a slow OOM under a memory cgroup"),
-                bullet("Pool sizes and arena counts scale from the CPU quota (Doc 5)"),
+                bullet("Pool sizes and arena counts scale from the CPU quota (threading)"),
                 bullet("Bounded structures everywhere: LRU caps, pool maxima, queue limits"),
             ],
             "notes": (
@@ -464,7 +464,7 @@ SECTIONS = [
                 "in-process cache that's fine on a 256 GB box becomes a slow "
                 "OOMKill under a 512 MB memory cgroup. Everything process-scoped "
                 "should be bounded and sized against the cgroup, which means "
-                "reading the cgroup — the helper we ship in Doc 11."),
+                "reading the cgroup — the helper we ship in the build-tooling section."),
         },
         {
             "kind": "content-code",
@@ -525,7 +525,7 @@ SECTIONS = [
 # ============================================================================
 {
     "num": 5,
-    "label": "Doc 05",
+    "label": "§5",
     "title": "Threading under a CPU quota",
     "tagline": "hardware_concurrency() lies; the cgroup tells the truth.",
     "divider_notes": (
@@ -621,7 +621,7 @@ SECTIONS = [
                 bullet("Background workers take a stop_token; loop while !stop_requested()"),
                 bullet("std::jthread joins on destruction — no detached threads outliving main()"),
                 bullet("Shutdown requests stop, the worker drains, the jthread joins cleanly"),
-                bullet("Ties directly into the graceful-shutdown sequence (Doc 9)"),
+                bullet("Ties directly into the graceful-shutdown sequence (health & shutdown)"),
             ],
             "notes": (
                 "std::jthread and std::stop_token are the C++20 tools for clean "
@@ -629,7 +629,7 @@ SECTIONS = [
                 "out of scope, so you can't accidentally leak a thread past "
                 "main(); and the stop_token gives cooperative cancellation — "
                 "the worker checks stop_requested() and exits its loop. The "
-                "shutdown sequence in Doc 9 uses exactly this to drain the "
+                "the health-and-shutdown sequence uses exactly this to drain the "
                 "outbox relay and other background work."),
         },
         {
@@ -656,7 +656,7 @@ SECTIONS = [
 # ============================================================================
 {
     "num": 6,
-    "label": "Doc 06",
+    "label": "§6",
     "title": "12-Factor adapted to C++",
     "tagline": "Most factors map directly; three collide with C++ idioms.",
     "divider_notes": (
@@ -697,7 +697,7 @@ SECTIONS = [
                 bullet("Processes: the Meyers singleton hides ownership — inject instead"),
                 bullet("Disposability: fast startup and clean shutdown are features under orchestration"),
                 bullet("The C++ startup tax — static initialization order, constinit to tame it"),
-                bullet("Staged startup: NOT_SERVING → warm → SERVING (Doc 9)"),
+                bullet("Staged startup: NOT_SERVING → warm → SERVING (health & shutdown)"),
             ],
             "notes": (
                 "The Processes factor collides with the Meyers singleton — the "
@@ -742,9 +742,9 @@ SECTIONS = [
             "title": "The other factors, briefly",
             "body": [
                 heading("Most of 12-factor maps cleanly", color=C.ACCENT_BLUE),
-                bullet("Logs → stdout, the collector owns persistence (Doc 8)"),
-                bullet("Backing services → attached resources, swappable by config (Doc 7)"),
-                bullet("Build/release/run → the multi-stage Containerfile + a lockfile (Doc 11)"),
+                bullet("Logs → stdout, the collector owns persistence (ephemeral filesystem)"),
+                bullet("Backing services → attached resources, swappable by config (state externalization)"),
+                bullet("Build/release/run → the multi-stage Containerfile + a lockfile (build tooling)"),
                 bullet("Port binding, concurrency, dev/prod parity → natural fits for a C++ service"),
             ],
             "notes": (
@@ -764,7 +764,7 @@ SECTIONS = [
 # ============================================================================
 {
     "num": 7,
-    "label": "Doc 07",
+    "label": "§7",
     "title": "State externalization",
     "tagline": "What goes outside the process, and how to reach it safely.",
     "divider_notes": (
@@ -865,14 +865,14 @@ SECTIONS = [
             "kind": "content",
             "title": "The cache counterexample, fixed",
             "body": [
-                heading("Why the local cache from Doc 1 was the bug", color=C.ACCENT_RED),
+                heading("Why the local-cache counterexample was the bug", color=C.ACCENT_RED),
                 bullet("An in-process cache of authoritative data desyncs across replicas"),
                 bullet("Replica A updates; replica B serves a stale read — non-deterministic"),
                 bullet("Fix: the cache tier is deploy-time scope, shared and authoritative"),
                 bullet("In-process caches are fine ONLY for derived/immutable data"),
             ],
             "notes": (
-                "This closes the loop on Doc 1's counterexample. A local "
+                "This closes the loop on the earlier cache counterexample. A local "
                 "in-process cache of authoritative data is the classic "
                 "statelessness violation: two replicas hold divergent views, "
                 "and which answer you get depends on which replica you hit. The "
@@ -908,7 +908,7 @@ SECTIONS = [
 # ============================================================================
 {
     "num": 8,
-    "label": "Doc 08",
+    "label": "§8",
     "title": "The ephemeral filesystem",
     "tagline": "The container rootfs is scratch space — treat it that way.",
     "divider_notes": (
@@ -1003,7 +1003,7 @@ SECTIONS = [
 # ============================================================================
 {
     "num": 9,
-    "label": "Doc 09",
+    "label": "§9",
     "title": "Health checks & graceful shutdown",
     "tagline": "Three probes, the gRPC health protocol, graceful shutdown.",
     "divider_notes": (
@@ -1041,7 +1041,7 @@ SECTIONS = [
                 bullet("A control thread flips readiness NOT_SERVING — the LB drains us"),
                 bullet("server->Shutdown(deadline) lets in-flight RPCs finish"),
                 bullet("Reverse-order destruction in main() — pools, channels, config"),
-                bullet("std::stop_token cancels background workers cleanly (Doc 5)"),
+                bullet("std::stop_token cancels background workers cleanly (the threading section)"),
             ],
             "notes": (
                 "The shutdown sequence ties together stop_token from the "
@@ -1117,7 +1117,7 @@ SECTIONS = [
 # ============================================================================
 {
     "num": 10,
-    "label": "Doc 10",
+    "label": "§10",
     "title": "The gRPC capstone",
     "tagline": "Every pattern composed in one order-pricing service.",
     "divider_notes": (
@@ -1130,12 +1130,12 @@ SECTIONS = [
             "kind": "content",
             "title": "What composes",
             "body": [
-                heading("Every prior doc, in one main()", color=C.ACCENT_BLUE),
-                bullet("Config parsed once (Doc 6); process-scoped pool + channel cache (Doc 4)"),
-                bullet("RequestContext with a PMR arena per call (Docs 2, 3)"),
-                bullet("Handler throws grpc::Status; RAII cleans up; boundary translates (Doc 2)"),
-                bullet("Deadline-propagated PostgreSQL + outbound gRPC tax call (Docs 5, 7)"),
-                bullet("Idempotency on the client key; staged health + graceful shutdown (Docs 7, 9)"),
+                heading("Every prior section, in one main()", color=C.ACCENT_BLUE),
+                bullet("Config parsed once (12-factor config); process-scoped pool + channel cache (process scope)"),
+                bullet("RequestContext with a PMR arena per call (RAII + PMR)"),
+                bullet("Handler throws grpc::Status; RAII cleans up; boundary translates (the RAII section)"),
+                bullet("Deadline-propagated PostgreSQL + outbound gRPC tax call (threading + externalization)"),
+                bullet("Idempotency on the client key; staged health + graceful shutdown (externalization + health)"),
             ],
             "diagram": dg("10-grpc-microservices"),
             "notes": (
@@ -1197,9 +1197,9 @@ SECTIONS = [
             ),
             "notes": (
                 "The capstone's main() is twelve steps and every one maps to a "
-                "prior document — config from Doc 6, CPU budget from Doc 5, "
-                "pools from Doc 7, the composition root from Doc 4, the staged "
-                "health flip and signal handling from Doc 9. The shape is the "
+                "prior document — config from 12-factor, CPU budget from threading, "
+                "pools from externalization, the composition root from process scope, the staged "
+                "health flip and signal handling from health & shutdown. The shape is the "
                 "same for any gRPC service in this stack; only the specific "
                 "subsystems change. That reusability is the payoff of building "
                 "the patterns in isolation first."),
@@ -1250,7 +1250,7 @@ SECTIONS = [
 # ============================================================================
 {
     "num": 11,
-    "label": "Doc 11",
+    "label": "§11",
     "title": "Build tooling & vendored helpers",
     "tagline": "Conan, CMake, the toolchain — and the helpers made runnable.",
     "divider_notes": (
@@ -1268,7 +1268,7 @@ SECTIONS = [
                 bullet("CMake 3.27+ with Ninja; Conan-generated presets wire the toolchain"),
                 bullet("GCC 14 / libstdc++ for C++23 breadth (Clang 18 + libc++ equivalent)"),
                 bullet("Multi-stage Containerfile: full toolchain builder, minimal runtime"),
-                bullet("Dev profile wires AddressSanitizer — catches the Doc 3 arena trap early"),
+                bullet("Dev profile wires AddressSanitizer — catches the PMR arena trap early"),
             ],
             "diagram": dg("11-build-tooling"),
             "notes": (
