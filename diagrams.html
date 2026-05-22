@@ -77,6 +77,12 @@ permalink: /diagrams/
                 caption="io_uring SQ/CQ rings in shared memory." %}
 
             {% include diagram-card.html
+                file="08-deadline-budget-flow"
+                section="§8"
+                title="Deadline budget propagation"
+                caption="One deadline spent across every hop; each downstream call budgets against the time remaining and fails fast at zero." %}
+
+            {% include diagram-card.html
                 file="09-networking-veth-vs-host"
                 section="§9"
                 title="Container networking modes"
@@ -95,6 +101,18 @@ permalink: /diagrams/
                 caption="Two-tenant cgroup hierarchy with delegated controllers." %}
 
             {% include diagram-card.html
+                file="11-cfs-throttling-timeline"
+                section="§11"
+                title="CFS quota throttling"
+                caption="Oversubscribing a CPU quota burns the budget early and stalls the whole cgroup to the period boundary — spiking p99." %}
+
+            {% include diagram-card.html
+                file="11-numa-local-remote"
+                section="§11"
+                title="NUMA local vs remote"
+                caption="Local memory ~100ns; crossing the interconnect to the other node is ~1.5-2x slower. Pin cpuset.cpus + cpuset.mems." %}
+
+            {% include diagram-card.html
                 file="12-debug-sidecar-pattern"
                 section="§12"
                 title="Ephemeral gdb sidecar"
@@ -105,6 +123,12 @@ permalink: /diagrams/
                 section="§13"
                 title="Hermetic build pipeline"
                 caption="Hermetic build: Conan → CMake/Ninja → reproducible binary." %}
+
+            {% include diagram-card.html
+                file="13-abi-break-taxonomy"
+                section="§13"
+                title="ABI break taxonomy"
+                caption="What is safe to change vs what breaks the binary contract (layout, vtable, signatures) — bump the SONAME, catch with abidiff." %}
 
             {% include diagram-card.html
                 file="14-pitfalls-avx512-mismatch"

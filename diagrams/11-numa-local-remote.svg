@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 470" role="img" aria-label="Two NUMA nodes, each with a set of CPU cores and its own attached local memory, joined by a cross-node interconnect. A core reading its local node&#x27;s memory is fast, around 100 nanoseconds. The same core reading the other node&#x27;s memory must cross the interconnect and is roughly one and a half to two times slower. The takeaway, tied to the cgroup cpuset controller, is to pin a latency-sensitive workload to a single node with cpuset.cpus and cpuset.mems so its memory accesses stay local.">
+  <defs>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e8e1d3" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+    <marker id="arrowhead-r" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
+    <marker id="arrowhead-g" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a8870"/>
+    </marker>
+  </defs>
+  <rect width="900" height="470" fill="#fdfbf7"/>
+  <rect width="900" height="470" fill="url(#grid)" opacity="0.4"/>
+  <text x="450" y="30" text-anchor="middle" style="font: 700 16px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">NUMA — local versus remote memory access latency</text>
+  <text x="450" y="50" text-anchor="middle" style="font: italic 400 11px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #555555;">Not all memory is equally far — the node a core sits on decides its memory latency</text>
+  <rect x="60" y="90" width="360" height="250" rx="6" ry="6" fill="#e8f0fb" stroke="#4a73b8" stroke-width="1.5"/>
+  <text x="240" y="110" text-anchor="middle" style="font: 700 14px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">NUMA node 0</text>
+  <rect x="90" y="130" width="300" height="60" rx="4" ry="4" fill="#fdfbf7" stroke="#4a73b8" stroke-width="1.0"/>
+  <text x="240" y="158" text-anchor="middle" style="font: 600 12px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">cores 0–10</text>
+  <text x="240" y="176" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">cpuset.cpus = 0-10</text>
+  <rect x="90" y="240" width="300" height="70" rx="6" ry="6" fill="#d8e8df" stroke="#5a8870" stroke-width="1.5"/>
+  <text x="240" y="260" text-anchor="middle" style="font: 700 14px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">local memory (Mem0)</text>
+  <text x="240" y="278" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">cpuset.mems = 0</text>
+  <rect x="480" y="90" width="360" height="250" rx="6" ry="6" fill="#ecdfd8" stroke="#b86742" stroke-width="1.5"/>
+  <text x="660" y="110" text-anchor="middle" style="font: 700 14px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">NUMA node 1</text>
+  <rect x="510" y="130" width="300" height="60" rx="4" ry="4" fill="#fdfbf7" stroke="#b86742" stroke-width="1.0"/>
+  <text x="660" y="158" text-anchor="middle" style="font: 600 12px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">cores 11–21</text>
+  <text x="660" y="176" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">cpuset.cpus = 11-21</text>
+  <rect x="510" y="240" width="300" height="70" rx="6" ry="6" fill="#d8e8df" stroke="#5a8870" stroke-width="1.5"/>
+  <text x="660" y="260" text-anchor="middle" style="font: 700 14px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">local memory (Mem1)</text>
+  <text x="660" y="278" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">cpuset.mems = 1</text>
+  <line x1="240" y1="190" x2="240" y2="240" stroke="#5a8870" stroke-width="1.6" fill="none" marker-end="url(#arrowhead-g)"/>
+  <text x="310" y="211" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">local ≈ 100 ns</text>
+  <line x1="390" y1="160" x2="510" y2="275" stroke="#c0392b" stroke-width="2.0" fill="none" marker-end="url(#arrowhead-r)"/>
+  <text x="450" y="205" text-anchor="middle" style="font: 700 12px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #c0392b;">remote</text>
+  <text x="450" y="221" text-anchor="middle" style="font: italic 700 11px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #c0392b;">≈1.5–2× slower</text>
+  <line x1="420" y1="215" x2="480" y2="215" stroke="#8a5fb0" stroke-width="2.0"/>
+  <text x="450" y="130" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">interconnect</text>
+  <rect x="120" y="370" width="660" height="70" rx="6" ry="6" fill="#fdfbf7" stroke="#c0392b" stroke-width="2.0"/>
+  <text x="450" y="390" text-anchor="middle" style="font: 700 14px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">Pin latency-sensitive work to one node</text>
+  <text x="450" y="408" text-anchor="middle" style="font: italic 400 11px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #555555;">Crossing the interconnect adds latency and contends with other tenants&#x27; traffic.</text>
+  <text x="450" y="424" text-anchor="middle" style="font: italic 700 11px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #c0392b;">cpuset.cpus + cpuset.mems on the same node keeps a hot path&#x27;s memory local (see the cgroup isolation diagram).</text>
+</svg>

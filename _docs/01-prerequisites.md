@@ -528,6 +528,6 @@ frames the rest of the sections.
 
 If you'd rather skip ahead and confirm the toolchain works by
 running something concrete first, jump to
-[§3 — Container strategy](../03-image-strategy/) and run Demo 1.
+[§4 — Container strategy](../04-image-strategy/) and run Demo 1.
 You can come back for §2 once the cmake/podman pipeline has stopped
 feeling like a black box.

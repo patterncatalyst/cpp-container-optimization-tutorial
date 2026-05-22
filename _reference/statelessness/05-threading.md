@@ -179,6 +179,8 @@ For a C++ service, the practical answer is async I/O via coroutines on top of an
 
 ## OS container CPU limits and the thread budget
 
+{% include excalidraw.html name="11-cfs-throttling-timeline" caption="CFS quota throttling: a pool sized past the cgroup quota burns its budget early each period and the whole cgroup is descheduled to the period boundary — the p99 spike behind 'oversubscription buys no throughput.'" %}
+
 This is the section the project brief asked us to cover directly. Doc 04 covered CPU limits from the memory-budget angle (throttling raises queue depth, queue depth multiplies request-scoped memory). Doc 05 covers them from the threading angle, which is where most of the day-to-day pain lives.
 
 The Linux CFS scheduler enforces CPU limits via a quota/period mechanism. A container with `--cpus=2` (Podman) or `resources.limits.cpu: "2"` (Kubernetes) is given a quota of 200 ms per 100 ms period — it can consume 200 ms of aggregate CPU time before being throttled until the next period boundary. Thread parallelism does not multiply the budget: eight threads each running 25 ms in a 100 ms period have already consumed the 200 ms quota, and the kernel suspends all of them until the next period boundary. The unlucky thread that was about to be scheduled when the quota was reached can wait up to roughly 75 ms.

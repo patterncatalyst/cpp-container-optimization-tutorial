@@ -235,6 +235,8 @@ The skeleton-then-wire pattern is awkward because gRPC's `ServerBuilder` require
 
 ## Graceful shutdown
 
+{% include excalidraw.html name="statelessness/09-probe-states-shutdown" caption="Health states (Starting → Serving ⇄ NotReady → Draining → Stopped) and the ordered SIGTERM shutdown sequence: flag, drain readiness, stop workers, Shutdown(deadline), reverse-order teardown, exit 0." %}
+
 The orchestrator signals shutdown via SIGTERM. The container has `terminationGracePeriodSeconds` (default 30 in Kubernetes) before it gets SIGKILL'd. Inside that window, the service should drain in-flight work, refuse new work, and exit cleanly.
 
 The graceful shutdown sequence ties together several patterns from earlier documents:

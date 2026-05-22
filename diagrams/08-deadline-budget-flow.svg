@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" role="img" aria-label="A request arrives with a 100 ms deadline. The budget is a single bar that every hop spends against the same clock: a little to inbound network, a slice to the service plus its PostgreSQL query whose statement_timeout is set from the time remaining, a slice to the outbound gRPC call which carries the same absolute deadline, and the rest is slack before the response returns. The rule beneath it: before any downstream call, if the remaining budget is at or below zero the service throws DEADLINE_EXCEEDED and fails fast instead of starting work that cannot finish in time.">
+  <defs>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e8e1d3" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d2d2d"/>
+    </marker>
+    <marker id="arrowhead-r" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c0392b"/>
+    </marker>
+    <marker id="arrowhead-g" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a8870"/>
+    </marker>
+  </defs>
+  <rect width="900" height="480" fill="#fdfbf7"/>
+  <rect width="900" height="480" fill="url(#grid)" opacity="0.4"/>
+  <text x="450" y="30" text-anchor="middle" style="font: 700 16px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">Deadline budget propagation — one clock, every hop</text>
+  <text x="450" y="50" text-anchor="middle" style="font: italic 400 11px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #555555;">inbound deadline = 100 ms  ·  every downstream call budgets against the same clock</text>
+  <rect x="80.0" y="95" width="22.200000000000003" height="46" rx="4" ry="4" fill="#e8f0fb" stroke="#4a73b8" stroke-width="1.2"/>
+  <rect x="102.2" y="95" width="310.8" height="46" rx="4" ry="4" fill="#f0e8d8" stroke="#b89540" stroke-width="1.2"/>
+  <rect x="413.0" y="95" width="185.0" height="46" rx="4" ry="4" fill="#d8e8df" stroke="#5a8870" stroke-width="1.2"/>
+  <rect x="598.0" y="95" width="74.0" height="46" rx="4" ry="4" fill="#ece4f0" stroke="#8a5fb0" stroke-width="1.2"/>
+  <rect x="672.0" y="95" width="148.0" height="46" rx="4" ry="4" fill="#f4efe4" stroke="#cdbfa6" stroke-width="1.2"/>
+  <line x1="80" y1="141" x2="80" y2="149" stroke="#9a9183" stroke-width="0.8"/>
+  <text x="80" y="161" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">0</text>
+  <line x1="154" y1="141" x2="154" y2="149" stroke="#9a9183" stroke-width="0.8"/>
+  <text x="154" y="161" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">10</text>
+  <line x1="228" y1="141" x2="228" y2="149" stroke="#9a9183" stroke-width="0.8"/>
+  <text x="228" y="161" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">20</text>
+  <line x1="302" y1="141" x2="302" y2="149" stroke="#9a9183" stroke-width="0.8"/>
+  <text x="302" y="161" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">30</text>
+  <line x1="376" y1="141" x2="376" y2="149" stroke="#9a9183" stroke-width="0.8"/>
+  <text x="376" y="161" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">40</text>
+  <line x1="450" y1="141" x2="450" y2="149" stroke="#9a9183" stroke-width="0.8"/>
+  <text x="450" y="161" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">50</text>
+  <line x1="524" y1="141" x2="524" y2="149" stroke="#9a9183" stroke-width="0.8"/>
+  <text x="524" y="161" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">60</text>
+  <line x1="598" y1="141" x2="598" y2="149" stroke="#9a9183" stroke-width="0.8"/>
+  <text x="598" y="161" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">70</text>
+  <line x1="672" y1="141" x2="672" y2="149" stroke="#9a9183" stroke-width="0.8"/>
+  <text x="672" y="161" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">80</text>
+  <line x1="746" y1="141" x2="746" y2="149" stroke="#9a9183" stroke-width="0.8"/>
+  <text x="746" y="161" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">90</text>
+  <line x1="820" y1="141" x2="820" y2="149" stroke="#9a9183" stroke-width="0.8"/>
+  <text x="820" y="161" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">100</text>
+  <text x="450" y="175" text-anchor="middle" style="font: italic 400 11px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #555555;">milliseconds of the request budget</text>
+  <text x="257.6" y="123" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">service + PG query</text>
+  <text x="501.8" y="123" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">tax gRPC</text>
+  <text x="746" y="123" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">slack</text>
+  <rect x="90" y="230" width="165" height="70" rx="6" ry="6" fill="#e8f0fb" stroke="#4a73b8" stroke-width="1.5"/>
+  <text x="172.5" y="250" text-anchor="middle" style="font: 700 14px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">Client</text>
+  <text x="172.5" y="268" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">sets deadline</text>
+  <text x="172.5" y="282" text-anchor="middle" style="font: italic 700 11px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #c0392b;">100 ms</text>
+  <rect x="300" y="230" width="165" height="70" rx="6" ry="6" fill="#e8f0fb" stroke="#4a73b8" stroke-width="1.5"/>
+  <text x="382.5" y="250" text-anchor="middle" style="font: 700 14px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">Pricing service</text>
+  <text x="382.5" y="268" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">remaining on entry</text>
+  <text x="382.5" y="282" text-anchor="middle" style="font: italic 700 11px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #c0392b;">≈ 97 ms</text>
+  <rect x="520" y="230" width="165" height="70" rx="6" ry="6" fill="#e8f0fb" stroke="#4a73b8" stroke-width="1.5"/>
+  <text x="602.5" y="250" text-anchor="middle" style="font: 700 14px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">PostgreSQL</text>
+  <text x="602.5" y="268" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">statement_timeout</text>
+  <text x="602.5" y="282" text-anchor="middle" style="font: italic 700 11px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #c0392b;">= remaining</text>
+  <rect x="720" y="230" width="165" height="70" rx="6" ry="6" fill="#e8f0fb" stroke="#4a73b8" stroke-width="1.5"/>
+  <text x="802.5" y="250" text-anchor="middle" style="font: 700 14px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">Tax service</text>
+  <text x="802.5" y="268" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">ClientContext deadline</text>
+  <text x="802.5" y="282" text-anchor="middle" style="font: italic 700 11px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #c0392b;">≈ 55 ms</text>
+  <line x1="255" y1="265" x2="300" y2="265" stroke="#2d2d2d" stroke-width="1.4" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="277.5" y="259" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">deadline</text>
+  <line x1="465" y1="265" x2="520" y2="265" stroke="#2d2d2d" stroke-width="1.4" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="492.5" y="259" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">deadline</text>
+  <line x1="685" y1="265" x2="720" y2="265" stroke="#2d2d2d" stroke-width="1.4" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="702.5" y="259" text-anchor="middle" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">deadline</text>
+  <rect x="120" y="350" width="660" height="78" rx="6" ry="6" fill="#fdfbf7" stroke="#c0392b" stroke-width="2.0"/>
+  <text x="450" y="370" text-anchor="middle" style="font: 700 14px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">Fail fast when the budget is gone</text>
+  <text x="450" y="388" text-anchor="middle" style="font: italic 400 11px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #555555;">A slow dependency must not outlive the client&#x27;s patience.</text>
+  <text x="450" y="404" text-anchor="middle" style="font: 400 11px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #1a1a1a;">auto left = deadline - now();  if (left &lt;= 0ms) throw grpc::Status{DEADLINE_EXCEEDED};</text>
+  <text x="450" y="418" text-anchor="middle" style="font: italic 700 11px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #c0392b;">Never start a downstream call you can&#x27;t finish in time.</text>
+</svg>

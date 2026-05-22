@@ -27,6 +27,8 @@ By the end of this section you can:
 
 {% include excalidraw.html name="11-isolation-cgroup-tree" caption="Two-tenant cgroup hierarchy with delegated controllers." %}
 
+{% include excalidraw.html name="11-cfs-throttling-timeline" caption="CFS quota throttling: a pool sized past the quota burns its budget early and the whole cgroup stalls to the period boundary — spiking p99, not throughput." %}
+
 ## The setup
 
 Demo-05 runs two single-purpose containers on one host. `tenant-a`
@@ -205,6 +207,8 @@ on a multi-socket server. Memory accesses to the local node are
 faster than to remote nodes (typically 30-100% latency
 difference). The pinning above only pinned CPUs; on a NUMA host
 you also want to pin memory.
+
+{% include excalidraw.html name="11-numa-local-remote" caption="NUMA local vs remote access: a core reading its own node's memory is ~100ns; crossing the interconnect to the other node is ~1.5-2x slower. Pin cpuset.cpus + cpuset.mems to one node." %}
 
 `numactl --cpunodebind=0 --membind=0` runs a process with CPU
 and memory both bound to NUMA node 0. The podman equivalents

@@ -300,6 +300,8 @@ This is a tiny example, but the shape is general. State that needs to be consist
 
 ## The Outbox pattern, briefly
 
+{% include excalidraw.html name="statelessness/07-outbox-sequence" caption="Outbox: order + event written in one transaction; a relay publishes with FOR UPDATE SKIP LOCKED; an idempotent consumer applies ON CONFLICT — at-least-once delivery plus idempotent apply = exactly-once effect." %}
+
 A common consistency requirement: when handling a request, atomically (a) write to the database and (b) emit an event to a message bus. The naive approach — write the DB row, then publish the event — has a race: if the process dies between the two, the DB is updated but the event is lost. Reversing the order has the symmetric problem.
 
 The Outbox pattern resolves this by writing both the DB row and the event to the *same* database, inside the *same* transaction. A separate process — or a background thread in the same service — reads the outbox table and publishes events from it, marking them as published once acknowledged by the message bus. The transactional guarantee of the database extends to event emission: either both the row and the outbox entry are committed, or neither is.

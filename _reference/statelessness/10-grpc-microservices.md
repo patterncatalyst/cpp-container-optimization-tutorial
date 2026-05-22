@@ -54,6 +54,8 @@ This document is heavier on code than the others by design. The point is to make
 
 ## The example service
 
+{% include excalidraw.html name="08-deadline-budget-flow" caption="Deadline budget propagation through the capstone: the inbound deadline is spent across the PostgreSQL lookups and the outbound tax-service gRPC call, each budgeting against the time remaining." %}
+
 Take an order-pricing service. It accepts an order specification — customer ID and a list of line items — looks up customer metadata from PostgreSQL, fetches product prices from Redis (with cache-miss falling through to PostgreSQL), calls a tax-calculation service via gRPC, and returns a fully priced order. It supports idempotency via a client-supplied key, propagates deadlines through every downstream call, and exposes the standard gRPC health protocol.
 
 The proto:

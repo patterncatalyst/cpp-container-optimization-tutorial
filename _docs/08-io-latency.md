@@ -31,6 +31,8 @@ By the end of this section you can:
 
 {% include excalidraw.html name="08-io-uring-rings" caption="io_uring SQ/CQ rings in shared memory." %}
 
+{% include excalidraw.html name="08-deadline-budget-flow" caption="Deadline budget propagation: one clock spent across every hop; each downstream call (DB statement_timeout, outbound gRPC) budgets against the time remaining and fails fast at zero." %}
+
 ## The 60× throughput gap
 
 Demo-03 runs three TCP echo servers in the *same binary*, on the

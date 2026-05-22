@@ -16,7 +16,7 @@ The site references diagrams two ways:
 
 `<section>-<topic>-<thing>.{svg,excalidraw}`
 
-Examples that already have placeholders pointed at them:
+Diagrams currently in the set:
 
 | File basename                         | Section | Topic / thing                          |
 |---------------------------------------|---------|----------------------------------------|
@@ -35,6 +35,42 @@ Examples that already have placeholders pointed at them:
 | `12-debug-sidecar-pattern`            | §12     | ephemeral gdb sidecar                  |
 | `13-reproducibility-conan-flow`       | §13     | hermetic build pipeline                |
 | `14-pitfalls-avx512-mismatch`         | §14     | AVX-512 mismatch trap                  |
+| `08-deadline-budget-flow`             | §8      | deadline budget propagation across hops |
+| `11-cfs-throttling-timeline`          | §11     | CFS quota throttling vs tail latency   |
+| `11-numa-local-remote`                | §11     | NUMA local vs remote access latency    |
+| `13-abi-break-taxonomy`               | §13     | ABI-safe vs ABI-breaking changes       |
+
+The last four are supplementary concept diagrams (a second figure for a
+section) added to visualize a temporal or comparison concept the
+section's primary diagram doesn't show.
+
+### Statelessness compendium diagrams
+
+The statelessness companion's diagrams live in
+[`diagrams/statelessness/`](statelessness/), one per compendium doc,
+named `NN-<topic>` to match Docs 01-11:
+
+| File basename                  | Doc   | Topic / thing                          |
+|--------------------------------|-------|----------------------------------------|
+| `01-deployment-posture`        | Doc 01 | three scopes of state; stateless vs stateful |
+| `02-raii`                      | Doc 02 | the `RequestContext` lifecycle         |
+| `03-pmr`                       | Doc 03 | the layered monotonic + pool arena     |
+| `04-process-scoped-state`      | Doc 04 | the composition root in `main()`       |
+| `05-threading`                 | Doc 05 | the CPU quota vs `hardware_concurrency()` |
+| `06-twelve-factor`             | Doc 06 | config binding times                   |
+| `07-state-externalization`     | Doc 07 | the pool + RAII checkout + outbox      |
+| `08-ephemeral-filesystem`      | Doc 08 | read-only rootfs; where writes go      |
+| `09-health-checks`             | Doc 09 | startup/liveness/readiness + shutdown  |
+| `10-grpc-microservices`        | Doc 10 | the capstone composition               |
+| `11-build-tooling`             | Doc 11 | the build stack + the cgroup helper    |
+| `07-outbox-sequence`           | Doc 07 | outbox: atomic write → relay → idempotent consumer |
+| `09-probe-states-shutdown`     | Doc 09 | health state machine + ordered shutdown sequence |
+
+The last two are supplementary sequence diagrams for the outbox example
+and the graceful-shutdown flow, alongside each doc's primary diagram.
+
+These are embedded inline in the compendium docs and in the companion
+deck (`presentation/cpp-statelessness-compendium.pptx`).
 
 ## Editing a diagram
 
@@ -70,13 +106,11 @@ After editing:
   the *one* element you most want the reader to notice; using it on
   three things diffuses attention.
 
-## Placeholder state
+## Status
 
-Until each diagram is drawn, this directory contains a placeholder
-SVG and a minimal `.excalidraw` stub for every basename above. The
-placeholders render as a gray box with the basename and a "draw me"
-prompt — enough to verify the include and gallery wiring works
-without making the page look broken.
-
-Replace each placeholder pair as the diagrams are drawn. The
-reconciliation plan's G.5 row tracks progress.
+The diagrams are drawn — both the main-track set (above) and the
+statelessness compendium set are real hand-style Excalidraw diagrams,
+embedded inline and rendered into their respective decks. When adding a new
+diagram, follow the naming convention and style guidelines above, and
+commit the `.svg` and `.excalidraw` pair together. The reconciliation
+plan tracks diagram history.

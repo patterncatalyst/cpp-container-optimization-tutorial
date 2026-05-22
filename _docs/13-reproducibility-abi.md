@@ -32,6 +32,8 @@ By the end of this section you can:
 
 {% include excalidraw.html name="13-reproducibility-conan-flow" caption="Hermetic build: Conan → CMake/Ninja → reproducible binary." %}
 
+{% include excalidraw.html name="13-abi-break-taxonomy" caption="ABI-safe vs ABI-breaking changes: layout, vtable, base classes, and signatures break the binary contract — bump the SONAME and catch it with abidiff." %}
+
 ## What reproducibility actually means
 
 A reproducible build produces a byte-identical artifact given
