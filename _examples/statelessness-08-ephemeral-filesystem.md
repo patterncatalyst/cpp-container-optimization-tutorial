@@ -2,6 +2,9 @@
 title: "Statelessness 08 — Ephemeral filesystem"
 description: "The runnable companion to compendium Doc 08: a read-only container rootfs as the forcing function, spdlog's basic_logger_mt EROFS trap and the stdout-sink fix, ephemerality across container restarts, and why scratch belongs on an explicitly-mounted tmpfs."
 order: 209
+card_eyebrow: "Compendium · <strong>Doc 08</strong>"
+card_title: "Ephemeral filesystem"
+card_blurb: "The read-only rootfs as a forcing function: spdlog's basic_logger_mt EROFS trap and the stdout-sink fix, ephemerality across restarts, and why scratch belongs on an explicitly-mounted tmpfs."
 layout: example
 sectionid: examples
 permalink: /examples/statelessness-08-ephemeral-filesystem/

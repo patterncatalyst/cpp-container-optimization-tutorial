@@ -2,6 +2,9 @@
 title: "Demo 02 — STL & Layout Under Memory Pressure"
 description: "Compares four key-value container designs on two operations, run once unconstrained and once under a cgroup memory cap. The takeaway: data layout determines cache behavior, and at production scales cache locality usually beats algorithmic…"
 order: 2
+card_eyebrow: "Demo 02 · <strong>§6</strong>"
+card_title: "STL &amp; layout"
+card_blurb: "<code>unordered_map</code> vs <code>map</code> vs <code>flat_map</code> vs <code>vector</code> with a linear scan; Google Benchmark median timings under a baseline and a 128 MB cgroup memory cap, side-by-side."
 layout: example
 sectionid: examples
 permalink: /examples/demo-02-stl-layout/

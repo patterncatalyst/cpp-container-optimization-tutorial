@@ -2,6 +2,9 @@
 title: "Statelessness 02 — RequestContext RAII"
 description: "The runnable companion to compendium Doc 02: a small gRPC service whose handler builds a RequestContext (RAII) on entry and takes one of three exit paths — normal return, early return, and throw — proving the destructor fires on all three."
 order: 202
+card_eyebrow: "Compendium · <strong>Doc 02</strong>"
+card_title: "RequestContext RAII"
+card_blurb: "A gRPC handler builds a RequestContext on entry and takes one of three exit paths — normal return, early return, and throw — proving the destructor fires on all three. RAII cleanup made visible."
 layout: example
 sectionid: examples
 permalink: /examples/statelessness-02-raii/

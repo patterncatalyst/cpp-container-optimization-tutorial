@@ -2,6 +2,9 @@
 title: "Demo 1 — Image Strategy: UBI, ubi-micro, multi-stage, LTO, PGO"
 description: "Builds the same trivial C++23 HTTP service three different ways and compares the results. Adds a Profile-Guided Optimization pass on top of the best variant and measures the additional delta. Every optimization is something you'd actually…"
 order: 1
+card_eyebrow: "Demo 01 · <strong>§4, §5</strong>"
+card_title: "Image strategy &amp; PGO"
+card_blurb: "UBI multi-stage vs UBI-micro vs single-stage-naive, plus a two-pass PGO build. <code>hey</code> drives load against each variant; the demo prints a p50/p95/p99 table side by side."
 layout: example
 sectionid: examples
 permalink: /examples/demo-01-image-strategy/

@@ -2,6 +2,9 @@
 title: "Statelessness 10 — gRPC microservices (capstone)"
 description: "The runnable companion to compendium Doc 10: an order-pricing gRPC service that composes every prior pattern — Config parsed once, process-scoped PgPool and channel cache, a per-request RAII bundle with a PMR arena, deadline-propagating PostgreSQL and outbound-gRPC helpers, idempotency, and the staged health/graceful-shutdown sequence — calling a second tax service over gRPC end to end."
 order: 211
+card_eyebrow: "Compendium · <strong>Doc 10</strong>"
+card_title: "gRPC microservices (capstone)"
+card_blurb: "The integration example: an order-pricing service composing every prior pattern — Config, process-scoped pools and a channel cache, a per-request PMR arena, deadline-propagated PostgreSQL and an outbound gRPC tax call, idempotency, and the staged health/shutdown sequence."
 layout: example
 sectionid: examples
 permalink: /examples/statelessness-10-grpc-microservices/

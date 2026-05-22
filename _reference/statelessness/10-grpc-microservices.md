@@ -18,6 +18,40 @@ This document is heavier on code than the others by design. The point is to make
 
 {% include excalidraw.html name="statelessness/10-grpc-microservices" caption="gRPC capstone: a complete order-pricing service composing process-, request-, and external-scope state." %}
 
+> **Run this pattern.** A runnable companion lives at
+> [`examples/statelessness/10-grpc-microservices/`]({{ '/examples/statelessness-10-grpc-microservices/' | relative_url }}).
+> It composes the patterns below into an order-pricing gRPC service that
+> calls a second tax service over gRPC end to end. Clone the repo, `cd` in,
+> and `./demo.sh`.
+>
+> **What the companion realizes vs. what this document designs.** This
+> document presents the *full* design, including the OpenTelemetry tracing
+> pipeline. The runnable companion stays on this tutorial's verified stack
+> and so represents some of that design as documented seams rather than
+> built dependencies — it is faithful in architecture, leaner in
+> dependencies:
+>
+> - **OpenTelemetry / tracing:** the companion emits **no spans** — there is
+>   no `TracerProvider`, no exporter, no OTLP endpoint, and nothing reaches
+>   Tempo. The `RequestContext` span/scope shown below is present in the
+>   companion as a commented insertion point; the PMR arena, deadline, and
+>   correlation id around it are real. The `propagate_trace_context` call in
+>   `compute_tax` is likewise a seam.
+> - **PostgreSQL:** via **libpq**, not libpqxx (libpqxx's bundled CMake
+>   breaks this toolchain — gotcha G-67); the connection-pool pattern is
+>   identical.
+> - **Redis:** the companion's price lookup goes **straight to PostgreSQL**;
+>   the Redis cache-aside is marked as a seam where a `GET` would slot in.
+> - **gRPC API:** the companion uses the **sync** API rather than the
+>   callback API sketched below; the composition is identical and the
+>   migration is mechanical (Doc 05).
+>
+> So when the code below constructs a span, injects trace context, or reads
+> from Redis, read it as *the design* — the companion proves the
+> composition (request/process/external scope, deadline propagation,
+> idempotency, lifecycle), not the telemetry. Wiring real OpenTelemetry to
+> Tempo is a deliberate add-on, not something the companion silently does.
+
 ## The example service
 
 Take an order-pricing service. It accepts an order specification — customer ID and a list of line items — looks up customer metadata from PostgreSQL, fetches product prices from Redis (with cache-miss falling through to PostgreSQL), calls a tax-calculation service via gRPC, and returns a fully priced order. It supports idempotency via a client-supplied key, propagates deadlines through every downstream call, and exposes the standard gRPC health protocol.

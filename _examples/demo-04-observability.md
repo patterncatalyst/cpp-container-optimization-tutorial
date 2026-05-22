@@ -2,6 +2,9 @@
 title: "Demo 4 — Observability stack with OpenTelemetry"
 description: "A small C++ HTTP service instrumented with OpenTelemetry (logs, metrics, traces) running alongside the `grafana/otel-lgtm` all-in-one observability container. Three OTLP signals — traces, metrics, logs — plus optional kernel-side…"
 order: 4
+card_eyebrow: "Demo 04 · <strong>§10</strong>"
+card_title: "Observability stack"
+card_blurb: "A C++ HTTP service instrumented with OpenTelemetry <code>grafana/otel-lgtm</code>. Optional <code>bpftrace</code> probes add the kernel-side dimension above the application telemetry."
 layout: example
 sectionid: examples
 permalink: /examples/demo-04-observability/

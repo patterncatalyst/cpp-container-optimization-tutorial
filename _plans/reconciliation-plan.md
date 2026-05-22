@@ -23974,7 +23974,12 @@ Divergences from Doc 10 (each noted in README + example page + code):
   in fetch_price.
 - No OpenTelemetry: RequestContext span/scope is a documented seam (the PMR
   arena + deadline + correlation_id are real; the OTel members are commented
-  insertion points).
+  insertion points). EXPLICIT: example 10 emits NO spans — there is no
+  TracerProvider, no exporter, no OTLP endpoint. Nothing was (or could be)
+  verified in Tempo; "host-verified green" for 10 means the BUSINESS path
+  (PG + outbound gRPC + idempotency + lifecycle), NOT tracing. Wiring real
+  OTel -> Tempo (opentelemetry-cpp Conan dep + the LGTM stack) is a separate,
+  deliberate follow-up if desired.
 - sync gRPC API (grpc::Status methods), not the callback API the doc
   sketches — sync is what 07/09 verified. Composition identical.
 - No jemalloc MALLOC_CONF tuning (orthogonal to the composition story).

@@ -2,6 +2,9 @@
 title: "Statelessness 09 — Health checks"
 description: "The runnable companion to compendium Doc 09: a single gRPC service that demonstrates the three probes (startup, liveness, readiness), the gRPC standard health protocol, liveness and readiness on separate ports, a SIGUSR1-driven readiness toggle, and the graceful-shutdown sequence — SIGTERM to drained, ordered teardown, clean exit."
 order: 210
+card_eyebrow: "Compendium · <strong>Doc 09</strong>"
+card_title: "Health checks"
+card_blurb: "The three probes (startup, liveness, readiness) via the gRPC standard health protocol: HTTP liveness on a separate port, gRPC readiness, a SIGUSR1 readiness toggle, and the signal-safe graceful-shutdown sequence to a clean exit."
 layout: example
 sectionid: examples
 permalink: /examples/statelessness-09-health-checks/

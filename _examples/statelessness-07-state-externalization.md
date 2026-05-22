@@ -2,6 +2,9 @@
 title: "Statelessness 07 — State externalization"
 description: "The runnable companion to compendium Doc 07: authoritative order state in PostgreSQL, a hand-rolled connection pool with ScopedConnection RAII checkout, DB-authoritative idempotency via ON CONFLICT, and gRPC deadline propagation to the database."
 order: 207
+card_eyebrow: "Compendium · <strong>Doc 07</strong>"
+card_title: "State externalization"
+card_blurb: "Authoritative order state in PostgreSQL: a hand-rolled connection pool with ScopedConnection RAII checkout, DB-authoritative idempotency via ON CONFLICT, and gRPC deadline propagation to the database."
 layout: example
 sectionid: examples
 permalink: /examples/statelessness-07-state-externalization/

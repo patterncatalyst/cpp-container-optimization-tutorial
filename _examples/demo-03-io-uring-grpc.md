@@ -2,6 +2,9 @@
 title: "Demo 03 — Async gRPC + io_uring (direct + Asio backend)"
 description: "Three servers in one binary, all wired into the LGTM observability stack. Two of the three speak the same protocol — raw TCP echo — which lets you drive them with the same load generator and compare the cost of going through Asio's…"
 order: 3
+card_eyebrow: "Demo 03 · <strong>§8, §9</strong>"
+card_title: "io_uring &amp; async gRPC"
+card_blurb: "Direct liburing, an Asio io_uring executor, and an async gRPC server — three servers in one binary. Wired into the LGTM observability stack; <code>ghz</code> drives load and the demo writes results to disk."
 layout: example
 sectionid: examples
 permalink: /examples/demo-03-io-uring-grpc/

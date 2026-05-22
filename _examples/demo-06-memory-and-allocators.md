@@ -2,6 +2,9 @@
 title: "Demo 06 — Memory Management & Allocators"
 description: "Three allocator variants of the same C++23 binary, side-by-side on a synthetic JSON-shaped allocator-stress workload:"
 order: 6
+card_eyebrow: "Demo 06 · <strong>§7</strong>"
+card_title: "Memory &amp; allocators"
+card_blurb: "Side-by-side latency comparison of <code>std::allocator</code>, <code>std::pmr::synchronized_pool_resource</code>, and <code>mimalloc</code> on an allocator-stressful workload. Layered with <code>MAP_HUGETLB</code> and cgroup <code>memory.high</code> pressure. OTel-instrumented; histograms reach the LGTM stack."
 layout: example
 sectionid: examples
 permalink: /examples/demo-06-memory-and-allocators/

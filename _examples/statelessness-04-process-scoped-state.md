@@ -2,6 +2,9 @@
 title: "Statelessness 04 — Process-scoped state"
 description: "The runnable companion to compendium Doc 04: the composition root in main(), dependency injection by reference, a bounded LRU cache sized against the cgroup budget, and correct reverse-order teardown for free from RAII."
 order: 204
+card_eyebrow: "Compendium · <strong>Doc 04</strong>"
+card_title: "Process-scoped state"
+card_blurb: "The composition root in main(), dependency injection by reference, a bounded LRU cache sized against the cgroup budget, and correct reverse-order teardown for free from RAII."
 layout: example
 sectionid: examples
 permalink: /examples/statelessness-04-process-scoped-state/

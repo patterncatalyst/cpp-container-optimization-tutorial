@@ -2,6 +2,9 @@
 title: "Statelessness 03 — PMR request arena"
 description: "The runnable companion to compendium Doc 03: the layered monotonic + pool arena, per-request allocation, the bulk-release-vs-per-object asymmetry, and the lifetime trap caught by AddressSanitizer."
 order: 203
+card_eyebrow: "Compendium · <strong>Doc 03</strong>"
+card_title: "PMR request arena"
+card_blurb: "The layered monotonic + pool arena, per-request allocation freed in bulk, the release-cost asymmetry, and the lifetime trap caught live by AddressSanitizer."
 layout: example
 sectionid: examples
 permalink: /examples/statelessness-03-pmr/

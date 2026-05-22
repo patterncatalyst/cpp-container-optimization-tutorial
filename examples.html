@@ -32,92 +32,17 @@ permalink: /examples/
         </p>
 
         <div class="cards">
-            <a class="card" href="{{ '/examples/demo-01-image-strategy/' | relative_url }}">
-                <div class="card__eyebrow">Demo 01 · <strong>§4, §5</strong></div>
-                <h3 class="card__title">Image strategy &amp; PGO</h3>
-                <p class="card__desc">
-                    UBI multi-stage vs UBI-micro vs single-stage-naive,
-                    plus a two-pass PGO build. <code>hey</code> drives load
-                    against each variant; the demo prints a p50/p95/p99 table
-                    side by side.
-                </p>
-                <div class="card__meta"><span>Read page →</span></div>
+        {%- assign sorted_examples = site.examples | sort: "order" -%}
+        {%- for e in sorted_examples -%}
+        {%- if e.order < 100 -%}
+            <a class="card" href="{{ e.url | relative_url }}">
+                <div class="card__eyebrow">{{ e.card_eyebrow }}</div>
+                <h3 class="card__title">{{ e.card_title }}</h3>
+                <p class="card__desc">{{ e.card_blurb }}</p>
+                <div class="card__meta"><span>Read page &rarr;</span></div>
             </a>
-
-            <a class="card" href="{{ '/examples/demo-02-stl-layout/' | relative_url }}">
-                <div class="card__eyebrow">Demo 02 · <strong>§6</strong></div>
-                <h3 class="card__title">STL &amp; layout</h3>
-                <p class="card__desc">
-                    <code>unordered_map</code> vs <code>map</code> vs
-                    <code>flat_map</code> vs <code>vector</code> with a linear
-                    scan; Google Benchmark median timings under a baseline
-                    and a 128 MB cgroup memory cap, side-by-side.
-                </p>
-                <div class="card__meta"><span>Read page →</span></div>
-            </a>
-
-            <a class="card" href="{{ '/examples/demo-03-io-uring-grpc/' | relative_url }}">
-                <div class="card__eyebrow">Demo 03 · <strong>§8, §9</strong></div>
-                <h3 class="card__title">io_uring &amp; async gRPC</h3>
-                <p class="card__desc">
-                    Direct liburing, an Asio io_uring executor, and an async
-                    gRPC server — three servers in one binary. Wired into
-                    the LGTM observability stack; <code>ghz</code> drives
-                    load and the demo writes results to disk.
-                </p>
-                <div class="card__meta"><span>Read page →</span></div>
-            </a>
-
-            <a class="card" href="{{ '/examples/demo-04-observability/' | relative_url }}">
-                <div class="card__eyebrow">Demo 04 · <strong>§10</strong></div>
-                <h3 class="card__title">Observability stack</h3>
-                <p class="card__desc">
-                    A C++ HTTP service instrumented with OpenTelemetry
-                    (traces, metrics, logs) running alongside
-                    <code>grafana/otel-lgtm</code>. Optional
-                    <code>bpftrace</code> probes add the kernel-side dimension
-                    above the application telemetry.
-                </p>
-                <div class="card__meta"><span>Read page →</span></div>
-            </a>
-
-            <a class="card" href="{{ '/examples/demo-05-isolation/' | relative_url }}">
-                <div class="card__eyebrow">Demo 05 · <strong>§11</strong></div>
-                <h3 class="card__title">Noisy neighbor isolation</h3>
-                <p class="card__desc">
-                    Twin-tenant scenario: a latency-sensitive HTTP service
-                    next to a CPU/memory-bound noisy neighbor. Compares
-                    baseline, unisolated, <code>cpu.weight</code>, and
-                    <code>cpuset.cpus</code> pinning.
-                </p>
-                <div class="card__meta"><span>Read page →</span></div>
-            </a>
-
-            <a class="card" href="{{ '/examples/demo-06-memory-and-allocators/' | relative_url }}">
-                <div class="card__eyebrow">Demo 06 · <strong>§7</strong></div>
-                <h3 class="card__title">Memory &amp; allocators</h3>
-                <p class="card__desc">
-                    Side-by-side latency comparison of <code>std::allocator</code>,
-                    <code>std::pmr::synchronized_pool_resource</code>, and
-                    <code>mimalloc</code> on an allocator-stressful workload.
-                    Layered with <code>MAP_HUGETLB</code> and cgroup
-                    <code>memory.high</code> pressure. OTel-instrumented;
-                    histograms reach the LGTM stack.
-                </p>
-                <div class="card__meta"><span>Read page →</span></div>
-            </a>
-
-            <a class="card" href="{{ '/examples/demo-07-quality-pipeline/' | relative_url }}">
-                <div class="card__eyebrow">Demo 07 · <strong>§12, §13</strong></div>
-                <h3 class="card__title">Quality &amp; ABI pipeline</h3>
-                <p class="card__desc">
-                    cppcheck and clang-tidy as build stages, gtest+gmock
-                    suite, <code>abidiff</code> against a checked-in ABI
-                    reference, plus a gdbserver sidecar for live debugging.
-                    Hermetic Conan 2 lockfile + CMake presets throughout.
-                </p>
-                <div class="card__meta"><span>Read page →</span></div>
-            </a>
+        {%- endif -%}
+        {%- endfor %}
         </div>
     </div>
 </section>
@@ -133,113 +58,17 @@ permalink: /examples/
             <code>./demo.sh</code> shape.
         </p>
         <div class="cards">
-            <a class="card" href="{{ '/examples/statelessness-02-raii/' | relative_url }}">
-                <div class="card__eyebrow">Compendium · <strong>Doc 02</strong></div>
-                <h3 class="card__title">RequestContext RAII</h3>
-                <p class="card__desc">
-                    A gRPC handler builds a RequestContext on entry and
-                    takes one of three exit paths — normal return, early
-                    return, and throw — proving the destructor fires on
-                    all three. RAII cleanup made visible.
-                </p>
-                <div class="card__meta"><span>Read page →</span></div>
+        {%- assign sorted_examples = site.examples | sort: "order" -%}
+        {%- for e in sorted_examples -%}
+        {%- if e.order >= 200 -%}
+            <a class="card" href="{{ e.url | relative_url }}">
+                <div class="card__eyebrow">{{ e.card_eyebrow }}</div>
+                <h3 class="card__title">{{ e.card_title }}</h3>
+                <p class="card__desc">{{ e.card_blurb }}</p>
+                <div class="card__meta"><span>Read page &rarr;</span></div>
             </a>
-
-            <a class="card" href="{{ '/examples/statelessness-03-pmr/' | relative_url }}">
-                <div class="card__eyebrow">Compendium · <strong>Doc 03</strong></div>
-                <h3 class="card__title">PMR request arena</h3>
-                <p class="card__desc">
-                    The layered monotonic + pool arena, per-request
-                    allocation freed in bulk, the release-cost
-                    asymmetry, and the lifetime trap caught live by
-                    AddressSanitizer.
-                </p>
-                <div class="card__meta"><span>Read page →</span></div>
-            </a>
-
-            <a class="card" href="{{ '/examples/statelessness-04-process-scoped-state/' | relative_url }}">
-                <div class="card__eyebrow">Compendium · <strong>Doc 04</strong></div>
-                <h3 class="card__title">Process-scoped state</h3>
-                <p class="card__desc">
-                    The composition root in main(), dependency injection
-                    by reference, a bounded LRU cache sized against the
-                    cgroup budget, and correct reverse-order teardown for
-                    free from RAII.
-                </p>
-                <div class="card__meta"><span>Read page →</span></div>
-            </a>
-
-            <a class="card" href="{{ '/examples/statelessness-05-threading/' | relative_url }}">
-                <div class="card__eyebrow">Compendium · <strong>Doc 05</strong></div>
-                <h3 class="card__title">Threading &amp; CPU budget</h3>
-                <p class="card__desc">
-                    hardware_concurrency() lies under a cgroup quota. A
-                    cgroup-aware probe and a pool-size sweep under
-                    --cpus=2 show oversubscription buys no throughput and
-                    wrecks tail latency via CFS throttling.
-                </p>
-                <div class="card__meta"><span>Read page →</span></div>
-            </a>
-
-            <a class="card" href="{{ '/examples/statelessness-07-state-externalization/' | relative_url }}">
-                <div class="card__eyebrow">Compendium · <strong>Doc 07</strong></div>
-                <h3 class="card__title">State externalization</h3>
-                <p class="card__desc">
-                    Authoritative order state in PostgreSQL: a hand-rolled
-                    connection pool with ScopedConnection RAII checkout,
-                    DB-authoritative idempotency via ON CONFLICT, and gRPC
-                    deadline propagation to the database.
-                </p>
-                <div class="card__meta"><span>Read page →</span></div>
-            </a>
-            <a class="card" href="{{ '/examples/statelessness-07-outbox-pattern/' | relative_url }}">
-                <div class="card__eyebrow">Compendium · <strong>Doc 07</strong></div>
-                <h3 class="card__title">Outbox pattern</h3>
-                <p class="card__desc">
-                    Atomic DB write plus event emission: an order and its
-                    event written in one transaction, a relay that publishes
-                    the outbox to Kafka with FOR UPDATE SKIP LOCKED, and an
-                    idempotent consumer — at-least-once delivery plus
-                    idempotent apply gives an exactly-once effect.
-                </p>
-                <div class="card__meta"><span>Read page →</span></div>
-            </a>
-            <a class="card" href="{{ '/examples/statelessness-08-ephemeral-filesystem/' | relative_url }}">
-                <div class="card__eyebrow">Compendium · <strong>Doc 08</strong></div>
-                <h3 class="card__title">Ephemeral filesystem</h3>
-                <p class="card__desc">
-                    The read-only rootfs as a forcing function: spdlog's
-                    basic_logger_mt EROFS trap and the stdout-sink fix,
-                    ephemerality across restarts, and why scratch belongs on
-                    an explicitly-mounted tmpfs.
-                </p>
-                <div class="card__meta"><span>Read page →</span></div>
-            </a>
-
-            <a class="card" href="{{ '/examples/statelessness-09-health-checks/' | relative_url }}">
-                <div class="card__eyebrow">Compendium · <strong>Doc 09</strong></div>
-                <h3 class="card__title">Health checks</h3>
-                <p class="card__desc">
-                    The three probes (startup, liveness, readiness) via the
-                    gRPC standard health protocol: HTTP liveness on a separate
-                    port, gRPC readiness, a SIGUSR1 readiness toggle, and the
-                    signal-safe graceful-shutdown sequence to a clean exit.
-                </p>
-                <div class="card__meta"><span>Read page →</span></div>
-            </a>
-
-            <a class="card" href="{{ '/examples/statelessness-10-grpc-microservices/' | relative_url }}">
-                <div class="card__eyebrow">Compendium · <strong>Doc 10</strong></div>
-                <h3 class="card__title">gRPC microservices (capstone)</h3>
-                <p class="card__desc">
-                    The integration example: an order-pricing service composing
-                    every prior pattern — Config, process-scoped pools and a
-                    channel cache, a per-request PMR arena, deadline-propagated
-                    PostgreSQL and an outbound gRPC tax call, idempotency, and
-                    the staged health/shutdown sequence.
-                </p>
-                <div class="card__meta"><span>Read page →</span></div>
-            </a>
+        {%- endif -%}
+        {%- endfor %}
         </div>
     </div>
 </section>

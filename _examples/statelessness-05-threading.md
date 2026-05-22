@@ -2,6 +2,9 @@
 title: "Statelessness 05 — Threading & CPU budget"
 description: "The runnable companion to compendium Doc 05: hardware_concurrency() lies under a cgroup CPU quota. A cgroup-aware probe and a pool-size sweep under --cpus=2 show that oversubscription buys no throughput and wrecks tail latency through CFS throttling."
 order: 205
+card_eyebrow: "Compendium · <strong>Doc 05</strong>"
+card_title: "Threading &amp; CPU budget"
+card_blurb: "hardware_concurrency() lies under a cgroup quota. A cgroup-aware probe and a pool-size sweep under --cpus=2 show oversubscription buys no throughput and wrecks tail latency via CFS throttling."
 layout: example
 sectionid: examples
 permalink: /examples/statelessness-05-threading/

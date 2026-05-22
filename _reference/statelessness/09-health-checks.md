@@ -18,6 +18,26 @@ This document covers the health-check model: the three probes and what each mean
 
 {% include excalidraw.html name="statelessness/09-health-checks" caption="Three probes (startup, liveness, readiness) and the graceful-shutdown sequence that ties scope destructors together." %}
 
+> **Run this pattern.** A runnable companion lives at
+> [`examples/statelessness/09-health-checks/`]({{ '/examples/statelessness-09-health-checks/' | relative_url }}).
+> A single gRPC service demonstrates staged startup (up `NOT_SERVING`,
+> initialize, flip to `SERVING`), liveness vs. readiness, a `SIGUSR1`
+> readiness toggle, and the graceful-shutdown sequence to a clean exit.
+> Clone the repo, `cd` in, and `./demo.sh`.
+>
+> Two refinements the companion makes to the code shown below, both for
+> correctness: it calls `SetServingStatus` through the public
+> **`bool` overload** (`SetServingStatus(name, true/false)`) rather than the
+> `grpc::health::v1` enum sketched here — the bool form is the documented
+> `HealthCheckServiceInterface` API and needs no generated `health.pb.h` on
+> the server. And its signal handlers set only a `volatile sig_atomic_t`
+> flag, with a dedicated control thread doing the `SetServingStatus` /
+> `Shutdown` work — the async-signal-safe refinement of the in-handler
+> version shown in the Graceful-shutdown section (`signal-safety(7)`). The
+> companion also uses the hybrid shape from the *separate-port vs same-port*
+> section: HTTP `/healthz` for liveness, the gRPC health service for
+> readiness.
+
 ## The three probes
 
 Kubernetes distinguishes three probes per container. Podman has a single `healthcheck`. The semantic distinctions are worth understanding even when only one of them is configurable, because they translate to the questions any orchestrator needs answered.

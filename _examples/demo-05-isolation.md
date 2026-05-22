@@ -2,6 +2,9 @@
 title: "Demo 5 — Noisy neighbor isolation"
 description: "Two services running side-by-side on the same host, with a load generator hammering one of them. The demo measures what happens to the well-behaved tenant's p99 under three isolation strategies, plus a baseline."
 order: 5
+card_eyebrow: "Demo 05 · <strong>§11</strong>"
+card_title: "Noisy neighbor isolation"
+card_blurb: "Twin-tenant scenario: a latency-sensitive HTTP service next to a CPU/memory-bound noisy neighbor. Compares baseline, unisolated, <code>cpu.weight</code>, and <code>cpuset.cpus</code> pinning."
 layout: example
 sectionid: examples
 permalink: /examples/demo-05-isolation/

@@ -2,6 +2,9 @@
 title: "Demo 7 — Quality pipeline: static analysis, tests, sanitizers, ABI, debugging"
 description: "A complete pre-merge quality pipeline for a small C++ library and its service, all running inside containers. Static analysis, unit tests, sanitizers, ABI checks, hermetic builds, and a gdbserver sidecar — the six tools that, between…"
 order: 7
+card_eyebrow: "Demo 07 · <strong>§12, §13</strong>"
+card_title: "Quality &amp; ABI pipeline"
+card_blurb: "cppcheck and clang-tidy as build stages, gtest+gmock suite, <code>abidiff</code> against a checked-in ABI reference, plus a gdbserver sidecar for live debugging. Hermetic Conan 2 lockfile + CMake presets throughout."
 layout: example
 sectionid: examples
 permalink: /examples/demo-07-quality-pipeline/

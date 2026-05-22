@@ -2,6 +2,9 @@
 title: "Statelessness 07 — Outbox pattern"
 description: "The runnable companion to compendium Doc 07's Outbox pattern: an order and its event written in one PostgreSQL transaction, a relay that publishes the outbox to Kafka with FOR UPDATE SKIP LOCKED, and an idempotent consumer — at-least-once delivery plus idempotent apply gives an exactly-once effect."
 order: 208
+card_eyebrow: "Compendium · <strong>Doc 07</strong>"
+card_title: "Outbox pattern"
+card_blurb: "Atomic DB write plus event emission: an order and its event written in one transaction, a relay that publishes the outbox to Kafka with FOR UPDATE SKIP LOCKED, and an idempotent consumer — at-least-once delivery plus idempotent apply gives an exactly-once effect."
 layout: example
 sectionid: examples
 permalink: /examples/statelessness-07-outbox-pattern/
