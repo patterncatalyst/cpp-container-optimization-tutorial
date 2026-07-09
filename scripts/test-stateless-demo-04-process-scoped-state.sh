@@ -56,9 +56,12 @@ for k in k1 k2 k3 k4 k5 k6 k7 k8; do
 done
 stats="$("${COMPOSE[@]}" exec -T "$SVC" /usr/local/bin/state-client 127.0.0.1:50051 stats 2>&1 | filter_compose)"
 printf '%s\n' "$stats" | sed 's/^/    /'
-size=$(printf '%s\n' "$stats" | grep -oE 'cache_size=[0-9]+' | head -1 | cut -d= -f2)
-cap=$(printf '%s\n' "$stats" | grep -oE 'cache_capacity=[0-9]+' | head -1 | cut -d= -f2)
-evict=$(printf '%s\n' "$stats" | grep -oE 'evictions=[0-9]+' | head -1 | cut -d= -f2)
+size_field=$(printf '%s\n' "$stats" | grep -oE 'cache_size=[0-9]+(/[0-9]+)?' | head -1 | cut -d= -f2 || true)
+size=${size_field%%/*}
+cap=$(printf '%s\n' "$stats" | grep -oE 'cache_capacity=[0-9]+' | head -1 | cut -d= -f2 || true)
+# fall back: cache_size=N/M encodes capacity as the denominator
+[[ -z "$cap" && "$size_field" == */* ]] && cap=${size_field##*/}
+evict=$(printf '%s\n' "$stats" | grep -oE 'evictions=[0-9]+' | head -1 | cut -d= -f2 || true)
 if [[ "${size:-}" == "${cap:-x}" && "${evict:-0}" -gt 0 ]]; then
     log_ok "cache bounded at $size/$cap with $evict evictions"
 else
