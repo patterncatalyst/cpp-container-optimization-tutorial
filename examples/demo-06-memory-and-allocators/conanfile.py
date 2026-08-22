@@ -9,7 +9,7 @@ The dep chain matches demo-04's, for two reasons:
 1. **Same toolchain shape, same gotchas avoided.** Demo-04 went
    through ~20 rounds (r28-r52) to land a working
    opentelemetry-cpp + grpc + protobuf + abseil combination on
-   our gcc-toolset-14 / UBI 9 toolchain. Most of the catalog
+   base gcc 14 / UBI 10 toolchain. Most of the catalog
    entries G-13 through G-31 came out of that work. Copying
    demo-04's pinned versions means r85 inherits the wins for free
    instead of re-shaking the dep graph.

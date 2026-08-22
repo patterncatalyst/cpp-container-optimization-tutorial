@@ -68,7 +68,7 @@ fi
 
 # The image we use here must match the Containerfile's first stage
 # closely enough that the resolved graph is the same one production
-# builds will see. Mirror UBI 9 + gcc-toolset-14 + Conan 2 + the
+# builds will see. Mirror UBI 10 + base gcc 14 + Conan 2 + the
 # same profile cppstd=gnu17 setting (G-27).
 log_step "Spinning up build-context container to resolve the dep graph"
 

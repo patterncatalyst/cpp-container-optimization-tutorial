@@ -7,16 +7,14 @@
 # The image itself is NOT read-only; the demo applies `--read-only` and
 # `--tmpfs` at run time to show how the binary behaves under each.
 
-FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
+FROM registry.access.redhat.com/ubi10/ubi:10.2 AS builder
 
 RUN dnf install -y --quiet --setopt=install_weak_deps=False \
-        gcc-toolset-14 \
+        gcc gcc-c++ \
         cmake ninja-build python3-pip \
     && dnf clean all \
     && rm -rf /var/cache/dnf/*
 
-ENV PATH="/opt/rh/gcc-toolset-14/root/usr/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
 # Future-proofing for a future UBI CMake 4.x (rejects deps declaring
 # cmake_minimum_required < 3.5). Honored from the environment by CMake
 # 3.31+; harmless today (G-67).
@@ -58,8 +56,15 @@ RUN cmake -S . -B build -G Ninja \
 # ════════════════════════════════════════════════════════════════════════
 # Runtime — ubi-minimal + libstdc++ (spdlog/fmt are statically linked).
 # ════════════════════════════════════════════════════════════════════════
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS runtime
 
+# UBI-minimal without an entitlement: microdnf's subscription-manager
+# plugin prints a harmless "Found 0 entitlement certificates" on each
+# install. This stage installs only base runtime libs (no dnf plugin
+# needed), so turn plugins off to keep the build log clean.
+# (The older sed on subscription-manager.conf was a no-op: that file
+# doesn't exist in ubi-minimal; plugins=0 in dnf.conf is what works.)
+RUN printf 'plugins=0\n' >> /etc/dnf/dnf.conf
 RUN microdnf install -y --setopt=install_weak_deps=0 \
         libstdc++ \
     && microdnf clean all \

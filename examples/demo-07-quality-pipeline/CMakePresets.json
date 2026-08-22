@@ -44,7 +44,7 @@
     {
       "name": "coverage-gcc",
       "inherits": "_base",
-      "displayName": "Coverage (gcov via gcc-toolset-14, processed by lcov)",
+      "displayName": "Coverage (gcov via gcc 14, processed by lcov)",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_CXX_FLAGS": "-O0 -g --coverage",

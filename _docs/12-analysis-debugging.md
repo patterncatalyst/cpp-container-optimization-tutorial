@@ -99,7 +99,7 @@ Both tools fit cleanly as a build stage inside a multi-stage
 Containerfile:
 
 ```dockerfile
-FROM ubi9:latest AS analysis
+FROM ubi10:latest AS analysis
 COPY --from=build /src /src
 WORKDIR /src
 RUN dnf install -y cppcheck clang-tools-extra
@@ -223,7 +223,7 @@ runs it, but doesn't `COPY --from=build` the test binary into
 the runtime image:
 
 ```dockerfile
-FROM ubi9:latest AS build
+FROM ubi10:latest AS build
 # (toolchain + dependencies as before)
 COPY . /src
 WORKDIR /src
@@ -231,7 +231,7 @@ RUN cmake -B build -DBUILD_TESTING=ON --preset conan-release && \
     cmake --build build && \
     ctest --test-dir build --output-on-failure
 
-FROM ubi9-micro:latest
+FROM ubi10-micro:latest
 COPY --from=build /usr/local/bin/myservice /
 ENTRYPOINT ["/myservice"]
 ```
@@ -655,7 +655,7 @@ OI is the tool for the data-structure side.
 ## The debug sidecar pattern — gdb without rebuilding the image
 
 The single most useful pattern for debugging a containerized
-C++ service. The runtime image stays small (`ubi9-micro` from
+C++ service. The runtime image stays small (`ubi10-micro` from
 [§4](../04-image-strategy/), no gdb, no debug symbols). When
 diagnosis demands gdb, spawn an *ephemeral sidecar container*
 that:

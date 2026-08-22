@@ -57,10 +57,10 @@ log_step "Spinning up build-context container to resolve the dep graph"
 podman run --rm \
     -v "$DEMO_DIR:/src:Z" \
     -w /src \
-    registry.access.redhat.com/ubi9/ubi:9.5 \
+    registry.access.redhat.com/ubi10/ubi:10.2 \
     bash -euo pipefail -c '
         dnf install -y --quiet \
-            gcc-toolset-14 \
+            gcc gcc-c++ \
             cmake ninja-build git python3-pip \
             liburing-devel \
             perl-FindBin perl-IPC-Cmd perl-Data-Dumper perl-Pod-Html \
@@ -70,7 +70,6 @@ podman run --rm \
             perl-Term-ANSIColor \
             >/dev/null
 
-        source /opt/rh/gcc-toolset-14/enable
         pip install --quiet "conan~=2.0"
 
         conan profile detect --force >/dev/null

@@ -332,7 +332,7 @@ they bite:
 the `COPY . /src` line is *above* the `RUN dnf install`. [§4
 covers the ordering rule](../04-image-strategy/); the short
 version is dependency installs go above source `COPY` lines.
-Symptom: every build re-downloads `gcc-toolset-14`. Easy 5-10
+Symptom: every build re-downloads `gcc gcc-c++`. Easy 5-10
 minute fix per build, recurring.
 
 **Missing build-cache mounts**: Conan, ccache, vcpkg, npm
@@ -344,8 +344,8 @@ supports via the `--mount=type=cache` syntax inside `RUN`) fix
 this:
 
 ```dockerfile
-FROM ubi9:latest AS build
-RUN dnf install -y gcc-toolset-14 cmake ninja-build python3-pip
+FROM ubi10:latest AS build
+RUN dnf install -y gcc gcc-c++ cmake ninja-build python3-pip
 RUN pip3 install conan
 
 # Mount a persistent cache directory for Conan
@@ -468,7 +468,7 @@ exactly which restrictions need to relax, craft a minimal
 exception, then deploy. The pitfall is shipping step 1 instead
 of step 3.
 
-For non-io_uring services, the tutorial default of `ubi9-micro`
+For non-io_uring services, the tutorial default of `ubi10-micro`
 + no security-opt overrides is already production-appropriate.
 [§4's runtime base selection](../04-image-strategy/) and
 [§12's debug-sidecar pattern](../12-analysis-debugging/) compose

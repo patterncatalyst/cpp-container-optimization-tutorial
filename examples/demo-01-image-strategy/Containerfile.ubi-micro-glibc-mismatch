@@ -1,4 +1,4 @@
-# Multi-stage build to ubi-micro — TEACHING REFERENCE.
+# Cross-glibc build to ubi-micro — TEACHING REFERENCE.
 #
 # This Containerfile DELIBERATELY builds a binary that fails at runtime
 # on ubi-micro. Its purpose is to demonstrate a real-world production
@@ -6,18 +6,48 @@
 # symbol-version mismatch between the build host and the runtime host.
 #
 # When the demo runs this image, the container will exit immediately
-# with something like:
+# with exactly:
 #
-#   /app/demo-svc: /lib64/libc.so.6: version `GLIBC_2.35' not found
+#   /app/demo-svc: /lib64/libc.so.6: version `GLIBC_2.41' not found
 #   (required by /app/demo-svc)
 #
-# That error is the lesson. Three things to take away from it:
+# HOW THE MISMATCH IS ENGINEERED (and why it's realistic):
 #
-# 1. "ubi:9.4" and "ubi-micro:9.4" are NOT the same glibc.
-#    Both carry the 9.4 tag, but Red Hat publishes them on different
-#    cadences. The build container's glibc had patch-level backports
-#    stamped with newer symbol versions (e.g. GLIBC_2.35) that the
-#    runtime container's older glibc didn't yet expose.
+#   The build stage is Fedora (glibc 2.41), the runtime stage is UBI 10
+#   ubi-micro (glibc 2.39). This is the everyday scenario "I built on a
+#   newer base than I deploy to." Because the build glibc is NEWER, it
+#   exposes libc symbols at version tags (e.g. GLIBC_2.40 / GLIBC_2.41)
+#   that simply don't exist in the older runtime glibc. The dynamic
+#   linker checks those version requirements at startup and refuses to
+#   run before main() is ever reached.
+#
+#   In the wild, WHICH newer symbol a binary pulls in is incidental —
+#   it depends on which libc functions your (and your libraries') code
+#   happens to touch, and it drifts release to release. To make this
+#   teaching reference DETERMINISTIC instead of dependent on that luck,
+#   the build forces a hard reference to one symbol that is brand-new
+#   in Fedora's glibc 2.41 and absent from ubi-micro's 2.39:
+#   sched_setattr@GLIBC_2.41. This is done purely at link time via
+#   -Wl,--require-defined=sched_setattr in the CMake preset
+#   `release-static-libstdcxx` (used ONLY by this Containerfile). No
+#   source code is changed, so the other demo-01 variants that share
+#   src/ are unaffected. The forced reference makes the binary record a
+#   dependency on version GLIBC_2.41 in libc.so.6; ubi-micro's glibc
+#   2.39 has no such version, so the loader aborts with the error above.
+#   (--require-defined is used rather than --undefined so the linker
+#   cannot garbage-collect the reference.)
+#
+#   (On UBI 10 alone this trap does NOT reproduce: ubi:10.2 and
+#   ubi-micro:10.2 ship the same glibc 2.39, so there's no drift. You
+#   need an actual newer-than-runtime build glibc to force it — hence
+#   the Fedora build stage. The mechanism is the lesson; the specific
+#   symbol just makes the failure reproducible on demand.)
+#
+# Three things to take away:
+#
+# 1. The build image and the runtime image are NOT guaranteed to share
+#    a glibc. Build on something newer than you deploy to and a
+#    dynamically-linked binary can fail before main() ever runs.
 #
 # 2. -static-libstdc++ is NOT enough on minimal images. It bakes the
 #    C++ standard library into the binary, but glibc itself stays
@@ -39,23 +69,19 @@
 #   podman build -f Containerfile.ubi-micro-glibc-mismatch \
 #     -t demo-01-ubi-micro-glibc-mismatch .
 
-ARG UBI_VERSION=9.4
-FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build
-
-# UBI w/o entitlement: silence subscription-manager.
-RUN rm -f /etc/yum.repos.d/redhat.repo && \
-    sed -i 's/^enabled=1/enabled=0/' \
-        /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
+# Build stage: Fedora, deliberately NEWER glibc than the UBI 10 runtime.
+# Both ARGs are declared before the first FROM so each stage's FROM can
+# see them (an ARG declared after a FROM is scoped to that stage only).
+ARG FEDORA_VERSION=42
+ARG UBI_VERSION=10.2
+FROM docker.io/library/fedora:${FEDORA_VERSION} AS build
 
 RUN dnf install -y --setopt=install_weak_deps=False \
-        gcc-toolset-14 \
+        gcc gcc-c++ \
         cmake \
         ninja-build \
         libstdc++-static \
     && dnf clean all
-
-ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
-ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64
 
 WORKDIR /src
 COPY src/ ./src/
@@ -64,19 +90,22 @@ COPY CMakeLists.txt CMakePresets.json ./
 # The trap: -static-libstdc++ -static-libgcc but NO -static.
 # The C++ stdlib + libgcc support routines bake into the binary,
 # but glibc itself stays dynamic. Looks reasonable. Fails on
-# ubi-micro because of the cross-image glibc version drift
-# documented in the header comment above.
+# ubi-micro because the Fedora build glibc is newer than the
+# ubi-micro runtime glibc. The preset also link-forces one
+# Fedora-2.41-only libc symbol (sched_setattr@GLIBC_2.41) so the
+# version mismatch reproduces deterministically — see the header
+# comment above for the full explanation.
 RUN cmake --preset release-static-libstdcxx \
  && cmake --build --preset release-static-libstdcxx -j"$(nproc)" \
  && strip --strip-all build/release-static-libstdcxx/demo-svc
 
 # ---- runtime stage: ubi-micro (the trap) ----
-FROM registry.access.redhat.com/ubi9/ubi-micro:${UBI_VERSION} AS runtime
+FROM registry.access.redhat.com/ubi10/ubi-micro:${UBI_VERSION} AS runtime
 
 ARG GIT_SHA=unknown
 ARG BUILD_DATE
 LABEL org.opencontainers.image.title="cpp-container-tutorial demo-01 ubi-micro-glibc-mismatch (TEACHING REFERENCE — INTENTIONALLY FAILS)" \
-      org.opencontainers.image.description="Demonstrates glibc symbol-version drift between ubi:9.4 build host and ubi-micro:9.4 runtime; binary fails to start with 'GLIBC_2.X.Y not found'" \
+      org.opencontainers.image.description="Demonstrates glibc symbol-version drift: binary built on Fedora (newer glibc) fails to start on ubi10 ubi-micro (glibc 2.39) with 'GLIBC_2.XX not found'" \
       org.opencontainers.image.source="https://github.com/patterncatalyst/cpp-container-optimization-tutorial" \
       org.opencontainers.image.revision="${GIT_SHA}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
@@ -84,7 +113,7 @@ LABEL org.opencontainers.image.title="cpp-container-tutorial demo-01 ubi-micro-g
       tutorial.variant="ubi-micro-glibc-mismatch" \
       tutorial.purpose="teaching-reference" \
       tutorial.expected="fails-at-runtime" \
-      tutorial.toolchain="gcc-toolset-14" \
+      tutorial.toolchain="fedora-gcc" \
       tutorial.linkage="static-libstdcxx-only"
 
 WORKDIR /app

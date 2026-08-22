@@ -35,8 +35,8 @@ A first-pass Containerfile for a C++ service usually looks like
 this:
 
 ```dockerfile
-FROM registry.access.redhat.com/ubi9:latest
-RUN dnf install -y gcc-toolset-14 cmake ninja-build python3-pip && \
+FROM registry.access.redhat.com/ubi10/ubi:10.2
+RUN dnf install -y gcc gcc-c++ cmake ninja-build python3-pip && \
     pip3 install conan
 COPY . /src
 WORKDIR /src
@@ -53,7 +53,7 @@ to be present at runtime:
 
 | What | How much | Why it's in there |
 |---|---|---|
-| `gcc-toolset-14` (compiler, headers, linker) | ~400 MB | needed to compile, not to run |
+| `gcc`/`gcc-c++` (compiler, headers, linker) | ~400 MB | needed to compile, not to run |
 | Conan cache (sources + variants + binary cache) | ~200 MB | needed to resolve dependencies, not to use them |
 | CMake configure cache, `.o` files, `.a` archives | ~80 MB | intermediates from the build step |
 | Source tree (`/src`) | ~5 MB | needed to be compiled, not to be executed |
@@ -79,8 +79,8 @@ discarded:
 
 ```dockerfile
 # Stage 1 — heavy: compile here
-FROM registry.access.redhat.com/ubi9:latest AS build
-RUN dnf install -y gcc-toolset-14 cmake ninja-build python3-pip && \
+FROM registry.access.redhat.com/ubi10/ubi:10.2 AS build
+RUN dnf install -y gcc gcc-c++ cmake ninja-build python3-pip && \
     pip3 install conan
 COPY . /src
 WORKDIR /src
@@ -90,7 +90,7 @@ RUN conan install . --build=missing && \
     cp build/Release/myservice /usr/local/bin/myservice
 
 # Stage 2 — lean: only the binary travels
-FROM registry.access.redhat.com/ubi9-micro:latest
+FROM registry.access.redhat.com/ubi10/ubi-micro:10.2
 COPY --from=build /usr/local/bin/myservice /usr/local/bin/myservice
 ENTRYPOINT ["/usr/local/bin/myservice"]
 ```
@@ -103,8 +103,8 @@ intermediate `.o` files, not the source tree — make it into the
 final image. They die with stage 1.
 
 Demo-01's `Containerfile.ubi-multistage` produces a **114 MB**
-image with this pattern (UBI 9 base + your binary + dynamic
-libs). Switching the runtime base from `ubi9` to `ubi9-micro`
+image with this pattern (UBI 10 base + your binary + dynamic
+libs). Switching the runtime base from `ubi` to `ubi-micro`
 (see the next section) gets it to **26.4 MB**.
 
 The build *time* is roughly the same as the single-stage version
@@ -118,23 +118,26 @@ tiers, with very different trade-offs:
 
 | Tier | Size | Shell | Package manager | When to pick it |
 |---|---|---|---|---|
-| `ubi9` | ~210 MB | `bash` | `dnf` | development bases, debug images |
-| `ubi9-minimal` | ~100 MB | `bash` | `microdnf` | most production C++ services |
-| `ubi9-micro` | ~14 MB | none | none | static-ish C++ services, security-sensitive |
+| `ubi10/ubi` | ~210 MB | `bash` | `dnf` | development bases, debug images |
+| `ubi10/ubi-minimal` | ~100 MB | `bash` | `microdnf` | most production C++ services |
+| `ubi10/ubi-micro` | ~14 MB | none | none | static-ish C++ services, security-sensitive |
 
-`ubi9` is what you build *with*. It has the full
-`gcc-toolset-14`, `dnf`, every utility your build script might
-need. You almost never want this as your *runtime* base.
+`ubi10/ubi` is what you build *with*. It has `dnf` and every
+utility your build script might need; on UBI 10 the base
+appstream carries `gcc`/`gcc-c++` (14.3.1) directly, so a
+`dnf install gcc gcc-c++` puts a modern compiler on `PATH`
+without any software-collection dance. You almost never want
+this as your *runtime* base.
 
-`ubi9-minimal` is the comfortable default for C++ runtime. You
-get a working `bash` (so `podman exec -it ... bash` works for
+`ubi10/ubi-minimal` is the comfortable default for C++ runtime.
+You get a working `bash` (so `podman exec -it ... bash` works for
 diagnosis), a working `microdnf` (so you can install missing
 runtime libraries if you must), and a consistent `glibc` /
 `libstdc++` from the UBI release stream (so security updates
-flow). The trade-off is ~85 MB extra over `ubi9-micro` for
+flow). The trade-off is ~85 MB extra over `ubi10/ubi-micro` for
 that comfort.
 
-`ubi9-micro` is what you ship when you've measured everything.
+`ubi10/ubi-micro` is what you ship when you've measured everything.
 Roughly 14 MB on disk before you copy your binary in. No shell.
 No `dnf`. No `ldd`, no `strace`, no `bash` — you can't even
 `podman exec -it ... bash` into it because there's no `bash` to
@@ -146,14 +149,14 @@ explicitly `COPY` them from the build stage.
 **The decision is about your incident-response posture, not
 about the binary.** If the on-call playbook for "service is
 misbehaving" starts with `podman exec -it ... bash`, ship
-`ubi9-minimal`. If the playbook is "start an ephemeral
+`ubi10/ubi-minimal`. If the playbook is "start an ephemeral
 [debug sidecar](../12-analysis-debugging/) with `--pid=container:main`
-that has gdb and the debug tools", ship `ubi9-micro`. The
+that has gdb and the debug tools", ship `ubi10/ubi-micro`. The
 sidecar approach is what production deployments converge to and
 it's what [§12](../12-analysis-debugging/) walks through.
 
 Distroless (Google) and Wolfi (Chainguard) are out of scope for
-this tutorial but exist in the same space as `ubi9-micro`: very
+this tutorial but exist in the same space as `ubi10/ubi-micro`: very
 small bases that assume you've moved diagnosis into a separate
 sidecar.
 
@@ -169,10 +172,10 @@ A bad ordering forces a full rebuild on every source change:
 
 ```dockerfile
 # BAD: source change invalidates conan install
-FROM ubi9:latest AS build
+FROM registry.access.redhat.com/ubi10/ubi:10.2 AS build
 COPY . /src                              # ← changes every commit
 WORKDIR /src
-RUN dnf install -y gcc-toolset-14 ...    # ← re-runs every commit
+RUN dnf install -y gcc gcc-c++ ...       # ← re-runs every commit
 RUN pip3 install conan                   # ← re-runs every commit
 RUN conan install . --build=missing      # ← re-runs every commit
 RUN cmake --preset conan-release && cmake --build --preset conan-release
@@ -182,8 +185,8 @@ A good ordering keeps the expensive dependency steps cached:
 
 ```dockerfile
 # GOOD: source change only invalidates the cmake build
-FROM ubi9:latest AS build
-RUN dnf install -y gcc-toolset-14 cmake ninja-build python3-pip
+FROM registry.access.redhat.com/ubi10/ubi:10.2 AS build
+RUN dnf install -y gcc gcc-c++ cmake ninja-build python3-pip
 RUN pip3 install conan
 COPY conanfile.txt conan.lock /src/      # ← changes when deps change
 WORKDIR /src
@@ -205,7 +208,7 @@ makes the cached `conan install` layer trustworthy across CI runs.
 
 ## ABI labels — tell future-you what's inside
 
-A small `ubi9-micro` image is opaque. You can't `dnf list
+A small `ubi10/ubi-micro` image is opaque. You can't `dnf list
 installed`. You can't `ldd` your binary. Six months from now,
 when a CVE drops against `libstdc++` in some version range,
 nobody can easily tell whether your shipped image is affected.
@@ -214,14 +217,14 @@ The fix is to write the answer into the image metadata at build
 time:
 
 ```dockerfile
-FROM ubi9-micro:latest
+FROM registry.access.redhat.com/ubi10/ubi-micro:10.2
 COPY --from=build /usr/local/bin/myservice /usr/local/bin/myservice
 COPY --from=build /usr/lib64/libstdc++.so.6 /usr/lib64/
 LABEL org.opencontainers.image.title="myservice"
 LABEL org.opencontainers.image.version="1.4.2"
 LABEL org.opencontainers.image.revision="a3f29b1"
-LABEL ai.cpp-tutorial.libc="glibc-2.34-100.el9_4"
-LABEL ai.cpp-tutorial.libstdcxx="libstdc++.so.6.0.32"
+LABEL ai.cpp-tutorial.libc="glibc-2.39"
+LABEL ai.cpp-tutorial.libstdcxx="libstdc++.so.6.0.33"
 LABEL ai.cpp-tutorial.march="x86-64-v3"
 LABEL ai.cpp-tutorial.pgo="enabled"
 LABEL ai.cpp-tutorial.lto="thin"
@@ -239,23 +242,41 @@ instead.**
 
 ## The glibc-mismatch story
 
-`ubi9-micro` is glibc-2.34 in current releases. If you build
-your binary against a *different* glibc — say, by using a
-`fedora:41` build base instead of `ubi9` — your binary may
-reference symbols (`memcpy@GLIBC_2.39`, etc.) that don't exist
-in the runtime image. The container will start, the dynamic
-linker will fail, and you'll see this:
+`ubi10/ubi-micro:10.2` ships glibc 2.39. So does `ubi10/ubi:10.2`
+— which is exactly why, if you build *and* run on UBI 10, this
+whole class of failure never appears: both stages share the same
+glibc, so every versioned symbol your binary references is present
+at runtime. The drift only shows up when the build stage and the
+runtime stage come from *different* glibc lineages.
+
+To make that failure reproducible on demand, demo-01 engineers it
+deliberately. `Containerfile.ubi-micro-glibc-mismatch` builds the
+service on `docker.io/library/fedora:42` (glibc 2.41) and runs it on
+`ubi10/ubi-micro:10.2` (glibc 2.39). It compiles with
+`-static-libstdc++ -static-libgcc` and a forced link reference,
+`-Wl,--require-defined=sched_setattr` — and `sched_setattr` is
+versioned `GLIBC_2.41` in Fedora 42's libc, a version node that
+glibc 2.39 does not carry at all. The container starts, the dynamic
+linker goes looking for that symbol version in the runtime's
+`libc.so.6`, doesn't find it, and dies with:
 
 ```
-./myservice: /lib64/libc.so.6: version `GLIBC_2.39' not found
+/app/demo-svc: /lib64/libc.so.6: version `GLIBC_2.41' not found (required by /app/demo-svc)
 ```
 
-This isn't a `ubi9-micro` problem — it's a build/runtime base
-mismatch problem. **Use the same UBI release for the build
-stage and the runtime stage.** Demo-01 ships a deliberately-
-broken `ubi-micro-glibc-mismatch` variant (a 25.2 MB image built
-against newer glibc) so you can see this exact failure
-firsthand. The general "build host vs runtime host CPU"
+The lesson holds regardless of which two distros you cross: **the
+build image and the runtime image are not guaranteed to share a
+glibc, and `-static-libstdc++` is not enough to save you.** Static
+linking libstdc++ pulls the C++ runtime into the binary, but glibc
+stays *dynamically* linked — so a newer symbol version baked in at
+build time is still resolved against whatever `libc.so.6` the
+runtime image happens to ship. The fix is to link glibc statically
+too: `-static -static-libgcc -static-libstdc++`, as in demo-01's
+working `Containerfile.ubi-micro` variant, which has no dynamic
+libc dependency to mismatch. The simpler discipline — **use the
+same UBI release for the build stage and the runtime stage** — is
+why UBI-10-on-UBI-10 sidesteps the problem without any static
+linking at all. The general "build host vs runtime host CPU"
 version of this problem — AVX-512 in the binary, an older CPU
 in production — is what [§14](../14-pitfalls/) covers; the
 toolchain mismatch story is its sibling.
@@ -284,12 +305,12 @@ podman run --rm --entrypoint=/usr/bin/ldd myservice:1.4.2 \
 # 5. for ubi-micro: do the ldd in a sidecar
 podman run --rm \
     --pid=container:myservice-prod \
-    --entrypoint=ldd ubi9:latest /proc/1/root/usr/local/bin/myservice
+    --entrypoint=ldd registry.access.redhat.com/ubi10/ubi:10.2 /proc/1/root/usr/local/bin/myservice
 ```
 
 Steps 1-2 work on any image and are usually enough. Step 4 only
 works if you have a shell + `ldd` in the runtime base (so
-`ubi9-minimal` yes, `ubi9-micro` no). Step 5 is the
+`ubi10/ubi-minimal` yes, `ubi10/ubi-micro` no). Step 5 is the
 [debug-sidecar pattern in miniature](../12-analysis-debugging/):
 join the prod container's PID namespace so you can see its
 filesystem at `/proc/1/root`, and run `ldd` from a heavier image
@@ -328,7 +349,7 @@ verified sizes:
 | `single-stage-naive` | 689 MB | (baseline) |
 | `ubi-multistage` | 114 MB | toolchain, Conan cache, intermediates, source |
 | `ubi-micro` | 26.4 MB | + bash, dnf, every utility |
-| `ubi-micro-glibc-mismatch` | 25.2 MB | broken — dies on `GLIBC_2.39` not found |
+| `ubi-micro-glibc-mismatch` | 25.2 MB | broken — dies on `GLIBC_2.41` not found |
 
 Run `./demo.sh` to build and tag all four; `./demo.sh inspect`
 walks through the diagnostic recipe above on each variant.

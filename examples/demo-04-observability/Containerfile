@@ -1,9 +1,9 @@
-ARG UBI_VERSION=9.4
+ARG UBI_VERSION=10.2
 
 # ════════════════════════════════════════════════════════════════════════
-# Build stage — UBI 9.4 with gcc-toolset-14, Conan 2.x for C++ deps.
+# Build stage — UBI 10.2 with base gcc/gcc-c++ 14, Conan 2.x for C++ deps.
 # ════════════════════════════════════════════════════════════════════════
-FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build
+FROM registry.access.redhat.com/ubi10/ubi:${UBI_VERSION} AS build
 
 # UBI w/o entitlement: silence subscription-manager.
 # Free UBI repos in ubi.repo are unaffected — dnf install works normally.
@@ -12,18 +12,20 @@ RUN rm -f /etc/yum.repos.d/redhat.repo && \
         /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
 
 # Build basics. Conan handles all C++ ecosystem deps (gRPC, protobuf,
-# abseil-cpp, opentelemetry-cpp) — UBI 9 BaseOS+AppStream are enough
-# for the toolchain itself. We don't need EPEL for this demo (G-13
-# story in the plan covers why we stopped chasing system C++ packages).
+# abseil-cpp, opentelemetry-cpp) — UBI 10 BaseOS+AppStream are enough
+# for the toolchain itself. UBI 10's appstream ships gcc/gcc-c++ 14
+# directly, so there's no gcc-toolset SCL to activate. We don't need
+# EPEL for this demo (G-13 story in the plan covers why we stopped
+# chasing system C++ packages).
 #
 # The perl-* modules are for openssl's Configure script, which Conan
-# runs when building openssl from source. UBI 9 ships a minimal perl;
+# runs when building openssl from source. UBI 10 ships a minimal perl;
 # the modules each need a separate package. The full list comes from
 # openssl/INSTALL.md required-perl-modules — preempting all of them
 # saves "add one module, rebuild, hit next" iteration. See G-15/G-16
 # in the plan.
 RUN dnf install -y --setopt=install_weak_deps=False \
-        gcc-toolset-14 \
+        gcc gcc-c++ \
         cmake \
         ninja-build \
         git \
@@ -44,8 +46,6 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         perl-Thread-Queue \
         perl-Term-ANSIColor \
     && dnf clean all
-
-ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
 
 # Conan 2.x via pip — packaged Conan in distros lags upstream and
 # Conan 2's CLI/recipe format is what we want.
@@ -127,7 +127,15 @@ RUN cmake -S . -B build -G Ninja \
 # Static linkage from Conan deps means the binary doesn't pull a
 # single C++ ecosystem package at runtime.
 # ════════════════════════════════════════════════════════════════════════
-FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION}
+FROM registry.access.redhat.com/ubi10/ubi-minimal:${UBI_VERSION}
+
+# UBI-minimal without an entitlement: microdnf's subscription-manager
+# plugin prints a harmless "Found 0 entitlement certificates" on each
+# install. This stage installs only base runtime libs (no dnf plugin
+# needed), so turn plugins off to keep the build log clean.
+# (The older sed on subscription-manager.conf was a no-op: that file
+# doesn't exist in ubi-minimal; plugins=0 in dnf.conf is what works.)
+RUN printf 'plugins=0\n' >> /etc/dnf/dnf.conf
 
 RUN microdnf install -y --setopt=install_weak_deps=0 \
         libstdc++ \

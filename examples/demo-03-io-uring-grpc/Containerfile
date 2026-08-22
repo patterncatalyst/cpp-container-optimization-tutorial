@@ -5,28 +5,36 @@
 #   - io_uring TCP echo on :9000  (direct liburing)
 #   - Asio TCP echo on :9001  (Asio's io_uring backend)
 #
-# Inherits demo-04's UBI 9 + gcc-toolset-14 + Conan profile-gnu17
+# Inherits demo-04's UBI 10 + base gcc 14 + Conan profile-gnu17
 # pattern. Inherits demo-04's exact OTel/gRPC override chain via
 # conanfile.py (see G-22..G-30 in the reconciliation plan for why
 # each version is pinned where it is).
 #
 # Additions over demo-04's Containerfile:
-#   - liburing-devel (UBI 9 AppStream package) for direct io_uring
-#     calls in the io_uring echo server
+#   - liburing-devel (UBI 10 CodeReady Builder package, enabled by
+#     default on ubi10/ubi) for direct io_uring calls in the
+#     io_uring echo server
 #   - ASIO_HAS_IO_URING compile flag wired in CMakeLists.txt
 #
 # First-build cost: similar to demo-04 (~30-45 min on a clean cache
 # because the OTel/gRPC chain rebuilds from source under our
 # overridden profile). Cached builds: 2-3 min.
 
-FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
+FROM registry.access.redhat.com/ubi10/ubi:10.2 AS builder
+
+# UBI w/o entitlement: silence subscription-manager.
+# Free UBI repos in ubi.repo are unaffected — dnf install works normally.
+RUN rm -f /etc/yum.repos.d/redhat.repo && \
+    sed -i 's/^enabled=1/enabled=0/' \
+        /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
 
 # Same dnf set as demo-04 + liburing-devel for io_uring direct calls.
-# liburing isn't on Conan Center; UBI 9 AppStream is the right
-# source. Kernel-level io_uring is supported since RHEL 9.0
-# (kernel 5.14+).
+# liburing isn't on Conan Center; UBI 10's CodeReady Builder (CRB)
+# repo is the right source — CRB is enabled by default on ubi10/ubi,
+# so no config-manager step is needed. Kernel-level io_uring is
+# supported since RHEL 9.0 (kernel 5.14+).
 RUN dnf install -y --quiet --setopt=install_weak_deps=False \
-        gcc-toolset-14 \
+        gcc gcc-c++ \
         cmake ninja-build git python3-pip \
         liburing-devel \
         perl-FindBin perl-IPC-Cmd perl-Data-Dumper perl-Pod-Html \
@@ -37,9 +45,6 @@ RUN dnf install -y --quiet --setopt=install_weak_deps=False \
         which \
     && dnf clean all \
     && rm -rf /var/cache/dnf/*
-
-ENV PATH="/opt/rh/gcc-toolset-14/root/usr/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
 
 RUN pip install --quiet "conan~=2.0"
 
@@ -96,7 +101,15 @@ RUN cmake -S . -B build -G Ninja \
 # linked dynamically (Conan-managed gRPC chain is static, but system
 # libraries from dnf-installed packages are dynamic).
 # ════════════════════════════════════════════════════════════════════════
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS runtime
+
+# UBI-minimal without an entitlement: microdnf's subscription-manager
+# plugin prints a harmless "Found 0 entitlement certificates" on each
+# install. This stage installs only base runtime libs (no dnf plugin
+# needed), so turn plugins off to keep the build log clean.
+# (The older sed on subscription-manager.conf was a no-op: that file
+# doesn't exist in ubi-minimal; plugins=0 in dnf.conf is what works.)
+RUN printf 'plugins=0\n' >> /etc/dnf/dnf.conf
 
 RUN microdnf install -y --setopt=install_weak_deps=0 \
         libstdc++ \

@@ -39,7 +39,7 @@
 #   delete the opentelemetry-cpp lines from conanfile.py to save
 #   that initial wait — but the build cost is one-time.
 
-FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
+FROM registry.access.redhat.com/ubi10/ubi:10.2 AS builder
 
 # UBI w/o entitlement: silence the subscription-manager plugin. UBI
 # is free and unsubscribed by design; the librhsm warning about
@@ -54,7 +54,7 @@ RUN rm -f /etc/yum.repos.d/redhat.repo && \
 # Build basics + perl modules required by openssl's Configure script.
 # r85 added the perl-* modules: Conan builds openssl from source as
 # a transitive dep of opentelemetry-cpp's gRPC exporter; openssl's
-# Configure uses these modules at build time. UBI 9 ships a minimal
+# Configure uses these modules at build time. UBI 10 ships a minimal
 # perl; each module needs a separate package. The list comes from
 # openssl/INSTALL.md required-perl-modules — preempting all of them
 # saves "add one module, rebuild, hit next" iteration (the demo-04
@@ -64,7 +64,7 @@ RUN rm -f /etc/yum.repos.d/redhat.repo && \
 # autoconf-based deps decide they can't find tools and fail
 # configure with cryptic messages.
 RUN dnf install -y --quiet --setopt=install_weak_deps=False \
-        gcc-toolset-14 \
+        gcc gcc-c++ \
         cmake ninja-build git python3-pip \
         which \
         perl-FindBin \
@@ -84,9 +84,6 @@ RUN dnf install -y --quiet --setopt=install_weak_deps=False \
         perl-Term-ANSIColor \
     && dnf clean all \
     && rm -rf /var/cache/dnf/*
-
-ENV PATH="/opt/rh/gcc-toolset-14/root/usr/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
 
 RUN pip install --quiet "conan~=2.0"
 
@@ -155,14 +152,15 @@ RUN cmake -S . -B build -G Ninja \
 # All three binaries land in /usr/local/bin so the demo's compose can
 # select which to exec.
 # ════════════════════════════════════════════════════════════════════════
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS runtime
 
-# Same UBI-without-entitlement warning suppression as the builder
-# stage. ubi-minimal ships microdnf which uses the same plugin
-# config path; disabling the plugin here keeps the runtime stage's
-# microdnf install output clean.
-RUN sed -i 's/^enabled=1/enabled=0/' \
-        /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
+# UBI-minimal without an entitlement: microdnf's subscription-manager
+# plugin prints a harmless "Found 0 entitlement certificates" on each
+# install. This stage installs only base runtime libs (no dnf plugin
+# needed), so turn plugins off to keep the build log clean.
+# (The older sed on subscription-manager.conf was a no-op: that file
+# doesn't exist in ubi-minimal; plugins=0 in dnf.conf is what works.)
+RUN printf 'plugins=0\n' >> /etc/dnf/dnf.conf
 
 RUN microdnf install -y --setopt=install_weak_deps=0 \
         libstdc++ \

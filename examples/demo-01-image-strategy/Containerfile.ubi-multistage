@@ -5,8 +5,8 @@
 # Build:
 #   podman build -f Containerfile.ubi-multistage -t demo-01-ubi-multistage .
 
-ARG UBI_VERSION=9.4
-FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build
+ARG UBI_VERSION=10.2
+FROM registry.access.redhat.com/ubi10/ubi:${UBI_VERSION} AS build
 
 # UBI w/o entitlement: silence subscription-manager.
 # Free UBI repos in ubi.repo are unaffected — dnf install works normally.
@@ -15,14 +15,11 @@ RUN rm -f /etc/yum.repos.d/redhat.repo && \
         /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
 
 RUN dnf install -y --setopt=install_weak_deps=False \
-        gcc-toolset-14 \
+        gcc gcc-c++ \
         cmake \
         ninja-build \
         git \
     && dnf clean all
-
-ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
-ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64
 
 WORKDIR /src
 COPY src/ ./src/
@@ -34,7 +31,15 @@ RUN cmake --preset release \
  && strip --strip-all build/release/demo-svc
 
 # ---- runtime stage ----
-FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION} AS runtime
+FROM registry.access.redhat.com/ubi10/ubi-minimal:${UBI_VERSION} AS runtime
+
+# UBI-minimal without an entitlement: microdnf's subscription-manager
+# plugin prints a harmless "Found 0 entitlement certificates" on each
+# install. This stage installs only base runtime libs (no dnf plugin
+# needed), so turn plugins off to keep the build log clean.
+# (The older sed on subscription-manager.conf was a no-op: that file
+# doesn't exist in ubi-minimal; plugins=0 in dnf.conf is what works.)
+RUN printf 'plugins=0\n' >> /etc/dnf/dnf.conf
 
 RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ \
  && microdnf clean all
@@ -49,7 +54,7 @@ LABEL org.opencontainers.image.title="cpp-container-tutorial demo-01 ubi-multist
       org.opencontainers.image.created="${BUILD_DATE}" \
       tutorial.demo="01-image-strategy" \
       tutorial.variant="ubi-multistage" \
-      tutorial.toolchain="gcc-toolset-14" \
+      tutorial.toolchain="gcc-14" \
       tutorial.lto="thin"
 
 WORKDIR /app

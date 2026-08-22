@@ -36,7 +36,7 @@
       "displayName": "Release + static libstdc++/libgcc ONLY (TEACHING REFERENCE — demonstrates glibc symbol-version trap on minimal runtime images)",
       "cacheVariables": {
         "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
-        "CMAKE_EXE_LINKER_FLAGS": "-static-libstdc++ -static-libgcc",
+        "CMAKE_EXE_LINKER_FLAGS": "-static-libstdc++ -static-libgcc -Wl,--require-defined=sched_setattr",
         "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG -fno-plt"
       }
     },

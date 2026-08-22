@@ -42,8 +42,8 @@
 #   - GCC will warn at link time about each function affected.
 #     Those warnings are expected and not actionable for our case.
 
-ARG UBI_VERSION=9.4
-FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build
+ARG UBI_VERSION=10.2
+FROM registry.access.redhat.com/ubi10/ubi:${UBI_VERSION} AS build
 
 # UBI w/o entitlement: silence subscription-manager.
 RUN rm -f /etc/yum.repos.d/redhat.repo && \
@@ -51,15 +51,12 @@ RUN rm -f /etc/yum.repos.d/redhat.repo && \
         /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
 
 RUN dnf install -y --setopt=install_weak_deps=False \
-        gcc-toolset-14 \
+        gcc gcc-c++ \
         cmake \
         ninja-build \
         libstdc++-static \
         glibc-static \
     && dnf clean all
-
-ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
-ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64
 
 WORKDIR /src
 COPY src/ ./src/
@@ -80,7 +77,7 @@ RUN cmake --preset release-static \
  && strip --strip-unneeded build/release-static/demo-svc
 
 # ---- runtime stage: ubi-micro (~12 MB, just rootfs scaffolding) ----
-FROM registry.access.redhat.com/ubi9/ubi-micro:${UBI_VERSION} AS runtime
+FROM registry.access.redhat.com/ubi10/ubi-micro:${UBI_VERSION} AS runtime
 
 ARG GIT_SHA=unknown
 ARG BUILD_DATE
@@ -91,7 +88,7 @@ LABEL org.opencontainers.image.title="cpp-container-tutorial demo-01 ubi-micro" 
       org.opencontainers.image.created="${BUILD_DATE}" \
       tutorial.demo="01-image-strategy" \
       tutorial.variant="ubi-micro" \
-      tutorial.toolchain="gcc-toolset-14" \
+      tutorial.toolchain="gcc-14" \
       tutorial.linkage="static"
 
 WORKDIR /app

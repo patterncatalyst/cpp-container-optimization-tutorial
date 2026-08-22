@@ -177,7 +177,12 @@ wants it included, or be a standalone post-PPTX round.
 
 ---
 
-## Cleanup: retrofit subscription-manager disable to demo-04's runtime stage
+## ~~Cleanup: retrofit subscription-manager disable to demo-04's runtime stage~~ — DONE 2026-08-21
+
+**Status:** **DONE 2026-08-21.** Runtime-stage suppression block added
+to demo-04's final ubi-minimal stage. Closed together with the audit
+below (all demos swept in one pass). Cosmetic only; not build-verified
+(the change is a `sed ... || true` guard that cannot fail the build).
 
 **Status:** Logged 2026-05-16 in r82. Small, mechanical, no behavior
 impact, but worth doing for consistency.
@@ -203,7 +208,36 @@ discussion.
 
 ---
 
-## Audit: same subscription-manager pattern in demos 01/02/03/05/07
+## ~~Audit: same subscription-manager pattern in demos 01/02/03/05/07~~ — DONE + HOST-VERIFIED 2026-08-21
+
+**CORRECTION 2026-08-21 (verified in real containers):** the historical
+`sed -i 's/^enabled=1/enabled=0/' /etc/dnf/plugins/subscription-manager.conf`
+approach (including demo-06's r82 "fix") was ALWAYS A NO-OP for runtime
+stages — that file does not exist in `ubi9/ubi-minimal`, and the trailing
+`|| true` hid the failure. So every ubi-minimal runtime stage kept
+printing `librhsm-WARNING **: Found 0 entitlement certificates`.
+- Full `ubi9/ubi` (builder stages, `dnf`) does NOT emit the warning at
+  all — builder blocks are harmless but unnecessary; left in place.
+- The verified fix for microdnf runtime stages is `plugins=0` in
+  `/etc/dnf/dnf.conf`. Applied to all 10 runtime stages (demo-01 pgo×2 +
+  ubi-multistage, 02, 03, 04, 05 tenant×2, 06, 07 svc). NOT applied to
+  builders (would break demo-07's `dnf config-manager --set-enabled crb`).
+- **Host-verified: all 7 demos now rebuild with ZERO librhsm warnings.**
+
+**Status:** **DONE 2026-08-21.** Whole-repo sweep. Suppression block
+now present in every stage that starts from a fresh UBI base:
+- demo-01: both ubi-minimal runtime stages (`instrumented`, `optimized`)
+- demo-02: builder + runtime (neither had it before)
+- demo-03: builder + runtime (neither had it before)
+- demo-04: runtime stage (see cleanup above)
+- demo-05: both runtime stages (`tenant-a`, `tenant-b`)
+- demo-06: already had both stages (r82) ✓
+- demo-07: builder/toolchain already had it; the `svc` release-runtime
+  stage (a fresh ubi-minimal that the audit almost missed) now fixed too.
+  Intermediate stages inherit from `toolchain`/`build`; the centos
+  `libabigail-builder` is non-UBI and needs nothing.
+
+Cosmetic only; not build-verified (`sed ... || true`, cannot fail a build).
 
 **Status:** Logged 2026-05-16 in r82. Companion to the demo-04
 cleanup above.
@@ -227,7 +261,13 @@ no dedicated round needed.
 
 ---
 
-## Cleanup: demo.sh + verification scripts should short-circuit on `compose up` build failure
+## ~~Cleanup: demo.sh + verification scripts should short-circuit on `compose up` build failure~~ — DONE 2026-08-21
+
+**Status:** **DONE 2026-08-21.** Resolved via the demo-format adoption:
+every one of the 7 main demos now wraps its builds / `compose up` in
+`if ! ...; then log_err; exit 1; fi`, so a failed build never proceeds
+to load-testing. Not build-verified (needs host runs), but the guard is
+straightforward control flow.
 
 **Status:** Logged 2026-05-16 in r84. Minor UX cleanup.
 
@@ -380,7 +420,15 @@ anything.
 ---
 
 
-## Cleanup: backport G-39 (ThreadPool size) to demo-06
+## ~~Cleanup: backport G-39 (ThreadPool size) to demo-06~~ — DONE + BUILD-VERIFIED 2026-08-21
+
+**Status:** **DONE 2026-08-21.** `examples/demo-06-memory-and-allocators/src/main.cpp`
+ThreadPool bumped 16 → 64 with the G-39 explanatory comment backported
+from demo-05. Build-verified: demo-06 image rebuilt on the host, the
+change compiles cleanly and batch mode runs green (hash still
+`0xac09f54afe8c6152` across all three variants). The serve-mode error-
+rate drop (~34/1M at `hey -c 50` → ~0) is code-confirmed but not
+separately load-tested here.
 
 **Status:** Logged 2026-05-16 (r97). demo-05 surfaced G-39 — httplib's
 ThreadPool size must exceed test concurrency when keep-alive is on,
@@ -420,6 +468,55 @@ if no other demo-06 touch is coming and we want to close the latent
 bug formally.
 
 **Effort estimate:** 1 minute of code change + 30 min build/verify.
+
+---
+
+## Demo-format adoption: Quarkus-style presentation demos
+
+**Status:** IN PROGRESS 2026-08-21. Pilot approved (demo-04 first, then
+roll out). Modeled on `~/Dev/optimizing-java/quarkus-optimization`'s
+`demo.sh` format, which reads much better live.
+
+**The format** (helpers now in `scripts/lib/_helpers.sh`):
+`banner`, `demo_step` (auto-numbered stops), `hr`/`hr_thin`, `callout`
+(on-stage framing), `grafana_callout` (dashboard/panel pointers), and
+`pause` (Press-Enter; auto-skips when non-interactive or `DEMO_NO_PAUSE=1`
+/ `--no-pause`, so CI and piped runs don't hang). Plus `compose up`
+short-circuit on build failure (closes the r84 backlog item).
+
+**Done + HOST-VERIFIED 2026-08-21:**
+- Presentation helpers added to the shared lib.
+- ALL 7 main demos converted (01, 02, 03, 04, 05, 06, 07). Each: KEY
+  INSIGHT header, `banner` + setup `callout`, auto-numbered `demo_step`
+  stops, interpretation `callout`s after every result, `pause` between
+  stops (auto-skips non-interactive), `compose up`/build short-circuits,
+  `--no-pause` flag, all original flags/subcommands/outputs preserved.
+  `grafana_callout` used only in demo-03/04 (real LGTM stack). demo-02
+  stays compatible with its JSON-parsing test.
+- **All 7 run green end-to-end on the host (`./demo.sh --no-pause`,
+  exit 0, zero librhsm warnings):**
+  - 01 — 4 image builds + PGO two-pass; size/latency tables; EXPECTED-FAIL
+    glibc-mismatch row shown correctly.
+  - 02 — baseline + pressured runs; layout table + JSON outputs.
+  - 03 — stack up; gRPC 4459 req/s, io_uring p50 94µs, Asio p50 111µs;
+    summary table; honest Grafana callout (no demo-03 dashboard).
+  - 04 — LGTM up; all THREE signals (trace/metric/log) confirmed present
+    end-to-end; clean teardown.
+  - 05 — cgroup delegation OK; 4 scenarios (baseline/unisolated/weighted/
+    pinned) with expected p99 progression.
+  - 06 — 3-variant rebuild; hash `0xac09f54afe8c6152` matches across all
+    three (G-39 recompile confirmed); PMR wins p50.
+  - 07 — analyzer ✓, tests 5/5 ✓, asan 5/5 ✓, abi no-changes ✓.
+
+**Next:**
+- Known minor quirk (all demos, inherited from template): `--help` uses
+  `sed ... "$0"` after the script `cd`s, so it only resolves when invoked
+  as `./demo.sh` from the demo dir (the documented usage). Fix later by
+  parsing help against the absolute script path if it ever matters.
+- Statelessness examples (10) are a later phase if desired.
+- demo-06 serve-mode: G-39 fix (pool 64) only exercised via batch here;
+  the serve-mode error-rate drop (~34/1M → ~0 at `hey -c 50`) is code-
+  confirmed but not separately load-tested.
 
 ---
 

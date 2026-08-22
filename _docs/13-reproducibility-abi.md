@@ -54,15 +54,14 @@ techniques in this section close each one in turn.
 ## When Conan from-source meets a minimal distro
 
 A practical hazard worth knowing about before this section's
-worked examples: if your build host is UBI 9 / RHEL 9 /
-Rocky 9 / Alma 9 and you're using Conan to manage C++ deps,
-autotools-based packages (libcurl, openssl, c-ares, nghttp2,
-…) will fall over during their from-source build because
-UBI's minimal Perl doesn't ship the modules `aclocal` and
-`automake` need.
+worked examples: if your build host is UBI 10 / RHEL 10 /
+Rocky 10 / Alma 10 and you're using Conan to manage C++ deps,
+autotools-based packages (libcurl, openssl, c-ares, nghttp2, …) will fall over
+during their from-source build because UBI's minimal Perl
+doesn't ship the modules `aclocal` and `automake` need.
 
-**[Appendix A — Conan, autotools, and UBI 9's minimal
-Perl](appendix-a-conan-ubi9-perl.html)** has the full
+**[Appendix A — Conan, autotools, and UBI's minimal
+Perl](appendix-a-conan-perl.html)** has the full
 perl-module shopping list and the alternatives (skip the
 dep, use the system package, drop cppstd to hit pre-builts)
 so you can pick the right trade-off instead of chasing
@@ -381,7 +380,7 @@ Different `--build-arg HERMETIC_NONCE=...` values produce different
 cache keys at that line, forcing every layer downstream (the actual
 `cmake --build`) to re-execute. The arg itself has zero effect on the
 compiled binary — it only changes a string in `/tmp/`. The toolchain
-layers (UBI, EPEL, gcc-toolset-14, libabigail) stay cached because
+layers (UBI, EPEL, gcc/gcc-c++, libabigail) stay cached because
 they're upstream of the `ARG` line.
 
 **What "pass" looks like.**
@@ -440,7 +439,7 @@ returns nonzero, and the failing test output is in the build
 logs the same way a compile error would be.
 
 ```dockerfile
-FROM ubi9:latest AS build
+FROM registry.access.redhat.com/ubi10/ubi:10.2 AS build
 # (toolchain, prefetched deps)
 COPY --from=cachi2 /cachi2 /cachi2
 ENV CONAN_HOME=/cachi2
@@ -633,9 +632,9 @@ encoding for a hermetic build:
 LABEL org.opencontainers.image.title="myservice"
 LABEL org.opencontainers.image.version="1.4.2"
 LABEL org.opencontainers.image.revision="a3f29b1"
-LABEL ai.cpp-tutorial.libc="glibc-2.34-100.el9_4"
-LABEL ai.cpp-tutorial.libstdcxx="libstdc++.so.6.0.32"
-LABEL ai.cpp-tutorial.compiler="gcc-14.2.1-1.el9"
+LABEL ai.cpp-tutorial.libc="glibc-2.39"
+LABEL ai.cpp-tutorial.libstdcxx="libstdc++.so.6.0.33"
+LABEL ai.cpp-tutorial.compiler="gcc-14.3.1"
 LABEL ai.cpp-tutorial.march="x86-64-v3"
 LABEL ai.cpp-tutorial.lto="thin"
 LABEL ai.cpp-tutorial.pgo="enabled"

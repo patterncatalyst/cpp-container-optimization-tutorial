@@ -1,21 +1,21 @@
-ARG UBI_VERSION=9.4
+ARG UBI_VERSION=10.2
 
 # ---- libabigail builder stage ----
-# We use CentOS Stream 9 for this stage. Reasons:
-#   1. libabigail isn't in UBI 9's CRB subset (G-46)
-#   2. elfutils-devel isn't in UBI 9's CRB subset (G-47)
-#   3. flex + bison aren't in UBI 9's CRB subset either (G-49)
+# We use CentOS Stream 10 for this stage. Reasons:
+#   1. libabigail isn't in UBI 10's CRB subset (G-46)
+#   2. elfutils-devel isn't in UBI 10's CRB subset (G-47)
+#   3. flex + bison aren't in UBI 10's CRB subset either (G-49)
 # Cascading source builds for all four became unreasonable. CentOS
-# Stream 9 is the Red Hat-maintained development stream that becomes
-# RHEL 9 — it has the full CRB enabled (after one `dnf config-manager
-# --set-enabled crb`), with libabigail packaged. Same glibc 2.34 as
-# UBI 9, so the binaries copy across ABI-compatibly.
+# Stream 10 is the Red Hat-maintained development stream that becomes
+# RHEL 10 — it has the full CRB enabled (after one `dnf config-manager
+# --set-enabled crb`), with libabigail packaged. Same glibc 2.39 as
+# UBI 10, so the binaries copy across ABI-compatibly.
 #
 # This is a deliberate exception to the "UBI everywhere" project
 # preference — and a justified one, since CentOS Stream is Red Hat's
 # own upstream development stream, not a third-party distribution.
 # The runtime image (`svc`, ubi-minimal) is untouched.
-FROM quay.io/centos/centos:stream9 AS libabigail-builder
+FROM quay.io/centos/centos:stream10 AS libabigail-builder
 RUN dnf install -y --setopt=install_weak_deps=False \
         dnf-plugins-core \
  && dnf config-manager --set-enabled crb \
@@ -26,12 +26,29 @@ RUN dnf install -y --setopt=install_weak_deps=False \
  && cp -av /usr/bin/abidiff /usr/bin/abidw /usr/bin/abilint \
            /usr/bin/abicompat /usr/bin/abipkgdiff /usr/bin/kmidiff \
            /export/bin/ \
- && cp -av /usr/lib64/libabigail*.so* /export/lib/ \
- && cp -av /usr/lib64/libxxhash*.so* /export/lib/ \
- && cp -av /usr/lib64/libbpf*.so* /export/lib/
+ && cp -av /usr/lib64/libabigail*.so* /export/lib/
+# libabigail is the ONLY .so we stage from the builder. On el10 the
+# libabigail 2.10 package's direct DT_NEEDED set (verified with
+# `readelf -d /usr/lib64/libabigail.so.9`) is:
+#   libxml2, libdw, libelf, libctf, libbpf, liblzma, libstdc++, libm,
+#   libgcc_s, libc
+# Every one of those is already present in the UBI 10 toolchain base
+# below (libxml2 + elfutils-libelf/elfutils-libs explicitly; libctf,
+# libbpf, liblzma, libstdc++ et al. pulled in transitively by the gcc
+# toolchain), so none need copying. The libbfd/libsframe/libz/libzstd
+# that show up in `ldd` are transitive-only (via libctf) and resolve
+# against UBI 10's own binutils-libs, so the builder's version-stamped
+# libbfd-2.41-65 filename is never referenced.
+#
+# el9 -> el10 change: on el9 libabigail linked /usr/lib64/libxxhash.so.*
+# and we copied it here; on el10 libxxhash is no longer a shared-lib
+# dependency of libabigail (dropped/inlined), so that cp is gone — a
+# glob that matches nothing (as it now would) makes the build fail.
+# libbpf was also copied on el9 but is present in the UBI 10 base, so
+# it's dropped too.
 
 # ---- toolchain base ----
-FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS toolchain
+FROM registry.access.redhat.com/ubi10/ubi:${UBI_VERSION} AS toolchain
 
 # UBI w/o entitlement: silence subscription-manager.
 # Free UBI repos in ubi.repo are unaffected — dnf install works normally.
@@ -39,17 +56,17 @@ RUN rm -f /etc/yum.repos.d/redhat.repo && \
     sed -i 's/^enabled=1/enabled=0/' \
         /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
 
-# Enable EPEL 9 — UBI 9 doesn't ship cppcheck in its core repos.
+# Enable EPEL 10 — UBI 10 doesn't ship cppcheck in its core repos.
 # (libabigail is provided by the libabigail-builder stage above; we
 # don't need EPEL for it.) CRB (CodeReady Builder) is already enabled
-# in UBI 9 by default, which is the prerequisite for EPEL packages.
+# in UBI 10 by default, which is the prerequisite for EPEL packages.
 RUN dnf install -y \
-        https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+        https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
 
 RUN dnf install -y --setopt=install_weak_deps=False \
-        gcc-toolset-14 \
-        gcc-toolset-14-libasan-devel \
-        gcc-toolset-14-libubsan-devel \
+        gcc gcc-c++ \
+        libasan \
+        libubsan \
         cmake \
         ninja-build \
         clang-tools-extra \
@@ -65,14 +82,18 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         'gcovr>=7.0' \
     && dnf clean all
 
-# Copy libabigail tools + shared libs from the Stream 9 builder stage.
-# Runtime deps (libxml2, elfutils-libelf, elfutils-libs) come from UBI's
-# BaseOS repo — same elfutils 0.190 as Stream 9 ships, so ABI-compatible.
+# Copy libabigail tools + the libabigail shared lib from the Stream 10
+# builder stage. All of libabigail's other runtime deps (libxml2, libdw,
+# libelf, libctf, libbpf, liblzma, libstdc++, ...) come from UBI's
+# BaseOS/AppStream repos — installed explicitly (libxml2, elfutils-libelf,
+# elfutils-libs) or pulled in transitively by the gcc toolchain above.
+# UBI 10 ships elfutils 0.194 vs Stream 10's 0.192, and elfutils keeps a
+# forward-compatible ABI, so the copied binaries link.
 COPY --from=libabigail-builder /export/bin/  /usr/local/bin/
 COPY --from=libabigail-builder /export/lib/  /usr/local/lib/
 
-ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:/usr/local/bin:$PATH
-ENV LD_LIBRARY_PATH=/opt/rh/gcc-toolset-14/root/usr/lib64:/usr/local/lib
+ENV PATH=/usr/local/bin:$PATH
+ENV LD_LIBRARY_PATH=/usr/local/lib
 
 # ---- build stage ----
 FROM toolchain AS build
@@ -143,10 +164,19 @@ RUN mkdir -p reports
 
 # cppcheck WITHOUT --error-exitcode so the stage never gates. Findings
 # still land in reports/cppcheck.xml; the gating decision is downstream.
+# el10 cppcheck is 2.18.2 (vs the older cppcheck the demo source was tuned
+# against on el9). 2.18.2's `constParameterReference` check false-positives
+# on copy_in() in src/lib/channel.cpp: it suggests `buf` be a const&, but
+# buf is written through `std::memcpy(buf.data() + w, ...)` — a const
+# vector's .data() yields a const pointer that memcpy's void* dest rejects,
+# so the parameter genuinely cannot be const. This is a tool false positive,
+# not a code defect, so we suppress that one check on that one file to keep
+# the clean-repo pass clean (the gate still fires on every real finding).
 RUN cppcheck --enable=warning,style,performance,portability \
         --inline-suppr \
         --xml --xml-version=2 \
         --suppress=missingIncludeSystem \
+        --suppress=constParameterReference:src/lib/channel.cpp \
         -I src/include src/ 2> reports/cppcheck.xml \
   || true
 
@@ -250,18 +280,20 @@ RUN mkdir -p /src/reports \
 #
 # Why gcovr and not lcov?
 #   The straightforward choice would have been lcov + genhtml, but the
-#   UBI 9 EPEL mirror doesn't ship perl-JSON (lcov 1.14's dependency) —
+#   UBI 10 EPEL mirror doesn't ship perl-JSON (lcov 1.14's dependency) —
 #   see G-55 in the plan. gcovr is a Python alternative that's
 #   pip-installable, doesn't depend on the perl chain, has cleaner
 #   gcc-14 compatibility, and produces multiple output formats from a
 #   single invocation (HTML for humans, Cobertura XML for CI, JSON for
 #   tools, plain text for terminals).
 #
-# The one cross-version gotcha that still applies:
+# The gcov/gcc version match:
 #   gcovr internally shells out to `gcov` to parse .gcda/.gcno files.
-#   That gcov must match the gcc that built the code. UBI 9's
-#   /usr/bin/gcov is gcc 11; our compile uses gcc-toolset-14's gcc
-#   14.2.1. Pass --gcov-executable to point gcovr at the SCL gcov.
+#   That gcov must match the gcc that built the code. On UBI 10 the
+#   base appstream gcc is 14, so /usr/bin/gcov is already the gcc 14
+#   gcov that matches our compile — no --gcov-executable override needed
+#   (unlike the gcc-toolset SCL era, when we had to point gcovr at the
+#   SCL gcov because /usr/bin/gcov was the older base gcc).
 FROM build AS coverage-gcc
 WORKDIR /src
 RUN if [ -s conan.lock ]; then \
@@ -289,14 +321,12 @@ RUN mkdir -p /src/reports/coverage-gcc \
  && ctest --preset coverage-gcc --output-on-failure \
           --output-junit /src/reports/coverage-gcc.xml \
  && gcovr --root /src \
-          --gcov-executable /opt/rh/gcc-toolset-14/root/usr/bin/gcov \
           --filter 'src/' \
           --exclude '.*/tests/.*' \
           --exclude '/usr/.*' \
-          --exclude '/opt/rh/.*' \
           --exclude '.*/\.conan2/.*' \
           --html-details /src/reports/coverage-gcc/index.html \
-          --html-title "demo07 coverage (gcov via gcc-toolset-14)" \
+          --html-title "demo07 coverage (gcov via gcc 14)" \
           --json /src/reports/coverage.json \
           --cobertura /src/reports/coverage-cobertura.xml \
           --txt /src/reports/coverage-summary.txt \
@@ -339,7 +369,16 @@ RUN if [ -s /src/reports/abidiff.txt ]; then \
     fi
 
 # ---- release runtime ----
-FROM registry.access.redhat.com/ubi9/ubi-minimal:${UBI_VERSION} AS svc
+FROM registry.access.redhat.com/ubi10/ubi-minimal:${UBI_VERSION} AS svc
+
+# UBI-minimal without an entitlement: microdnf's subscription-manager
+# plugin prints a harmless "Found 0 entitlement certificates" on each
+# install. This stage installs only base runtime libs (no dnf plugin
+# needed), so turn plugins off to keep the build log clean.
+# (The older sed on subscription-manager.conf was a no-op: that file
+# doesn't exist in ubi-minimal; plugins=0 in dnf.conf is what works.)
+RUN printf 'plugins=0\n' >> /etc/dnf/dnf.conf
+
 RUN microdnf install -y --setopt=install_weak_deps=0 libstdc++ \
  && microdnf clean all
 COPY --from=build /src/build/release-debuginfo/demo07-svc /app/demo07-svc
@@ -350,7 +389,7 @@ USER 1001:1001
 ENTRYPOINT ["/app/demo07-svc"]
 
 # ---- gdbserver sidecar ----
-FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS gdbserver
+FROM registry.access.redhat.com/ubi10/ubi:${UBI_VERSION} AS gdbserver
 
 # UBI w/o entitlement: silence subscription-manager.
 # Free UBI repos in ubi.repo are unaffected — dnf install works normally.

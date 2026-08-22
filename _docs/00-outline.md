@@ -197,14 +197,15 @@ treatment at the
 and the topics this tutorial deliberately doesn't cover
 (coroutines, Kubernetes, distributed tracing, GPU offload).
 
-### [§16 — Appendix A: Conan, autotools, and UBI 9's minimal perl]({{ '/docs/16-appendix-a-conan-ubi9-perl/' | relative_url }})
+### [§16 — Appendix A: Conan, autotools, and UBI's minimal perl]({{ '/docs/16-appendix-a-conan-perl/' | relative_url }})
 
 Reference appendix. The operational survival guide for a hazard
-that bit demo-04 hard during development: when Conan from-source-
-builds a dep that uses autotools (libcurl, c-ares, openssl,
-nghttp2, …) on UBI 9, the build fails on missing perl modules. The
-complete fifteen-module shopping list, three simplifying
-alternatives, and a worked libcurl example.
+that bit demo-04 hard during development: when Conan
+from-source-builds a dep that uses autotools (libcurl, c-ares,
+openssl, nghttp2, …) on a minimal UBI, the build fails on missing
+perl modules. The complete fifteen-module shopping list, three
+simplifying alternatives, and a worked libcurl example, updated for
+the tutorial's UBI 10 toolchain.
 
 ## What this tutorial deliberately does not cover
 
@@ -254,7 +255,7 @@ If you read every section and run every demo, expect:
 - **45 minutes** for §14–§15 (pitfalls reference + reading
   pointers)
 - **30 minutes** for §16 (appendix, only if you'll be building
-  Conan from-source dependencies on UBI 9)
+  Conan from-source dependencies on UBI)
 
 Total reading + running time: **roughly 10–14 hours**, spread over
 however many sittings you want. The §1–§3 prereq+mental-model block

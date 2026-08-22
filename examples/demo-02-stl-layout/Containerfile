@@ -7,15 +7,22 @@
 # cgroup memory cap — to demonstrate how data layout determines
 # cache locality under memory pressure (§6 lesson).
 #
-# Why UBI 9 + gcc-toolset-14: same base as demo-04, same toolset.
-# This is the project's standard build environment, see §0 / §1.
+# Why UBI 10 + base gcc 14: same base as demo-04. UBI 10's appstream
+# ships gcc/gcc-c++ 14 directly, so there's no gcc-toolset SCL to
+# activate — plain `gcc-c++` is the C++23 compiler. See §0 / §1.
 #
 # Conan dep set (boost, benchmark) is simpler than demo-04's
 # (gRPC, OTel-cpp, protobuf, abseil) — no overrides needed, no
 # lockfile needed for v1. If recipe revision drift bites later
 # (G-25), we'd convert the same way demo-04 did.
 
-FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
+FROM registry.access.redhat.com/ubi10/ubi:10.2 AS builder
+
+# UBI w/o entitlement: silence subscription-manager.
+# Free UBI repos in ubi.repo are unaffected — dnf install works normally.
+RUN rm -f /etc/yum.repos.d/redhat.repo && \
+    sed -i 's/^enabled=1/enabled=0/' \
+        /etc/dnf/plugins/subscription-manager.conf 2>/dev/null || true
 
 # Same dnf set as demo-04 — perl modules listed because Conan's
 # from-source builds of openssl/zlib/etc. need them, even though
@@ -23,7 +30,7 @@ FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
 # saves a future round if some transitive dep pulls them in.
 # (G-13, G-15, G-17 in the reconciliation plan have the long story.)
 RUN dnf install -y --quiet --setopt=install_weak_deps=False \
-        gcc-toolset-14 \
+        gcc gcc-c++ \
         cmake ninja-build git python3-pip \
         perl-FindBin perl-IPC-Cmd perl-Data-Dumper perl-Pod-Html \
         perl-Pod-Usage perl-File-Compare perl-File-Copy perl-File-Path \
@@ -33,10 +40,6 @@ RUN dnf install -y --quiet --setopt=install_weak_deps=False \
         which \
     && dnf clean all \
     && rm -rf /var/cache/dnf/*
-
-# Activate gcc-toolset-14 for all subsequent RUN commands.
-ENV PATH="/opt/rh/gcc-toolset-14/root/usr/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
 
 RUN pip install --quiet "conan~=2.0"
 
@@ -69,7 +72,15 @@ RUN cmake -S . -B build -G Ninja \
 # linked against boost (header-only here) and benchmark (we asked
 # Conan for static libs). The only runtime dep is libstdc++.
 # ════════════════════════════════════════════════════════════════════════
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS runtime
+
+# UBI-minimal without an entitlement: microdnf's subscription-manager
+# plugin prints a harmless "Found 0 entitlement certificates" on each
+# install. This stage installs only base runtime libs (no dnf plugin
+# needed), so turn plugins off to keep the build log clean.
+# (The older sed on subscription-manager.conf was a no-op: that file
+# doesn't exist in ubi-minimal; plugins=0 in dnf.conf is what works.)
+RUN printf 'plugins=0\n' >> /etc/dnf/dnf.conf
 
 RUN microdnf install -y --setopt=install_weak_deps=0 \
         libstdc++ \

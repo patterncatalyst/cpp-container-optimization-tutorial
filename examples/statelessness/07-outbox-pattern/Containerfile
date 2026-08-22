@@ -17,15 +17,20 @@
 # fight. The first build compiles the gRPC chain (~5 min cold); a warm
 # Conan cache makes it far faster.
 
-FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
+FROM registry.access.redhat.com/ubi10/ubi:10.2 AS builder
 
-# EPEL (for librdkafka-devel). libpq-devel is in UBI AppStream.
-RUN rpm -i https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm \
-    && dnf install -y --quiet --setopt=install_weak_deps=False \
-        gcc-toolset-14 \
+# librdkafka has no el10 package: it is absent from UBI AppStream, from
+# the (default-enabled) CodeReady Builder repo, and from EPEL 10 — which
+# ships only Python kafka clients, not the C library or its -devel headers
+# (the UBI 9 build got librdkafka-devel from EPEL 9, but that package was
+# never rebuilt for el10). So EPEL buys us nothing here and librdkafka is
+# built from source below (see the librdkafka build step). libpq-devel is
+# in UBI AppStream.
+RUN dnf install -y --quiet --setopt=install_weak_deps=False \
+        gcc gcc-c++ \
         cmake ninja-build git python3-pip \
         pkgconf-pkg-config \
-        libpq-devel librdkafka-devel \
+        libpq-devel \
         perl-FindBin perl-IPC-Cmd perl-Data-Dumper perl-Pod-Html \
         perl-Pod-Usage perl-File-Compare perl-File-Copy perl-File-Path \
         perl-Time-Piece perl-Getopt-Long perl-Digest-SHA \
@@ -35,8 +40,30 @@ RUN rpm -i https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rp
     && dnf clean all \
     && rm -rf /var/cache/dnf/*
 
-ENV PATH="/opt/rh/gcc-toolset-14/root/usr/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
+# Build librdkafka (C client) from source, since el10 has no package for
+# it. Minimal build: no SSL/SASL/compression (the demo speaks plaintext to
+# kafka:9092), producing a lean shared librdkafka.so.1 plus rdkafka.pc.
+# CMAKE_INSTALL_LIBDIR=lib keeps the lib and its .pc together under
+# /usr/local/lib so pkg-config's -L path matches the installed .so.
+ARG LIBRDKAFKA_VERSION=v2.6.1
+RUN git clone --depth 1 --branch "${LIBRDKAFKA_VERSION}" \
+        https://github.com/confluentinc/librdkafka.git /tmp/librdkafka \
+    && cmake -S /tmp/librdkafka -B /tmp/librdkafka/build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DRDKAFKA_BUILD_STATIC=OFF \
+        -DRDKAFKA_BUILD_EXAMPLES=OFF \
+        -DRDKAFKA_BUILD_TESTS=OFF \
+        -DWITH_SSL=OFF -DWITH_SASL=OFF -DWITH_ZLIB=OFF \
+        -DWITH_ZSTD=OFF -DWITH_CURL=OFF -DENABLE_LZ4_EXT=OFF \
+    && cmake --build /tmp/librdkafka/build \
+    && cmake --install /tmp/librdkafka/build --prefix /usr/local \
+    && rm -rf /tmp/librdkafka
+
+# The project's CMakeLists finds librdkafka via pkg-config (rdkafka.pc);
+# point pkg-config at the source-built install under /usr/local/lib.
+ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
+
 # Future-proofing: relaxes the cmake_minimum_required floor for any
 # Conan-built dep declaring < 3.5 (which CMake 4.x rejects). Honored from
 # the environment by CMake 3.31+; harmless to projects already on >= 3.5
@@ -81,16 +108,30 @@ RUN cmake -S . -B build -G Ninja \
 # ════════════════════════════════════════════════════════════════════════
 # Runtime — ubi-minimal + libstdc++ + libpq + librdkafka (all shared).
 # ════════════════════════════════════════════════════════════════════════
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS runtime
 
-# EPEL again for librdkafka at runtime; libpq is in UBI AppStream.
-RUN rpm -i https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm \
-    && microdnf install -y --setopt=install_weak_deps=0 \
+# UBI-minimal without an entitlement: microdnf's subscription-manager
+# plugin prints a harmless "Found 0 entitlement certificates" on each
+# install. This stage installs only base runtime libs (no dnf plugin
+# needed), so turn plugins off to keep the build log clean.
+# (The older sed on subscription-manager.conf was a no-op: that file
+# doesn't exist in ubi-minimal; plugins=0 in dnf.conf is what works.)
+RUN printf 'plugins=0\n' >> /etc/dnf/dnf.conf
+
+# librdkafka has no el10 package, so there is nothing to install for it
+# here (EPEL 10 ships no librdkafka); the shared lib built from source in
+# the builder stage is copied in below. libpq is in UBI AppStream, so no
+# EPEL is needed at runtime.
+RUN microdnf install -y --setopt=install_weak_deps=0 \
         libstdc++ \
         libpq \
-        librdkafka \
     && microdnf clean all \
     && rm -rf /var/cache/yum
+
+# librdkafka shared runtime lib (built from source in the builder stage).
+# Landing it in /usr/lib64 puts it on the default loader path so the
+# relay/consumer binaries resolve librdkafka.so.1 without extra config.
+COPY --from=builder /usr/local/lib/librdkafka.so.1 /usr/lib64/librdkafka.so.1
 
 COPY --from=builder /src/build/order-svc      /usr/local/bin/order-svc
 COPY --from=builder /src/build/order-client   /usr/local/bin/order-client

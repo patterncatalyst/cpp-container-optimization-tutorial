@@ -35,15 +35,16 @@ importance:
    on rootless cgroup writability for `memory.high`, `cpu.weight`,
    and `cpuset.cpus`. Some hardened distros disable this and require
    a manual `systemctl --user` setup.
-3. **`gcc-toolset-14` and `clang` 18 are both available and current.**
+3. **GCC 14 and `clang` 18 are both available and current.**
    We use both — GCC for the UBI-based demos (matches what Red Hat
-   ships in `gcc-toolset-14`), Clang for the PGO build
-   (better profile-data tooling and Sampling-PGO support).
+   ships as `gcc`/`gcc-c++` in the UBI 10 base appstream), Clang for
+   the PGO build (better profile-data tooling and Sampling-PGO
+   support).
 
-> **No subscription needed.** Every UBI 9 image we use comes from
-> `registry.access.redhat.com/ubi9/...` and is freely pullable and
+> **No subscription needed.** Every UBI 10 image we use comes from
+> `registry.access.redhat.com/ubi10/...` and is freely pullable and
 > redistributable. You don't need a Red Hat subscription for any
-> of the demos. Subscription-only images like `ubi9/toolbox` are not
+> of the demos. Subscription-only images like `ubi10/toolbox` are not
 > in use.
 
 Other distros that should work with minor adjustments:
@@ -78,8 +79,9 @@ right after.
 
 - **`gcc-c++`** — Fedora 44 ships GCC 14.x as the default `g++`,
   which has full C++23 support; that's all you need on the host.
-  (UBI-based container builds use `gcc-toolset-14` separately, but
-  that's installed *inside* the container Image, not on your host.)
+  (UBI-based container builds install `gcc`/`gcc-c++` from the UBI 10
+  base appstream — GCC 14.3.1 — separately, but that's installed
+  *inside* the container image, not on your host.)
 - **`clang`, `clang-tools-extra`, `lld`, `llvm`** — the gating Clang.
   Used for PGO instrumentation and `clang-tidy` in demo 6.
 - **`cmake`** (≥ 3.25) — needed for CMake presets v6.
@@ -316,7 +318,7 @@ gh auth refresh -h github.com -s repo,workflow,admin:repo_hook
 ## Configure registry access
 
 The UBI-based images pull from `registry.access.redhat.com`. Anonymous
-pull works for `ubi9/ubi` and `ubi9/ubi-minimal`, but if you hit a
+pull works for `ubi10/ubi` and `ubi10/ubi-minimal`, but if you hit a
 rate limit (you might, on a cold network), authenticate:
 
 ```bash

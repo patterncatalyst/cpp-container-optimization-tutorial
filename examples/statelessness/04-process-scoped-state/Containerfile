@@ -1,15 +1,15 @@
 # statelessness/04-process-scoped-state — composition-root demo.
 #
-# Same UBI 9 + gRPC scaffold as 02-raii (gRPC + protobuf + abseil, no
+# Same UBI 10 + gRPC scaffold as 02-raii (gRPC + protobuf + abseil, no
 # OTel). Simpler than 03-pmr: no AddressSanitizer binary, so no
 # libasan-devel. Builds two binaries: state-svc (the service) and
 # state-client. First build pulls/compiles the gRPC chain from source;
 # with a warm Conan cache from an earlier compendium example it's fast.
 
-FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
+FROM registry.access.redhat.com/ubi10/ubi:10.2 AS builder
 
 RUN dnf install -y --quiet --setopt=install_weak_deps=False \
-        gcc-toolset-14 \
+        gcc gcc-c++ \
         cmake ninja-build git python3-pip \
         perl-FindBin perl-IPC-Cmd perl-Data-Dumper perl-Pod-Html \
         perl-Pod-Usage perl-File-Compare perl-File-Copy perl-File-Path \
@@ -19,9 +19,6 @@ RUN dnf install -y --quiet --setopt=install_weak_deps=False \
         which \
     && dnf clean all \
     && rm -rf /var/cache/dnf/*
-
-ENV PATH="/opt/rh/gcc-toolset-14/root/usr/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
 
 RUN pip install --quiet "conan~=2.0"
 
@@ -61,8 +58,15 @@ RUN cmake -S . -B build -G Ninja \
 # ════════════════════════════════════════════════════════════════════════
 # Runtime — ubi-minimal + libstdc++. The gRPC chain is static.
 # ════════════════════════════════════════════════════════════════════════
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS runtime
 
+# UBI-minimal without an entitlement: microdnf's subscription-manager
+# plugin prints a harmless "Found 0 entitlement certificates" on each
+# install. This stage installs only base runtime libs (no dnf plugin
+# needed), so turn plugins off to keep the build log clean.
+# (The older sed on subscription-manager.conf was a no-op: that file
+# doesn't exist in ubi-minimal; plugins=0 in dnf.conf is what works.)
+RUN printf 'plugins=0\n' >> /etc/dnf/dnf.conf
 RUN microdnf install -y --setopt=install_weak_deps=0 \
         libstdc++ \
     && microdnf clean all \

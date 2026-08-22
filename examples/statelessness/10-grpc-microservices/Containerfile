@@ -15,12 +15,12 @@
 # first build compiles the gRPC chain (~5 min cold); a warm Conan cache is
 # far faster.
 
-FROM registry.access.redhat.com/ubi9/ubi:9.5 AS builder
+FROM registry.access.redhat.com/ubi10/ubi:10.2 AS builder
 
 # libpq-devel is in UBI AppStream. The perl list satisfies gRPC/boringssl
 # build scripts (G-30).
 RUN dnf install -y --quiet --setopt=install_weak_deps=False \
-        gcc-toolset-14 \
+        gcc gcc-c++ \
         cmake ninja-build git python3-pip \
         pkgconf-pkg-config \
         libpq-devel \
@@ -33,8 +33,6 @@ RUN dnf install -y --quiet --setopt=install_weak_deps=False \
     && dnf clean all \
     && rm -rf /var/cache/dnf/*
 
-ENV PATH="/opt/rh/gcc-toolset-14/root/usr/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/rh/gcc-toolset-14/root/usr/lib64"
 ENV CMAKE_POLICY_VERSION_MINIMUM=3.5
 
 RUN pip install --quiet "conan~=2.0"
@@ -77,8 +75,15 @@ RUN cmake -S . -B build -G Ninja \
 # already present; we don't add full curl (it would conflict). Liveness is
 # gRPC, checked by our own health-probe.
 # ════════════════════════════════════════════════════════════════════════
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS runtime
 
+# UBI-minimal without an entitlement: microdnf's subscription-manager
+# plugin prints a harmless "Found 0 entitlement certificates" on each
+# install. This stage installs only base runtime libs (no dnf plugin
+# needed), so turn plugins off to keep the build log clean.
+# (The older sed on subscription-manager.conf was a no-op: that file
+# doesn't exist in ubi-minimal; plugins=0 in dnf.conf is what works.)
+RUN printf 'plugins=0\n' >> /etc/dnf/dnf.conf
 RUN microdnf install -y --setopt=install_weak_deps=0 \
         libstdc++ \
         libpq \

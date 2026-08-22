@@ -1,15 +1,17 @@
 ---
-title: "Appendix A — Conan, autotools, and UBI 9's minimal perl"
+title: "Appendix A — Conan, autotools, and UBI's minimal perl"
 order: 16
-description: "A survival guide for building autotools-based C++ deps (libcurl, c-ares, openssl, etc.) on UBI 9 via Conan, learned the hard way during demo-04."
+description: "A survival guide for building autotools-based C++ deps (libcurl, c-ares, openssl, etc.) on UBI via Conan, learned the hard way on UBI 9 during demo-04."
 duration: "10 minutes"
+redirect_from:
+  - /docs/16-appendix-a-conan-ubi9-perl/
 ---
 
 ## Why this exists
 
 This tutorial's demo-04 took six rounds of build failures to converge.
 None of them were demo-04 bugs. All of them were the same underlying issue
-in a different costume: **UBI 9 ships a deliberately minimal perl, and
+in a different costume: **UBI ships a deliberately minimal perl, and
 Conan's bundled build tools assume the system perl is "complete."** When
 the assumption fails, you get this:
 
@@ -23,11 +25,19 @@ the assumption fails, you get this:
 sequence before pivoting strategy. This appendix is the recipe so you don't
 have to repeat the journey.
 
+> **A note on versions.** This war story played out on **UBI 9** during
+> the tutorial's original development, and the failures above are exactly
+> what we saw there. The tutorial now targets **UBI 10** (see
+> [§4](../04-image-strategy/)), and the recipes below have been updated
+> to the UBI 10 toolchain. The *shape* of the trap — a minimal system
+> perl versus Conan's from-source autotools builds — is a property of
+> UBI's deliberate minimalism, not of any one release, so keep the
+> defensive shopping list handy regardless of which UBI you build on.
+
 The lesson generalizes well beyond demo-04. **libcurl, c-ares, openssl,
 nghttp2, and several other staples of the C++ ecosystem use autotools
-under the hood**. If you're building any of them via Conan on UBI 9 (or
-RHEL 9, Rocky 9, Alma 9 — same packaging model), you'll meet the same
-walls.
+under the hood**. If you're building any of them via Conan on UBI (or
+RHEL, Rocky, Alma — same packaging model), you can meet these walls.
 
 ## The pattern
 
@@ -35,13 +45,14 @@ Three things conspire:
 
 1. **Conan from-source builds.** Conan Center pre-builds packages for
    common profiles (gcc 11/12 with cppstd=17, libstdc++11 ABI). Profiles
-   off this main path — gcc-toolset-14, cppstd=23, all-static-linkage —
-   often miss pre-builts and fall through to a from-source compile.
+   off this main path — a newer GCC (14.3.1 on UBI 10), cppstd=23,
+   all-static-linkage — often miss pre-builts and fall through to a
+   from-source compile.
 2. **From-source builds run perl scripts.** OpenSSL's `Configure` is
    perl. `mk-fipsmodule-cnf.pl` is perl. autotools' `aclocal`,
    `automake`, `autoheader` are all perl. `autoreconf` invokes the
    whole stack.
-3. **UBI 9's perl is minimal.** Each standard-library module
+3. **UBI's perl is minimal.** Each standard-library module
    (`FindBin`, `IPC::Cmd`, `Thread::Queue`, etc.) is a separate RPM.
    The base `perl` package only gives you the interpreter and a small
    core. Anything else needs `dnf install perl-<Module>`.
@@ -125,7 +136,7 @@ list demo-04 converged to:
 
 ```dockerfile
 RUN dnf install -y --setopt=install_weak_deps=False \
-        gcc-toolset-14 \
+        gcc gcc-c++ \
         cmake \
         ninja-build \
         git \
@@ -148,12 +159,12 @@ RUN dnf install -y --setopt=install_weak_deps=False \
     && dnf clean all
 ```
 
-## Worked example: libcurl from source via Conan on UBI 9
+## Worked example: libcurl from source via Conan on UBI 10
 
 libcurl is the canonical autotools-using C library. Its build does
 `autoreconf -fi`, then `configure`, then `make`. The `autoreconf`
-step is where UBI 9 trips you up; once that passes, the `configure`
-shell script and the C compilation are unremarkable.
+step is where UBI's minimal perl trips you up; once that passes, the
+`configure` shell script and the C compilation are unremarkable.
 
 ### conanfile.txt
 
@@ -190,8 +201,8 @@ openssl/*:no_fips=True
 ### Containerfile
 
 ```dockerfile
-ARG UBI_VERSION=9.4
-FROM registry.access.redhat.com/ubi9/ubi:${UBI_VERSION} AS build
+ARG UBI_VERSION=10.2
+FROM registry.access.redhat.com/ubi10/ubi:${UBI_VERSION} AS build
 
 # UBI w/o entitlement: silence subscription-manager.
 RUN rm -f /etc/yum.repos.d/redhat.repo && \
@@ -200,8 +211,12 @@ RUN rm -f /etc/yum.repos.d/redhat.repo && \
 
 # The full perl-module shopping list — see the appendix for what
 # each batch covers. Fifteen modules total.
+# On UBI 10, gcc/gcc-c++ (14.3.1) come straight from the base
+# appstream — no software collection to activate, and they land on
+# PATH directly. CRB (ninja-build, etc.) is enabled by default on
+# ubi10/ubi, so no config-manager step is needed either.
 RUN dnf install -y --setopt=install_weak_deps=False \
-        gcc-toolset-14 cmake ninja-build git python3-pip \
+        gcc gcc-c++ cmake ninja-build git python3-pip \
         perl-FindBin perl-IPC-Cmd perl-Data-Dumper \
         perl-Pod-Html perl-Pod-Usage perl-File-Compare \
         perl-File-Copy perl-File-Path perl-Time-Piece \
@@ -210,7 +225,6 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         perl-Term-ANSIColor \
     && dnf clean all
 
-ENV PATH=/opt/rh/gcc-toolset-14/root/usr/bin:$PATH
 RUN pip3 install --no-cache-dir 'conan~=2.0' && \
     conan profile detect --force
 
@@ -267,13 +281,13 @@ several megabytes of code you'll never link.
 
 ### Use the system package
 
-UBI 9 has openssl in BaseOS. EPEL 9 has libcurl. If you don't strictly
+UBI has openssl in BaseOS. EPEL has libcurl. If you don't strictly
 need the latest version that Conan would build, you can use the
 system version and tell Conan to find it:
 
 ```dockerfile
 RUN dnf install -y \
-        https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+        https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
 RUN dnf install -y openssl-devel libcurl-devel
 ```
 
@@ -294,9 +308,12 @@ zero from-source-build cost and zero perl-module gymnastics.
 
 ### Pin a profile that Conan Center pre-builds for
 
-`compiler.cppstd=17` and `compiler.version=11` (UBI 9's default gcc)
-hit the most pre-built coverage. If you can live without C++23
-features in your dep tree, drop the cppstd:
+`compiler.cppstd=17` and an older `compiler.version` (11/12) hit the
+most pre-built coverage on Conan Center. UBI 10's base gcc is 14.3.1,
+so `conan profile detect` writes `compiler.version=14` by default —
+which is exactly the off-the-main-path profile that falls through to
+from-source builds. If you can live without C++23 features in your
+dep tree, drop the cppstd (and, if you like, the compiler version):
 
 ```dockerfile
 RUN conan profile detect --force && \
@@ -324,7 +341,7 @@ they reach pre-built parity.
 This appendix synthesizes lessons documented in the project's
 reconciliation plan as gotchas:
 
-- **G-13** — UBI 9 BaseOS+AppStream don't carry the modern C++
+- **G-13** — UBI BaseOS+AppStream don't carry the modern C++
   ecosystem; switch to Conan or enable EPEL.
 - **G-14** — Even EPEL doesn't have everything; refactor to
   Conan-managed deps.
