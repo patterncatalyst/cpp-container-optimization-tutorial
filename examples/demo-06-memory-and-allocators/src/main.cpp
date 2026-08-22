@@ -525,7 +525,17 @@ int run_serve_mode(const Args& /*args*/, const demo06::WorkloadParams& params) {
     // cycles will fail with EADDRINUSE.
     svr.set_keep_alive_max_count(1000);
     svr.set_keep_alive_timeout(60);
-    svr.new_task_queue = [] { return new httplib::ThreadPool(16); };
+    // ── G-39 (backported from demo-05 r97): ThreadPool vs hey -c ──
+    //
+    // With keep_alive enabled, each accepted TCP connection holds one
+    // ThreadPool worker for its ENTIRE lifetime (not per request). If
+    // hey's -c exceeds the pool size, the excess connections sit in the
+    // accept queue with no worker and time out at hey's 20-sec default.
+    //
+    // demo-06's serve-mode test is `hey -c 50`; pool=16 produced ~34
+    // stuck connections (r88 observation: 50-16=34, matching the 34-37
+    // errors seen). Pool=64 covers -c 50 with headroom.
+    svr.new_task_queue = [] { return new httplib::ThreadPool(64); };
     // Generic lambda (auto sock) avoids the question of where
     // `socket_t` lives in any given cpp-httplib version. In v0.16.0
     // it's declared at global scope (not `httplib::socket_t`); r83's

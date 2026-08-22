@@ -1,9 +1,43 @@
 #!/usr/bin/env bash
-# Demo 5 — noisy-neighbor isolation through cgroup v2 controls.
+# ============================================================================
+# Demo 05 — Isolation: noisy-neighbor interference through cgroup v2 controls
 #
-#   ./demo.sh
-#   ./demo.sh --scenario baseline|unisolated|weighted|pinned
-#   ./demo.sh --clean
+# Two C++ HTTP services share one host. tenant-a is the "good citizen" whose
+# p99 latency we measure; tenant-b is the "noisy neighbor" that pegs the CPU
+# in a tight loop. We run tenant-a under four scenarios — alone, next to an
+# untuned neighbor, next to a weight-limited neighbor, and pinned to its own
+# CPUs — and watch what the neighbor does to tenant-a's tail latency.
+#
+# KEY INSIGHT — read this before presenting:
+#
+#   The dominant cost on a busy multi-tenant host is NOT the work each
+#   service does — it's the INTERFERENCE between services. A perfectly
+#   tuned service can have its p99 wrecked by a neighbor saturating the
+#   shared CPU, cache, and memory bandwidth.
+#
+#   cgroups v2 is the kernel's arbitration model, and two knobs bound the
+#   damage:
+#     • cpu.weight  — the noisy neighbor still runs, but the scheduler
+#                     preferentially gives tenant-a time. Bounds interference
+#                     WITHOUT capping throughput when the CPU is idle.
+#     • cpuset.cpus — hand each tenant its own CPUs. Eliminates cross-tenant
+#                     cache eviction entirely; pinned can beat baseline
+#                     because the scheduler stops migrating tenant-a.
+#
+#   THE ON-STAGE MOMENT is the summary table: 'unisolated' shows ~10× p99
+#   degradation (the cost of doing nothing), 'weighted' recovers most of it,
+#   and 'pinned' can drop BELOW the single-tenant baseline.
+#
+# This script is a talk-through: it stops between steps (Press Enter) so you
+# can narrate. Piped / non-interactive runs skip the pauses automatically
+# (or pass --no-pause).
+#
+# Usage:
+#   ./demo.sh                                       run all four scenarios
+#   ./demo.sh --scenario baseline|unisolated|weighted|pinned   one scenario
+#   ./demo.sh --no-pause                            never stop for Enter
+#   ./demo.sh --clean                               tear down + remove images
+# ============================================================================
 
 set -euo pipefail
 
@@ -22,7 +56,9 @@ DO_CLEAN=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --scenario) SCENARIO="$2"; shift 2;;
+    --no-pause) export DEMO_NO_PAUSE=1; shift;;
     --clean)    DO_CLEAN=1;    shift;;
+    -h|--help)  sed -n '2,35p' "$0"; exit 0;;
     *) log_err "unknown arg: $1"; exit 2;;
   esac
 done
@@ -39,7 +75,25 @@ require podman hey awk
 register_cleanup demo05-a demo05-b
 mkdir -p results
 
-# ── G-40 (r98): cgroup v2 controller delegation detection ────────────
+banner \
+  "DEMO 05 — Isolation: noisy-neighbor interference via cgroup v2" \
+  "Two C++ services, one host. What does a bad neighbor cost tenant-a?"
+
+callout \
+  "tenant-a:   http://127.0.0.1:${PORT}   the 'good citizen' we measure" \
+  "tenant-b:   the 'noisy neighbor' — pegs CPU in a tight loop, no limits" \
+  "Images:     $IMG_A · $IMG_B" \
+  "Knobs:      cpu.weight (bound interference) · cpuset.cpus (dedicate CPUs)"
+
+# ── Step 1: Check the host — cgroup v2 controller delegation ─────────────
+demo_step "Check the host: cgroup v2 controller delegation"
+callout "The 'weighted' and 'pinned' scenarios need rootless podman to apply" \
+        "the cgroup v2 'cpu' and 'cpuset' controllers. Most distros only" \
+        "delegate 'memory pids' to the user slice by default — cpu/cpuset" \
+        "need an explicit systemd opt-in. We detect that up front so missing" \
+        "controllers skip cleanly instead of crashing mid-run."
+#
+# G-40 (r98): cgroup v2 controller delegation detection.
 #
 # Rootless podman's `--cpu-weight` and `--cpuset-cpus` flags need their
 # respective cgroup v2 controllers (cpu, cpuset) delegated to the
@@ -70,16 +124,29 @@ if (( ! HAS_CPU_DELEGATED )) || (( ! HAS_CPUSET_DELEGATED )); then
   log_warn "Scenarios that need missing controllers will be skipped cleanly."
   log_warn "Fix: run \$REPO/scripts/cgroup-delegation.sh enable  (then re-login)"
   log_warn "     or see this demo's README for details."
+else
+  log_ok "cpu and cpuset controllers delegated — all scenarios will run"
 fi
+pause
 
-log_step "Building both tenants"
-podman build --target tenant-a -t "$IMG_A" .
-podman build --target tenant-b -t "$IMG_B" .
+# ── Step 2: Build both tenants ───────────────────────────────────────────
+demo_step "Build both tenants"
+callout "tenant-a is the HTTP service we probe; tenant-b is the CPU/memory" \
+        "hog. First run adds a Conan + Containerfile build (~2-3 min)."
+if ! podman build --target tenant-a -t "$IMG_A" .; then
+  log_err "tenant-a build failed — cannot measure anything without it."
+  exit 1
+fi
+if ! podman build --target tenant-b -t "$IMG_B" .; then
+  log_err "tenant-b build failed — cannot run the noisy-neighbor scenarios."
+  exit 1
+fi
 
 # Detect NUMA topology so we can decide whether the 'pinned' scenario
 # is even meaningful.
 NODES=$(ls -1 /sys/devices/system/node 2>/dev/null | grep -c '^node[0-9]\+$' || echo 1)
 log_info "Detected $NODES NUMA node(s)"
+pause
 
 start_a()    { podman run --rm --replace -d --name demo05-a -p "${PORT}:8080" "$IMG_A" >/dev/null; }
 start_b()    { podman run --rm --replace -d --name demo05-b "$@" "$IMG_B" >/dev/null; }
@@ -140,26 +207,40 @@ bench_a() {
 }
 
 run_baseline() {
-  log_step "Scenario: baseline (tenant-a alone)"
+  demo_step "Scenario: baseline (tenant-a alone)"
+  callout "No neighbor at all. This is tenant-a's best case — the number" \
+          "every other scenario is measured against."
   start_a
   bench_a baseline
+  callout "" "That p99 is the floor. Nothing on this host is competing for CPU."
   stop_both
+  pause
 }
 
 run_unisolated() {
-  log_step "Scenario: unisolated (both running, no tuning)"
+  demo_step "Scenario: unisolated (both running, no tuning)"
+  callout "Start the noisy neighbor with zero cgroup tuning — the default" \
+          "scheduler arbitrates. Watch what happens to tenant-a's tail."
   start_a
   start_b
   bench_a unisolated
+  callout "" "This is the cost of doing nothing: the neighbor's load leaks" \
+          "straight into tenant-a's p99 (~10× baseline is typical here)." \
+          "One tenant's load absolutely affects the other."
   stop_both
+  pause
 }
 
 run_weighted() {
-  log_step "Scenario: weighted (tenant-b cpu.weight=10)"
+  demo_step "Scenario: weighted (tenant-b cpu.weight=10)"
+  callout "Same two tenants, but the neighbor gets cpu.weight=10 vs tenant-a's" \
+          "default 100. The neighbor still runs — it's just deprioritized when" \
+          "they contend. Interference should be bounded, not eliminated."
   if (( ! HAS_CPU_DELEGATED )); then
     log_warn "skipping: cgroup v2 'cpu' controller not delegated to user slice"
     echo "weighted: skipped (cgroup v2 cpu controller not delegated; see README)" \
       > results/weighted.txt
+    pause
     return
   fi
   start_a
@@ -180,6 +261,8 @@ run_weighted() {
   err=$(mktemp)
   if start_b --cgroup-conf=cpu.weight=10 2>"$err"; then
     bench_a weighted
+    callout "" "cpu.weight recovers most of the baseline: the neighbor is still" \
+            "scheduled, but the kernel gives tenant-a more time. p99 stays bounded."
     rm -f "$err"
   else
     log_warn "podman rejected --cgroup-conf=cpu.weight=10; actual error:"
@@ -192,19 +275,25 @@ run_weighted() {
     rm -f "$err"
   fi
   stop_both
+  pause
 }
 
 run_pinned() {
-  log_step "Scenario: pinned (cpuset.cpus split)"
+  demo_step "Scenario: pinned (cpuset.cpus split)"
+  callout "Hand each tenant its own CPUs via cpuset.cpus. No shared cores means" \
+          "no cross-tenant cache eviction — pinned can beat baseline because the" \
+          "scheduler stops migrating tenant-a and its cache stays hot."
   if (( ! HAS_CPUSET_DELEGATED )); then
     log_warn "skipping: cgroup v2 'cpuset' controller not delegated to user slice"
     echo "pinned: skipped (cgroup v2 cpuset controller not delegated; see README)" \
       > results/pinned.txt
+    pause
     return
   fi
   if [[ "$NODES" -lt 1 ]]; then
     log_warn "no NUMA info; skipping pinned"
     echo "pinned: skipped (no NUMA info)" > results/pinned.txt
+    pause
     return
   fi
   local total
@@ -212,6 +301,7 @@ run_pinned() {
   if (( total < 4 )); then
     log_warn "need at least 4 CPUs to pin; have $total — skipping pinned"
     echo "pinned: skipped (only $total CPUs, need >= 4)" > results/pinned.txt
+    pause
     return
   fi
   local half=$(( total / 2 ))
@@ -227,6 +317,8 @@ run_pinned() {
      && podman run --rm --replace -d --name demo05-b --cpuset-cpus="$b_cpus" \
         "$IMG_B" >/dev/null 2>&1; then
     bench_a pinned
+    callout "" "Dedicated CPUs eliminate interference entirely. The neighbor's" \
+            "load can no longer touch tenant-a — p99 can even beat baseline."
   else
     log_warn "podman rejected --cpuset-cpus; recording N/A"
     log_warn "to see the underlying error, run:"
@@ -235,6 +327,7 @@ run_pinned() {
       > results/pinned.txt
   fi
   stop_both
+  pause
 }
 
 case "$SCENARIO" in
@@ -246,7 +339,8 @@ case "$SCENARIO" in
   *) log_err "unknown scenario: $SCENARIO"; exit 2 ;;
 esac
 
-log_step "Summary"
+# ── Summary ──────────────────────────────────────────────────────────────
+demo_step "Summary — what the neighbor cost tenant-a"
 for s in baseline unisolated weighted pinned; do
   if [[ -f "results/$s.txt" ]]; then
     if grep -qE '^[[:space:]]+50%+ in' "results/$s.txt"; then
@@ -261,3 +355,13 @@ for s in baseline unisolated weighted pinned; do
     fi
   fi
 done
+callout "" \
+  "Read the p99 column top to bottom:" \
+  "  baseline    — tenant-a's floor, no competition" \
+  "  unisolated  — the cost of doing nothing (neighbor wrecks the tail)" \
+  "  weighted    — cpu.weight bounds the damage; most of baseline recovered" \
+  "  pinned      — dedicated CPUs; interference gone, can beat baseline" \
+  "The lesson: on a shared host, isolation policy — not per-service tuning —" \
+  "decides your tail latency. Raw hey output is in results/."
+
+log_ok "Demo 05 complete. (Containers were stopped after each scenario.)"

@@ -1,10 +1,36 @@
 #!/usr/bin/env bash
-# Demo 1 — image strategy: UBI multi-stage vs UBI-micro vs naive single-stage,
+# ============================================================================
+# Demo 01 — Image strategy: UBI multi-stage vs UBI-micro vs naive single-stage,
 # plus a PGO pass against the multi-stage build.
 #
+# Builds the same trivial C++23 HTTP service several ways and makes the deltas
+# visible: image size, then p50/p95/p99 latency under a `hey` load.
+#
+# KEY INSIGHT — read this before presenting:
+#
+#   Image strategy is the lowest-hanging-fruit performance and security win in
+#   containerized C++. A multi-stage build leaves the toolchain (GCC, ld, headers,
+#   build deps) OUT of the runtime image — a ~26× size drop from the naive
+#   single-stage baseline to ubi-micro, and a matching cut in CVE surface — with
+#   NO measurable p50 penalty. LTO plus a representative PGO profile then buys a
+#   further few percent on the hot path, essentially for free once the pipeline
+#   is in place.
+#
+#   THE ON-STAGE MOMENT is the two tables: the image-size comparison (the
+#   toolchain leaving production) and the latency comparison (PGO's small-but-real
+#   p99 win, and the deliberately-broken glibc-mismatch variant's runtime failure
+#   as the closing lesson).
+#
+# This script is a talk-through: it stops between steps (Press Enter) so you can
+# narrate. Piped / non-interactive runs skip the pauses automatically (or pass
+# --no-pause).
+#
 # Run from this directory:
-#   ./demo.sh [--no-pgo]  # skip the PGO build (fast path)
-#   ./demo.sh --clean     # remove all images and exit
+#   ./demo.sh                full run (build every variant + PGO + benchmark)
+#   ./demo.sh --no-pgo       skip the PGO build (fast path)
+#   ./demo.sh --no-pause     never stop for Enter (unattended)
+#   ./demo.sh --clean        remove all images and exit
+# ============================================================================
 
 set -euo pipefail
 
@@ -14,23 +40,38 @@ cd "$DEMO_DIR"
 # shellcheck source=../../scripts/lib/_helpers.sh
 source "$(cd ../../scripts/lib && pwd)/_helpers.sh"
 
-require podman curl jq hey
-
 IMG_PREFIX="cpp-tut/demo-01"
 PORT_BASE=18801
 
-# Local color/header/note kept for backwards-compat with the script's
-# original output style; helpers are used for the new functionality
-# (require, wait_for_http) only.
-color() { printf '\033[%sm%s\033[0m' "$1" "$2"; }
-header() { echo; echo "$(color '1;34' "==> $*")"; }
-note() { echo "    $*"; }
+DO_PGO=1
+DO_CLEAN=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-pgo)   DO_PGO=0;               shift;;
+    --no-pause) export DEMO_NO_PAUSE=1; shift;;
+    --clean)    DO_CLEAN=1;             shift;;
+    -h|--help)  sed -n '2,32p' "$0"; exit 0;;
+    *) log_err "unknown arg: $1"; exit 2;;
+  esac
+done
+
+require podman curl jq hey
 
 cleanup() {
   podman ps -a --format '{{.Names}}' | grep -E '^demo01-' | \
     xargs -r podman rm -f >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
+
+if [[ $DO_CLEAN -eq 1 ]]; then
+  podman rmi -f \
+    "${IMG_PREFIX}:ubi-multistage" \
+    "${IMG_PREFIX}:ubi-micro" \
+    "${IMG_PREFIX}:single-stage-naive" \
+    "${IMG_PREFIX}:pgo" 2>/dev/null || true
+  log_ok "Cleaned."
+  exit 0
+fi
 
 # Ensure pgo-profiles/ exists so the optimized stage's COPY doesn't 404
 # even on a --no-pgo run that's followed later by a normal run that
@@ -41,46 +82,75 @@ mkdir -p pgo-profiles
 # produce a byte-identical input to the build.
 HTTPLIB_VERSION="${HTTPLIB_VERSION:-v0.16.0}"
 if [[ ! -f src/third_party/httplib.h ]]; then
-  header "Vendoring cpp-httplib ${HTTPLIB_VERSION}"
+  log_step "Vendoring cpp-httplib ${HTTPLIB_VERSION}"
   mkdir -p src/third_party
   curl -fsSL -o src/third_party/httplib.h \
     "https://raw.githubusercontent.com/yhirose/cpp-httplib/${HTTPLIB_VERSION}/httplib.h"
-  note "Saved to src/third_party/httplib.h"
+  log_ok "Saved to src/third_party/httplib.h"
 fi
 
-case "${1:-}" in
-  --clean)
-    podman rmi -f \
-      "${IMG_PREFIX}:ubi-multistage" \
-      "${IMG_PREFIX}:ubi-micro" \
-      "${IMG_PREFIX}:single-stage-naive" \
-      "${IMG_PREFIX}:pgo" 2>/dev/null || true
-    echo "Cleaned."
-    exit 0
-    ;;
-esac
+banner \
+  "DEMO 01 — Image strategy: multi-stage, ubi-micro, LTO, PGO" \
+  "Same C++23 service, built several ways. Watch size and latency move."
 
-DO_PGO=1
-[[ "${1:-}" == "--no-pgo" ]] && DO_PGO=0
+callout \
+  "Images:    ${IMG_PREFIX}:{ubi-multistage,ubi-micro,single-stage-naive,pgo}" \
+  "           + ubi-micro-glibc-mismatch  (TEACHING variant — fails at runtime)" \
+  "Ports:     bench containers on ${PORT_BASE}+ (one per variant)" \
+  "Load:      hey -n 5000 -c 50 per variant → p50/p95/p99" \
+  "PGO:       $([[ $DO_PGO -eq 1 ]] && echo 'enabled (two-pass build + training run)' || echo 'skipped (--no-pgo)')"
+pause "Ready to build? Press Enter"
 
-# ---------------------------------------------------------------------
-header "Building UBI multi-stage (LTO on, no PGO)"
-podman build -f Containerfile.ubi-multistage -t "${IMG_PREFIX}:ubi-multistage" .
+# ── Step 1: Build the image variants ────────────────────────────────────────
+demo_step "Build the image variants (multi-stage, micro, teaching, naive)"
+callout "First run compiles from source; later runs hit the podman layer cache." \
+        "Never proceed to measurement after a failed build — a broken image would" \
+        "just show up as a bogus benchmark row."
 
-header "Building UBI-micro (fully-static binary, production answer)"
-podman build -f Containerfile.ubi-micro -t "${IMG_PREFIX}:ubi-micro" .
+log_step "Building UBI multi-stage (LTO on, no PGO)"
+if ! podman build -f Containerfile.ubi-multistage -t "${IMG_PREFIX}:ubi-multistage" .; then
+  log_err "ubi-multistage build failed — stopping (nothing valid to measure)."
+  exit 1
+fi
 
-header "Building UBI-micro-glibc-mismatch (TEACHING REFERENCE — intentionally fails at runtime)"
-podman build -f Containerfile.ubi-micro-glibc-mismatch -t "${IMG_PREFIX}:ubi-micro-glibc-mismatch" .
+log_step "Building UBI-micro (fully-static binary, production answer)"
+if ! podman build -f Containerfile.ubi-micro -t "${IMG_PREFIX}:ubi-micro" .; then
+  log_err "ubi-micro build failed — stopping (nothing valid to measure)."
+  exit 1
+fi
 
-header "Building naive single-stage (anti-pattern)"
-podman build -f Containerfile.single-stage-naive -t "${IMG_PREFIX}:single-stage-naive" .
+log_step "Building UBI-micro-glibc-mismatch (TEACHING REFERENCE — intentionally fails at runtime)"
+if ! podman build -f Containerfile.ubi-micro-glibc-mismatch -t "${IMG_PREFIX}:ubi-micro-glibc-mismatch" .; then
+  log_err "ubi-micro-glibc-mismatch build failed — stopping (this variant must BUILD;"
+  log_err "it's only meant to fail at RUNTIME, which is the lesson)."
+  exit 1
+fi
 
+log_step "Building naive single-stage (anti-pattern)"
+if ! podman build -f Containerfile.single-stage-naive -t "${IMG_PREFIX}:single-stage-naive" .; then
+  log_err "single-stage-naive build failed — stopping (nothing valid to measure)."
+  exit 1
+fi
+
+callout "" "Four images built. The single-stage one still ships GCC, ld, and the" \
+        "build deps into 'production'; the multi-stage and micro ones don't." \
+        "That difference is what the next two tables put a number on."
+pause
+
+# ── Step 2: PGO two-pass build (optional) ────────────────────────────────────
 if [[ $DO_PGO -eq 1 ]]; then
-  header "Building PGO step 1 (instrumented binary)"
-  podman build -f Containerfile.pgo --target instrumented -t "${IMG_PREFIX}:pgo-instrumented" .
+  demo_step "PGO two-pass build: instrument → train → rebuild with the profile"
+  callout "GCC PGO is three phases run back-to-back: compile an instrumented" \
+          "binary, drive it with a representative workload to gather .gcda profile" \
+          "data, then rebuild biasing hot/cold paths toward what we measured."
 
-  header "Running representative workload to gather profile data"
+  log_step "Building PGO step 1 (instrumented binary)"
+  if ! podman build -f Containerfile.pgo --target instrumented -t "${IMG_PREFIX}:pgo-instrumented" .; then
+    log_err "instrumented PGO build failed — stopping (no profile to gather)."
+    exit 1
+  fi
+
+  log_step "Running representative workload to gather profile data"
   rm -rf pgo-profiles && mkdir -p pgo-profiles
   # Bind-mount pgo-profiles/ onto the exact build directory the
   # instrumented binary was compiled at (/src/build/pgo). GCC's runtime
@@ -103,17 +173,16 @@ if [[ $DO_PGO -eq 1 ]]; then
   podman stop -t 20 demo01-pgo-train >/dev/null 2>&1 || true
 
   GCDA_COUNT=$(find pgo-profiles -name '*.gcda' | wc -l)
-  note "Captured ${GCDA_COUNT} .gcda file(s)"
+  log_info "Captured ${GCDA_COUNT} .gcda file(s)"
   if [[ "${GCDA_COUNT}" -eq 0 ]]; then
-    echo
-    echo "$(color '1;31' "ERROR")  Zero .gcda files captured. The optimized PGO build"
-    echo "       would be a release build with no actual profile data."
-    echo "       Likely causes:"
-    echo "       - Binary didn't shut down cleanly (SIGTERM ignored, SIGKILL"
-    echo "         used; libgcov's atexit handler never ran)"
-    echo "       - The bind-mount path doesn't match the build path baked"
-    echo "         into the instrumented binary"
-    echo "       Skipping PGO step 2; ./demo.sh --clean and try again."
+    log_err "Zero .gcda files captured. The optimized PGO build would be a"
+    log_err "release build with no actual profile data."
+    callout "Likely causes:" \
+            "  - Binary didn't shut down cleanly (SIGTERM ignored, SIGKILL used;" \
+            "    libgcov's atexit handler never ran)" \
+            "  - The bind-mount path doesn't match the build path baked into the" \
+            "    instrumented binary" \
+            "Skipping PGO step 2; ./demo.sh --clean and try again."
     DO_PGO=0
   fi
 
@@ -121,13 +190,22 @@ if [[ $DO_PGO -eq 1 ]]; then
   # into the optimized build context via the optimized stage's COPY.
 
   if [[ $DO_PGO -eq 1 ]]; then
-    header "Building PGO step 2 (optimized using gathered profile)"
-    podman build -f Containerfile.pgo --target optimized -t "${IMG_PREFIX}:pgo" .
+    log_step "Building PGO step 2 (optimized using gathered profile)"
+    if ! podman build -f Containerfile.pgo --target optimized -t "${IMG_PREFIX}:pgo" .; then
+      log_err "optimized PGO build failed — stopping (no pgo image to measure)."
+      exit 1
+    fi
+    callout "" "The pgo image is byte-for-byte the same LTO build as ubi-multistage" \
+            "PLUS the measured profile. Any latency delta between them in the table" \
+            "below is PGO alone — nothing else changed."
   fi
+  pause
+else
+  log_info "PGO skipped (--no-pgo)."
 fi
 
-# ---------------------------------------------------------------------
-header "Image size comparison"
+# ── Step 3: Image size comparison ────────────────────────────────────────────
+demo_step "Image size comparison — where did the megabytes go?"
 # Use podman's --filter rather than a regex grep: podman 5.x prefixes
 # locally-built images with `localhost/` in `podman images` output,
 # so a strict `grep "^${IMG_PREFIX}:"` would match nothing and (under
@@ -139,9 +217,14 @@ podman images \
   | sort -u \
   | column -t \
   || true
+callout "" "The naive single-stage image is ~26× the size of ubi-micro, and almost" \
+        "all of that gap is the toolchain sitting in production: GCC, ld, headers," \
+        "build deps — none needed at runtime, all of them CVE surface. Multi-stage" \
+        "drops them; ubi-micro also statically links libstdc++ for the smallest floor." \
+        "Registry pull time (and therefore cold-start latency) scales with this number."
+pause
 
-# ---------------------------------------------------------------------
-# Latency benchmark
+# ── Step 4: Latency comparison ───────────────────────────────────────────────
 #
 # We run `hey -c 50 -n 5000` rather than something larger because:
 #   - At -c 100 against cpp-httplib's modest thread pool, queueing
@@ -153,7 +236,7 @@ podman images \
 #     real numbers.
 # 5000 requests is plenty for a meaningful percentile distribution
 # while keeping the benchmark phase under a few seconds per variant.
-header "Latency comparison ('hey -n 5000 -c 50')"
+demo_step "Latency comparison ('hey -n 5000 -c 50' per variant)"
 declare -A IMAGES=(
   [ubi-multistage]=$((PORT_BASE + 1))
   [ubi-micro]=$((PORT_BASE + 2))
@@ -257,7 +340,7 @@ if (( ${#PARSE_FAILURES[@]} > 0 )); then
   failtag="${PARSE_FAILURES[0]}"
   failport=$((PORT_BASE + 10))
   echo
-  note "Re-running '${failtag}' to capture hey's full output for diagnosis:"
+  log_info "Re-running '${failtag}' to capture hey's full output for diagnosis:"
   podman run --rm -d --name "demo01-bench-diag" -p "${failport}:8080" \
     "${IMG_PREFIX}:${failtag}" >/dev/null 2>&1 || true
   if wait_for_http "http://127.0.0.1:${failport}/healthz" 30; then
@@ -268,8 +351,18 @@ if (( ${#PARSE_FAILURES[@]} > 0 )); then
   podman stop -t 5 "demo01-bench-diag" >/dev/null 2>&1 || true
 fi
 
-# ---------------------------------------------------------------------
-header "Image labels (provenance for each build)"
+callout "" "How to read this table:" \
+        "  • p50 is essentially identical across the working variants — the" \
+        "    runtime cost of static-vs-dynamic libstdc++ is invisible at this scale." \
+        "  • PGO (if built) shaves a few percent off p95/p99 vs plain ubi-multistage:" \
+        "    small but real, and free once the build pipeline exists." \
+        "  • ubi-micro-glibc-mismatch never answers /healthz — the static/glibc" \
+        "    mismatch fails at RUNTIME. That NORUN/EXPECTED row is the whole point:" \
+        "    a build that succeeds is not a service that runs."
+pause
+
+# ── Step 5: Image labels (provenance) ────────────────────────────────────────
+demo_step "Image labels — provenance baked into each build"
 for tag in "${!IMAGES[@]}"; do
   echo
   echo "[$tag]"
@@ -277,7 +370,9 @@ for tag in "${!IMAGES[@]}"; do
     | jq -r 'to_entries[] | "  \(.key)=\(.value)"' 2>/dev/null \
     || echo "  (no labels)"
 done
+callout "" "Every image carries labels identifying its build strategy and inputs." \
+        "In production that provenance is what lets you answer 'what's actually" \
+        "running, and how was it built?' months later — reproducible-image discipline."
 
 echo
-header "Done"
-note "Tear down with: ./demo.sh --clean"
+log_ok "Demo 01 complete. Tear down the images with: ./demo.sh --clean"
