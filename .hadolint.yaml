@@ -1,12 +1,17 @@
 # Advisory hadolint config for the tutorial's Containerfiles.
 #
-# The examples intentionally use unpinned dnf/microdnf installs for
+# The examples intentionally use unpinned dnf/microdnf/apk installs for
 # readability (the prose, not a version pin, is the teaching artifact), so
 # the "pin package versions" family is silenced to keep the lint high-signal.
 ignored:
   - DL3033   # pin versions in yum install
   - DL3037   # pin versions in zypper install
   - DL3041   # pin versions in dnf install
+  - DL3018   # pin versions in apk add
   - DL3008   # pin versions in apt-get install (harmless; no apt here)
 
-failure-threshold: warning
+# Gate only on genuine hadolint ERRORs. Style warnings/info (SC2015 && || ,
+# DL3042 pip cache in throwaway builder layers, DL4006 pipefail, DL3040) still
+# print as advice in the log but do not fail CI — the demos' `&& ... || true`
+# short-circuits and discarded builder layers are deliberate.
+failure-threshold: error

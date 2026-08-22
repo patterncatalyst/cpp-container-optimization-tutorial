@@ -5,7 +5,8 @@ name: CI
 #      build-breakers the Pages build has hit historically.
 #   2. Jekyll build via the github-pages gem — the same build GitHub Pages
 #      runs, so a green job here means Pages will publish.
-#   3. Advisory hadolint lint of every Containerfile (non-blocking).
+#   3. hadolint lint of every Containerfile — gates on ERRORs only; style
+#      warnings/info print as advice (see .hadolint.yaml).
 #
 # Full `podman build` of the example images is intentionally NOT run here:
 # several build gRPC / OpenTelemetry-cpp / libabigail from source (tens of
@@ -42,9 +43,10 @@ jobs:
         run: bundle exec jekyll build
 
   lint-containerfiles:
-    name: Lint Containerfiles (advisory)
+    name: Lint Containerfiles
     runs-on: ubuntu-latest
-    continue-on-error: true   # advisory — never blocks merge
+    # Gates only on hadolint ERRORs (see .hadolint.yaml); style warnings/info
+    # still print in the log but do not fail the build.
     steps:
       - uses: actions/checkout@v4
 
