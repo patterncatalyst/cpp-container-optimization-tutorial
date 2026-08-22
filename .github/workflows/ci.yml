@@ -1,0 +1,60 @@
+name: CI
+
+# Fast, deterministic checks on every push/PR to main:
+#   1. Liquid hazard scan (scripts/check-liquid.py) — the four Liquid
+#      build-breakers the Pages build has hit historically.
+#   2. Jekyll build via the github-pages gem — the same build GitHub Pages
+#      runs, so a green job here means Pages will publish.
+#   3. Advisory hadolint lint of every Containerfile (non-blocking).
+#
+# Full `podman build` of the example images is intentionally NOT run here:
+# several build gRPC / OpenTelemetry-cpp / libabigail from source (tens of
+# minutes) and would blow past sensible CI budgets. Verify those on the host
+# (see each demo's demo.sh) or add a manual `workflow_dispatch` job if needed.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  site:
+    name: Build site (liquid + jekyll)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Liquid hazard check
+        run: python3 scripts/check-liquid.py
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'   # github-pages gem compatibility
+          bundler-cache: true
+
+      - name: Jekyll build (Pages-equivalent)
+        env:
+          JEKYLL_ENV: production
+        run: bundle exec jekyll build
+
+  lint-containerfiles:
+    name: Lint Containerfiles (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true   # advisory — never blocks merge
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install hadolint
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/hadolint \
+            https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          sudo chmod +x /usr/local/bin/hadolint
+
+      - name: Run hadolint on every Containerfile
+        run: |
+          find examples -name 'Containerfile*' -print0 \
+            | xargs -0 -r -n1 hadolint

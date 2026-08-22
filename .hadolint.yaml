@@ -1,0 +1,12 @@
+# Advisory hadolint config for the tutorial's Containerfiles.
+#
+# The examples intentionally use unpinned dnf/microdnf installs for
+# readability (the prose, not a version pin, is the teaching artifact), so
+# the "pin package versions" family is silenced to keep the lint high-signal.
+ignored:
+  - DL3033   # pin versions in yum install
+  - DL3037   # pin versions in zypper install
+  - DL3041   # pin versions in dnf install
+  - DL3008   # pin versions in apt-get install (harmless; no apt here)
+
+failure-threshold: warning
