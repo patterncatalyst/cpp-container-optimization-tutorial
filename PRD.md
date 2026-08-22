@@ -610,7 +610,7 @@ work, not core delivery.
 | **Self-paced site readers**| Untimed long-form reference covering every code listing, every measurement, every Liquid-safe code fence                                   | The Jekyll site at `patterncatalyst.github.io/cpp-container-optimization-tutorial/` |
 | **Demo runners**           | Seven self-contained Podman demos each with `./demo.sh`; runnable on Fedora 44 with no external services                                   | The `examples/demo-NN-*/` directories on the repo               |
 | **Tutorial extenders**     | Source-available diagrams (paired SVG + Excalidraw JSON); a build script for the deck that takes content as data; a documented architecture | `diagrams/`, `tools/`, `presentation/README.md`                 |
-| **Operators copying patterns** | The Conan + UBI 9 + autotools survival appendix; the AVX-512 mismatch runbook entry; the cgroup-v2-delegation script                       | `_docs/16-appendix-a-conan-ubi9-perl.md`, §14 pitfalls, `scripts/cgroup-delegation.sh` |
+| **Operators copying patterns** | The Conan + UBI 9 + autotools survival appendix; the AVX-512 mismatch runbook entry; the cgroup-v2-delegation script                       | `_docs/16-appendix-a-conan-perl.md`, §14 pitfalls, `scripts/cgroup-delegation.sh` |
 
 The deck and the site are two presentations of the same material
 for different consumption modes; they share content via the

@@ -880,7 +880,7 @@ the static library. No reason to pick one.
 
 > **Tutorial site has a permanent reference for this.** The
 > operational survival guide — full fifteen-module list, alternatives,
-> libcurl worked example — lives at `_docs/16-appendix-a-conan-ubi9-perl.md`
+> libcurl worked example — lives at `_docs/16-appendix-a-conan-perl.md`
 > (rendered as Appendix A on the site). G-15/G-16/G-17 here track
 > the discovery process and per-round rationale; the appendix is
 > the polished post-discovery reference for tutorial readers.
@@ -6565,7 +6565,7 @@ permanent first-class part of the tutorial site.
 
 **Changes in r37:**
 
-1. **`_docs/16-appendix-a-conan-ubi9-perl.md`** —
+1. **`_docs/16-appendix-a-conan-perl.md`** —
    new file. ~11 KB, eight-minute read. Structured as:
    - Why this exists (the user-facing problem
      statement; UBI 9's minimal perl trips Conan's
@@ -8504,7 +8504,7 @@ gotcha. Several have direct tutorial homes:
 - **G-30**: §10 itself — "started ≠ ready" is exactly
   the observability lesson §10 is positioned to teach.
 
-The reproducibility-plan appendix (`_docs/16-appendix-a-conan-ubi9-perl.md`)
+The reproducibility-plan appendix (`_docs/16-appendix-a-conan-perl.md`)
 already captures G-13 through G-17. The remaining
 gotchas (G-18 through G-30) deserve a similar
 appendix or section sidebars when §13 and §10 get
@@ -19959,7 +19959,7 @@ Files untouched (no bad patterns to begin with):
   _docs/00-outline.md, 01-prerequisites.md, 02-introduction.md,
   03-raii-discipline.md, 10-observability-profiling.md,
   11-noisy-neighbors.md, 15-where-to-go-next.md,
-  16-appendix-a-conan-ubi9-perl.md
+  16-appendix-a-conan-perl.md
 
 Also verified `_reference/statelessness/*.md` had zero bad patterns
 (those docs were authored after the canonical pattern was established
@@ -20054,7 +20054,7 @@ Final values (in section order):
 | 13-reproducibility-abi | 20 minutes |
 | 14-pitfalls | 15 minutes |
 | 15-where-to-go-next | 5 minutes |
-| 16-appendix-a-conan-ubi9-perl | 10 minutes |
+| 16-appendix-a-conan-perl | 10 minutes |
 
 Total: 225 minutes ≈ 3h 45m. Matches the 1.5-3h PPTX talk-time
 range well (PPTX is faster than reading because the deck condenses
@@ -20831,7 +20831,7 @@ inline-(r##) repetitions are gone.
 **Out of scope / intentionally left alone:**
 
 The gotcha catalog itself (G-13 through G-50ish in
-`_docs/16-appendix-a-conan-ubi9-perl.md` and inline G-NN
+`_docs/16-appendix-a-conan-perl.md` and inline G-NN
 references in the tutorial body) — these are stable identifiers
 for documented known issues, not iteration history. The user's
 specific concern was round annotations (r##) and authoring
