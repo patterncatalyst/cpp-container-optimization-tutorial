@@ -1,0 +1,63 @@
+name: Container builds
+
+# Full `podman build` of every example image. This is the heavy pass the
+# fast push CI (ci.yml) deliberately skips — several images build gRPC,
+# OpenTelemetry-cpp, or libabigail from source (tens of minutes each), so it
+# runs on demand rather than on every push.
+#
+# Trigger manually from the Actions tab (or `gh workflow run "Container builds"`).
+# To also run it weekly, uncomment the schedule block below (note: ~22 heavy
+# builds will consume Actions minutes on every scheduled run).
+
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: '0 6 * * 1'   # Mondays 06:00 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-builds-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  discover:
+    name: Discover Containerfiles
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: set
+        name: Build matrix from examples/**/Containerfile*
+        run: |
+          files=$(find examples -name 'Containerfile*' -type f | sort \
+            | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "matrix={\"containerfile\":$files}" >> "$GITHUB_OUTPUT"
+          echo "Discovered:"; echo "$files" | jq -r '.[]'
+
+  build:
+    name: ${{ matrix.containerfile }}
+    needs: discover
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false          # one image failing must not cancel the rest
+      max-parallel: 6
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: podman build
+        run: |
+          set -euo pipefail
+          path='${{ matrix.containerfile }}'
+          dir=$(dirname "$path")
+          file=$(basename "$path")
+          tag="ci-build:$(echo "$dir/$file" | tr '/.' '--' | tr '[:upper:]' '[:lower:]')"
+          echo "==> podman build -f $file  (context: $dir)  -> $tag"
+          cd "$dir"
+          podman build -f "$file" -t "$tag" .
+
+      # The glibc-mismatch image is a teaching artifact that BUILDS fine but is
+      # designed to FAIL at runtime; this job only builds, so it passes here.
