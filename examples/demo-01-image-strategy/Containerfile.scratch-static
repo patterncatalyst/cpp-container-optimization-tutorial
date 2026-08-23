@@ -20,7 +20,9 @@
 # Build:
 #   podman build -f Containerfile.scratch-static -t demo-01-scratch-static .
 
-FROM docker.io/alpine:3.20 AS build
+# alpine 3.21 is the first release carrying clang19/lld19 (3.20 shipped
+# clang17); the toolchain label below pins the intent to clang 19.
+FROM docker.io/alpine:3.21 AS build
 
 # `libstdc++-static` is the actual archive (libstdc++.a) we link with -static.
 # It's separate from g++ on Alpine and isn't pulled by build-base. If the

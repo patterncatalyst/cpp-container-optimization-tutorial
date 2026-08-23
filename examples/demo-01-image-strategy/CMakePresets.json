@@ -41,6 +41,17 @@
       }
     },
     {
+      "name": "static-musl",
+      "inherits": "_base",
+      "displayName": "Static musl build with clang + lld, thin LTO (scratch runtime)",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_EXE_LINKER_FLAGS": "-static -fuse-ld=lld -flto=thin",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG -flto=thin"
+      }
+    },
+    {
       "name": "pgo-generate",
       "inherits": "_base",
       "binaryDir": "${sourceDir}/build/pgo",
@@ -66,6 +77,7 @@
     { "name": "release",                   "configurePreset": "release" },
     { "name": "release-static",            "configurePreset": "release-static" },
     { "name": "release-static-libstdcxx",  "configurePreset": "release-static-libstdcxx" },
+    { "name": "static-musl",               "configurePreset": "static-musl" },
     { "name": "pgo-generate",              "configurePreset": "pgo-generate" },
     { "name": "pgo-use",                   "configurePreset": "pgo-use" }
   ]
