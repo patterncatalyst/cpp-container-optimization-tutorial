@@ -1,9 +1,13 @@
 name: Container builds
 
-# Full `podman build` of every example image. This is the heavy pass the
-# fast push CI (ci.yml) deliberately skips — several images build gRPC,
-# OpenTelemetry-cpp, or libabigail from source (tens of minutes each), so it
-# runs on demand rather than on every push.
+# Full `podman build` of every standalone example image. This is the heavy
+# pass the fast push CI (ci.yml) deliberately skips — several images build
+# gRPC, OpenTelemetry-cpp, or libabigail from source (tens of minutes each),
+# so it runs on demand rather than on every push.
+#
+# Two Containerfiles are excluded (see the discover job): demo-01's PGO build
+# and 11-build-tooling both need their demo.sh to generate a build input
+# (PGO profiles / vendored deps) first, so they are not standalone-buildable.
 #
 # Trigger manually from the Actions tab (or `gh workflow run "Container builds"`).
 # To also run it weekly, uncomment the schedule block below (note: ~22 heavy
@@ -32,10 +36,21 @@ jobs:
       - id: set
         name: Build matrix from examples/**/Containerfile*
         run: |
-          files=$(find examples -name 'Containerfile*' -type f | sort \
+          # Excluded — NOT standalone `podman build` targets. Each needs its
+          # demo.sh to generate a build input first, so a bare build from a
+          # clean checkout fails on a missing COPY source:
+          #   * demo-01 Containerfile.pgo — two-pass PGO; the optimized stage
+          #     COPYs pgo-profiles/ (.gcda files captured by demo.sh's training
+          #     run). Build it via `demo.sh` / the --target flow, not here.
+          #   * 11-build-tooling — COPYs vendor/, which is gitignored and
+          #     populated by the demo. Covered by its demo.sh instead.
+          exclude='examples/demo-01-image-strategy/Containerfile.pgo|examples/statelessness/11-build-tooling/Containerfile$'
+          echo "Excluded (demo.sh-driven, not standalone-buildable):"
+          find examples -name 'Containerfile*' -type f | sort | grep -E "$exclude" | sed 's/^/  - /' || true
+          files=$(find examples -name 'Containerfile*' -type f | sort | grep -vE "$exclude" \
             | jq -R -s -c 'split("\n") | map(select(length > 0))')
           echo "matrix={\"containerfile\":$files}" >> "$GITHUB_OUTPUT"
-          echo "Discovered:"; echo "$files" | jq -r '.[]'
+          echo "Building:"; echo "$files" | jq -r '.[]' | sed 's/^/  - /'
 
   build:
     name: ${{ matrix.containerfile }}
