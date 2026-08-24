@@ -28,7 +28,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": ["single-group"],
       "fontSize": 14, "fontFamily": 1,
-      "text": "Single-stage build\nFROM ubi:9; do everything in one image",
+      "text": "Single-stage build\nFROM ubi:10; do everything in one image",
       "textAlign": "center", "verticalAlign": "middle"
     },
     {
@@ -38,7 +38,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": ["single-group"],
       "fontSize": 11, "fontFamily": 1,
-      "text": "FROM ubi:9\nRUN dnf install -y gcc-toolset-14 ...\nRUN pip install conan && conan install ...\nCOPY . /src\nRUN cmake -B build && ninja",
+      "text": "FROM ubi:10\nRUN dnf install -y gcc gcc-c++ ...\nRUN pip install conan && conan install ...\nCOPY . /src\nRUN cmake -B build && ninja",
       "textAlign": "left", "verticalAlign": "top"
     },
     {
@@ -76,7 +76,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": ["multi-group"],
       "fontSize": 14, "fontFamily": 1,
-      "text": "Multi-stage build  —  Stage 1 (build)\nFROM ubi:9 AS build",
+      "text": "Multi-stage build  —  Stage 1 (build)\nFROM ubi:10 AS build",
       "textAlign": "center", "verticalAlign": "middle"
     },
     {
@@ -86,7 +86,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": ["multi-group"],
       "fontSize": 11, "fontFamily": 1,
-      "text": "FROM ubi:9 AS build\nRUN dnf install -y gcc-toolset-14 ...\nCOPY . /src\nRUN cmake -B build && ninja\n\nheavy stuff present — but THROWN AWAY",
+      "text": "FROM ubi:10 AS build\nRUN dnf install -y gcc gcc-c++ ...\nCOPY . /src\nRUN cmake -B build && ninja\n\nheavy stuff present — but THROWN AWAY",
       "textAlign": "left", "verticalAlign": "top"
     },
     {
@@ -114,7 +114,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": ["multi-group"],
       "fontSize": 11, "fontFamily": 1,
-      "text": "FROM registry.access.redhat.com/ubi9-micro\nCOPY --from=build /usr/local/bin/app /\nENTRYPOINT [\"/app\"]",
+      "text": "FROM registry.access.redhat.com/ubi10-micro\nCOPY --from=build /usr/local/bin/app /\nENTRYPOINT [\"/app\"]",
       "textAlign": "left", "verticalAlign": "top"
     },
     {

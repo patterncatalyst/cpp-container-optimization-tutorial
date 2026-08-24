@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 540" role="img"
-     aria-label="The tutorial's toolchain has two columns sitting on a shared Fedora 44 host: build-time tools (Conan, CMake + Ninja, gcc-toolset-14 or clang) produce an ELF binary, while runtime tools (Podman 5.x, podman compose, crun/conmon, UBI base images) consume that binary inside a container. Both columns ground onto the Fedora 44 host kernel, which provides cgroup v2 (with delegation as the prerequisite most people miss, highlighted in red), systemd, and the profiling tools (perf, bcc-tools, bpftrace) used in §10.">
+     aria-label="The tutorial's toolchain has two columns sitting on a shared Fedora 44 host: build-time tools (Conan, CMake + Ninja, gcc 14 or clang) produce an ELF binary, while runtime tools (Podman 5.x, podman compose, crun/conmon, UBI base images) consume that binary inside a container. Both columns ground onto the Fedora 44 host kernel, which provides cgroup v2 (with delegation as the prerequisite most people miss, highlighted in red), systemd, and the profiling tools (perf, bcc-tools, bpftrace) used in §10.">
   <defs>
     <style><![CDATA[
       .bg       { fill: #fdfbf7; }
@@ -57,7 +57,7 @@
   <text x="115" y="229" class="mono-sm">presets, hermetic build (§13)</text>
 
   <rect class="b-tool" x="100" y="242" width="260" height="32"/>
-  <text x="115" y="260" class="lbl">gcc-toolset-14  |  clang (optional)</text>
+  <text x="115" y="260" class="lbl">gcc 14  |  clang (optional)</text>
   <text x="115" y="271" class="mono-sm">C++20/23, sanitizers, LTO, PGO (§5)</text>
 
   <line x1="230" y1="278" x2="230" y2="298" class="arrow" marker-end="url(#arrowhead)"/>
@@ -83,7 +83,7 @@
   <text x="555" y="187" class="mono-sm">applies cgroup v2 + user namespace</text>
 
   <rect class="b-tool-r" x="540" y="200" width="260" height="32"/>
-  <text x="555" y="218" class="lbl">Base images: UBI 9 / UBI micro / scratch</text>
+  <text x="555" y="218" class="lbl">Base images: UBI 10 / UBI micro / scratch</text>
   <text x="555" y="229" class="mono-sm">multi-stage strategy in §4</text>
 
   <rect class="b-tool-r" x="540" y="242" width="260" height="32"/>

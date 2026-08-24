@@ -38,7 +38,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": [],
       "fontSize": 12, "fontFamily": 1,
-      "text": "Source code (C++20/23) + Containerfiles\n\nConan 2.x — package manager + lockfiles\n\nCMake + Ninja — presets, hermetic build\n\ngcc-toolset-14 | clang (optional)\nC++20/23, sanitizers, LTO, PGO\n\n↓\n\nELF binary\nlinked against glibc from build base",
+      "text": "Source code (C++20/23) + Containerfiles\n\nConan 2.x — package manager + lockfiles\n\nCMake + Ninja — presets, hermetic build\n\ngcc 14 | clang (optional)\nC++20/23, sanitizers, LTO, PGO\n\n↓\n\nELF binary\nlinked against glibc from build base",
       "textAlign": "left", "verticalAlign": "top"
     },
     {
@@ -66,7 +66,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": [],
       "fontSize": 12, "fontFamily": 1,
-      "text": "Podman 5.x (rootless)\npodman compose, slirp4netns\n\nOCI runtime: crun + conmon\napplies cgroup v2 + user namespace\n\nBase images: UBI 9 / UBI micro / scratch\nmulti-stage strategy in §4\n\nLoad generator: hey, ghz\nHTTP + gRPC, used by every demo\n\nObservability: otel-lgtm (§10)",
+      "text": "Podman 5.x (rootless)\npodman compose, slirp4netns\n\nOCI runtime: crun + conmon\napplies cgroup v2 + user namespace\n\nBase images: UBI 10 / UBI micro / scratch\nmulti-stage strategy in §4\n\nLoad generator: hey, ghz\nHTTP + gRPC, used by every demo\n\nObservability: otel-lgtm (§10)",
       "textAlign": "left", "verticalAlign": "top"
     },
     {

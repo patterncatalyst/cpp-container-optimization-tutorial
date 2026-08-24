@@ -50,12 +50,12 @@
   <!-- LEFT: Single-stage -->
   <rect class="band b-single" x="40" y="60" width="350" height="380"/>
   <text x="215" y="84" class="ttl" text-anchor="middle">Single-stage build</text>
-  <text x="215" y="100" class="sec" text-anchor="middle">FROM ubi:9; do everything in one image</text>
+  <text x="215" y="100" class="sec" text-anchor="middle">FROM ubi:10; do everything in one image</text>
 
   <!-- Containerfile preview -->
   <rect class="b-layer" x="60" y="114" width="310" height="78" stroke-dasharray="2 2"/>
-  <text x="70" y="132" class="mono">FROM ubi:9</text>
-  <text x="70" y="146" class="mono">RUN dnf install -y gcc-toolset-14 ...</text>
+  <text x="70" y="132" class="mono">FROM ubi:10</text>
+  <text x="70" y="146" class="mono">RUN dnf install -y gcc gcc-c++ ...</text>
   <text x="70" y="160" class="mono">RUN pip install conan &amp;&amp; conan install ...</text>
   <text x="70" y="174" class="mono">COPY . /src</text>
   <text x="70" y="188" class="mono">RUN cmake -B build &amp;&amp; ninja</text>
@@ -89,11 +89,11 @@
   <!-- RIGHT: Multi-stage -->
   <rect class="band b-multi-b" x="490" y="60" width="370" height="180"/>
   <text x="675" y="84" class="ttl" text-anchor="middle">Multi-stage build  —  Stage 1 (build)</text>
-  <text x="675" y="100" class="sec" text-anchor="middle">FROM ubi:9 AS build  —  same as single-stage above</text>
+  <text x="675" y="100" class="sec" text-anchor="middle">FROM ubi:10 AS build  —  same as single-stage above</text>
 
   <rect class="b-layer-b" x="510" y="114" width="330" height="62" stroke-dasharray="2 2"/>
-  <text x="520" y="132" class="mono">FROM ubi:9 AS build</text>
-  <text x="520" y="146" class="mono">RUN dnf install -y gcc-toolset-14 ...</text>
+  <text x="520" y="132" class="mono">FROM ubi:10 AS build</text>
+  <text x="520" y="146" class="mono">RUN dnf install -y gcc gcc-c++ ...</text>
   <text x="520" y="160" class="mono">COPY . /src</text>
   <text x="520" y="174" class="mono">RUN cmake -B build &amp;&amp; ninja</text>
 
@@ -110,7 +110,7 @@
   <text x="675" y="320" class="sec" text-anchor="middle">FROM ubi-micro  —  bare minimum runtime</text>
 
   <rect class="b-layer-r" x="510" y="334" width="330" height="48" stroke-dasharray="2 2"/>
-  <text x="520" y="352" class="mono">FROM registry.access.redhat.com/ubi9-micro</text>
+  <text x="520" y="352" class="mono">FROM registry.access.redhat.com/ubi10-micro</text>
   <text x="520" y="366" class="mono">COPY --from=build /usr/local/bin/app /</text>
   <text x="520" y="380" class="mono">ENTRYPOINT ["/app"]</text>
 
