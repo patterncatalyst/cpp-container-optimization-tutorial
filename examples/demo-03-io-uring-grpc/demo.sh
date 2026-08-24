@@ -150,6 +150,10 @@ callout \
   "io_uring direct:  :9000    (raw liburing submission/completion ring)" \
   "Asio io_uring:    :9001    (same kernel calls, executor abstraction)" \
   "Grafana:          $GRAFANA_URL          (anonymous viewer)"
+callout "" "Three server heads, three source files worth opening:"
+code_ref "src/grpc_async_server.cpp" 67 "async gRPC completion-queue worker loop (Proceed() state machine)"
+code_ref "src/echo_uring.cpp" 1 "raw liburing submission/completion ring (multishot on kernels ≥6.0)"
+code_ref "proto/echo.proto" 1 "the Echo service contract"
 
 # ── Step 1: Build and bring up ─────────────────────────────────────────
 demo_step "Build the demo image and bring up the stack + LGTM backend"

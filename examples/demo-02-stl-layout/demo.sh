@@ -87,6 +87,8 @@ callout \
     "Sizes:      64 · 1024 · 16384 · 262144   Ops: point lookup · iterate-sum" \
     "Pressure:   cgroup memory.max=$MEMORY_LIMIT, no swap" \
     "Outputs:    results-baseline.json · results-pressured.json + table"
+callout "" "The four containers and both benchmarks live in one file:"
+code_ref "src/main.cpp" 39 "container choices + BM_Lookup_Hit / BM_IterateAndSum (Google Benchmark)"
 
 # ── Step 1: Build the bench image ───────────────────────────────────────────
 demo_step "Build the benchmark image"

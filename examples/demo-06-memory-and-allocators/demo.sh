@@ -83,6 +83,9 @@ callout \
   "Variants:   std::allocator · std::pmr (monotonic+sync_pool) · mimalloc" \
   "Workload:   synthetic JSON-shaped tree builder (many small allocs)" \
   "Config:     iterations=$ITERATIONS depth=$DEPTH branch=$BRANCH values=$VALUES"
+callout "" "One workload, three allocator paths selected at compile time:"
+code_ref "src/workload.cpp" 101 "build_node_pmr — the std::pmr path (monotonic arena + sync pool)"
+code_ref "src/main.cpp" 4 "compile-time variant select: std::allocator · std::pmr · mimalloc"
 
 # ── Step 1: Build the 3-variant image ───────────────────────────────────────
 demo_step "Build the 3-variant image"

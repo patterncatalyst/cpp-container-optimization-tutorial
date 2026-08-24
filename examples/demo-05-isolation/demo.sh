@@ -84,6 +84,8 @@ callout \
   "tenant-b:   the 'noisy neighbor' — pegs CPU in a tight loop, no limits" \
   "Images:     $IMG_A · $IMG_B" \
   "Knobs:      cpu.weight (bound interference) · cpuset.cpus (dedicate CPUs)"
+callout "" "Both tenants are the SAME binary — behaviour differs only by cgroup:"
+code_ref "src/main.cpp" 84 "the request-path CPU work + tuned httplib thread pool (twin source)"
 
 # ── Step 1: Check the host — cgroup v2 controller delegation ─────────────
 demo_step "Check the host: cgroup v2 controller delegation"

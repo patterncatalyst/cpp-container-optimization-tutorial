@@ -134,6 +134,47 @@ callout() {
     for line in "$@"; do printf '  %s%s%s\n' "$C_DIM" "$line" "$C_RESET"; done
 }
 
+# ── Code-examination helpers ────────────────────────────────────────────
+# The recurring "now flip to the IDE and look at THIS code" moment. Always
+# prints a clickable file:line. When DEMO_IDE=clion is set, ALSO opens the
+# file at the line in CLion via the JetBrains Toolbox launcher — opt-in so
+# standalone / CI runs stay quiet. Path is resolved to absolute against the
+# caller's $PWD (demo.sh scripts cd into their own dir first) so CLion opens
+# the right file regardless of where the demo was launched from.
+DEMO_IDE="${DEMO_IDE:-}"
+
+# _clion_bin — echo a runnable CLion launcher, or return non-zero.
+_clion_bin() {
+    if command -v clion >/dev/null 2>&1; then command -v clion; return 0; fi
+    local t="$HOME/.local/share/JetBrains/Toolbox/scripts/clion"
+    if [[ -x "$t" ]]; then printf '%s' "$t"; return 0; fi
+    return 1
+}
+
+# code_ref <path> [line] ["caption"] — "examine this in the IDE" callout.
+code_ref() {
+    local path="$1" line="${2:-}" caption="${3:-}"
+    local abs="$path"
+    [[ "$abs" != /* ]] && abs="$PWD/$path"
+    local disp="$path"; [[ -n "$line" ]] && disp="$path:$line"
+    printf '  %s▸ Code:%s  %s%s%s' "$C_BOLD$C_GREEN" "$C_RESET" "$C_GREEN" "$disp" "$C_RESET"
+    [[ -n "$caption" ]] && printf '  %s— %s%s' "$C_DIM" "$caption" "$C_RESET"
+    printf '\n'
+    if [[ "$DEMO_IDE" == "clion" ]]; then
+        local bin
+        if bin="$(_clion_bin)"; then
+            if [[ -n "$line" ]]; then
+                "$bin" --line "$line" "$abs" >/dev/null 2>&1 &
+            else
+                "$bin" "$abs" >/dev/null 2>&1 &
+            fi
+            disown 2>/dev/null || true
+        else
+            log_warn "DEMO_IDE=clion but no CLion launcher found (skipping open)"
+        fi
+    fi
+}
+
 # grafana_callout <url> "Dashboard name" "panel/thing to look at" ...
 # The recurring "now switch to Grafana and look at X" moment.
 grafana_callout() {

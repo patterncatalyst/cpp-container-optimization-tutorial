@@ -121,6 +121,8 @@ callout "Every GET / does three things in ~40 lines of C++:" \
         "  • starts a span 'handle_request' with a child span 'compute'  (TRACE)" \
         "  • increments demo.requests and records demo.request.duration  (METRICS)" \
         "  • emits a 'request handled' log record                        (LOGS)"
+code_ref "src/main.cpp" 162 "the GET / handler — StartSpan, counter->Add, hist->Record, EmitLogRecord"
+code_ref "src/main.cpp" 153 "provider wiring — GetTracer/GetMeter/GetLogger, same as Java/Go"
 echo
 printf '  Priming a few requests: '
 for _ in 1 2 3 4 5; do curl -sf "$SVC_URL/" >/dev/null 2>&1 && printf '.'; done

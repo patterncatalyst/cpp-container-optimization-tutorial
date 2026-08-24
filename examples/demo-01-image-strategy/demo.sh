@@ -99,6 +99,8 @@ callout \
   "Ports:     bench containers on ${PORT_BASE}+ (one per variant)" \
   "Load:      hey -n 5000 -c 50 per variant → p50/p95/p99" \
   "PGO:       $([[ $DO_PGO -eq 1 ]] && echo 'enabled (two-pass build + training run)' || echo 'skipped (--no-pgo)')"
+callout "" "The service itself is one file — the SAME binary in every variant:"
+code_ref "src/main.cpp" 65 "httplib routing (/, /echo, /healthz, /metrics) — constexpr-lean, zero-alloc startup"
 pause "Ready to build? Press Enter"
 
 # ── Step 1: Build the image variants ────────────────────────────────────────
