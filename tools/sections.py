@@ -97,11 +97,11 @@ SECTIONS = [
                  heading("Build-time"),
                  bullet("Conan 2.x — package manager + lockfiles (§13)"),
                  bullet("CMake + Ninja — presets, hermetic builds"),
-                 bullet("gcc-toolset-14 or Clang 18 — C++23, sanitizers, LTO/PGO (§5)"),
+                 bullet("gcc/gcc-c++ 14.3.1 or Clang 18 — C++23, sanitizers, LTO/PGO (§5)"),
                  heading("Runtime", color=C.ACCENT_BLUE),
                  bullet("Podman 5.x rootless — podman compose, slirp4netns"),
                  bullet("OCI runtime: crun + conmon — applies cgroup v2 + user namespace"),
-                 bullet("Base images: UBI 9 / ubi-micro / scratch — multi-stage in §4"),
+                 bullet("Base images: UBI 10 / ubi-micro / scratch — multi-stage in §4"),
                  bullet("Load generators: hey (HTTP), ghz (gRPC)"),
                  bullet("Observability: otel-lgtm (§10) — all-in-one Grafana stack"),
              ],
@@ -109,7 +109,8 @@ SECTIONS = [
              notes=(
                  "Two columns. On the left, build-time: Conan manages "
                  "dependencies and produces lockfiles; CMake plus Ninja drives "
-                 "the build; either GCC 14 from gcc-toolset or Clang 18 does "
+                 "the build; either GCC 14 (base gcc/gcc-c++, 14.3.1) or "
+                 "Clang 18 does "
                  "the actual compilation. Standard hermetic build flow.\n\n"
                  "On the right, runtime: Podman 5 rootless runs the container; "
                  "crun and conmon apply the cgroup v2 limits and the user "
@@ -468,9 +469,10 @@ public:
                  "final image except the bytes you explicitly copy.\n\n"
                  "Three variants we'll measure in Demo 1: single-stage "
                  "naive (the anti-pattern, builder and runtime in one "
-                 "image, 689 MB); ubi-multistage (builder is ubi9, runtime "
-                 "is ubi9-minimal, 114 MB); ubi-micro (builder is ubi9, "
-                 "runtime is ubi9-micro with static libstdc++, 26 MB). "
+                 "image, 689 MB); ubi-multistage (builder is ubi10/ubi, "
+                 "runtime is ubi10/ubi-minimal, 114 MB); ubi-micro (builder "
+                 "is ubi10/ubi, runtime is ubi10/ubi-micro with static "
+                 "libstdc++, 26 MB). "
                  "Twenty-six-fold size reduction; same C++ source code; "
                  "same runtime performance for our HTTP echo service. The "
                  "only thing you trade is debug surface — ubi-micro has "
@@ -480,7 +482,7 @@ public:
              title="Demo 1 — three variants, measured",
              stats=[
                  ("689 MB", "single-stage naive\n(builder + runtime)", C.ACCENT_RED),
-                 ("114 MB", "ubi-multistage\n(ubi9 + ubi9-minimal)", C.ACCENT_ORANGE),
+                 ("114 MB", "ubi-multistage\n(ubi10/ubi + ubi10/ubi-minimal)", C.ACCENT_ORANGE),
                  ("26 MB", "ubi-micro\n(static libstdc++)", C.ACCENT_GREEN),
                  ("4-5%", "PGO improvement\nat p99 (on top of LTO)", C.ACCENT_CYAN),
              ],
@@ -1638,9 +1640,9 @@ cmake --build build-asan && ASAN_OPTIONS=halt_on_error=1 ./build-asan/svc""",
                  "type, compiler flags, and configuration options. "
                  "Anyone running `cmake --preset release` gets the same "
                  "build configuration.\n\n"
-                 "Third, the Containerfile pins the base image. UBI 9 "
-                 "with a specific digest hash, not just 'ubi9:latest'. "
-                 "If Red Hat ships a new ubi9 image, you don't pick it "
+                 "Third, the Containerfile pins the base image. UBI 10 "
+                 "with a specific digest hash, not just 'ubi10/ubi:latest'. "
+                 "If Red Hat ships a new ubi10 image, you don't pick it "
                  "up until you explicitly update the digest.\n\n"
                  "All three together: given a git commit, you can "
                  "rebuild bit-identical binaries six months from now. "
@@ -1991,26 +1993,28 @@ abidiff --suppressions abi-suppressions.txt \\
 },
 
 # ============================================================================
-# §16 — Appendix A: Conan + UBI 9 perl
+# §16 — Appendix A: Conan + UBI's minimal perl
 # ============================================================================
 {
     "num": 16,
     "label": "Section 16",
-    "title": "Appendix A — Conan, autotools, UBI 9's minimal perl",
-    "tagline": "The survival guide for from-source dependency builds on UBI 9",
+    "title": "Appendix A — Conan, autotools, UBI's minimal perl",
+    "tagline": "The survival guide for from-source dependency builds on UBI",
     "divider_notes": (
         "Brief appendix. Read this one before you attempt your own Conan "
-        "+ UBI 9 + autotools-using-dep build. The tutorial's demo-04 "
-        "took six rounds of build failures to converge, and every one "
-        "of them was the same underlying issue: UBI 9's minimal perl is "
-        "missing modules that autotools' configure scripts assume are "
-        "present."
+        "+ UBI + autotools-using-dep build. The tutorial's demo-04 "
+        "took six rounds of build failures to converge. That war story "
+        "played out on UBI 9; the tutorial now targets UBI 10 and the "
+        "recipe below is updated to match — but the trap is a property "
+        "of UBI's deliberate minimalism, not of any one release: UBI's "
+        "minimal perl is missing modules that autotools' configure "
+        "scripts assume are present."
     ),
     "slides": [
         dict(kind="content",
              title="The fifteen perl modules that autotools wants",
              body=[
-                 para("UBI 9's perl-interpreter is the minimal subset. Any autotools-based "
+                 para("UBI's perl-interpreter is the minimal subset. Any autotools-based "
                       "Conan build (libcurl, c-ares, openssl, nghttp2, etc.) will fail until "
                       "these are installed:"),
                  dict(text="", size=Pt(8)),
@@ -2024,20 +2028,20 @@ abidiff --suppressions abi-suppressions.txt \\
                  bullet("perl-Thread-Queue"),
                  dict(text="", size=Pt(6)),
                  heading("Simplifying alternatives", color=C.ACCENT_ORANGE),
-                 bullet("Use ubi9 (not ubi9-minimal) for the builder stage — includes full perl"),
+                 bullet("Use ubi10/ubi (not ubi10/ubi-minimal) for the builder stage — includes full perl"),
                  bullet("Use a pre-built ConanCenter binary if your platform has one"),
                  bullet("Or maintain a 'fat builder' base image with all 15 modules baked in"),
              ],
              notes=(
                  "Fifteen perl modules. I'll spare you the bug history "
                  "and just give you the list. If you're doing a Conan "
-                 "from-source build on UBI 9-minimal of anything that "
+                 "from-source build on ubi10/ubi-minimal of anything that "
                  "uses autotools — libcurl, c-ares, openssl, nghttp2, "
                  "and most C libraries from the 90s — you need these "
                  "fifteen modules.\n\n"
                  "Three simplifying alternatives. First and easiest: "
-                 "use the full ubi9 image for the builder stage. The "
-                 "runtime image can still be ubi9-minimal or ubi9-micro. "
+                 "use the full ubi10/ubi image for the builder stage. The "
+                 "runtime image can still be ubi10/ubi-minimal or ubi10/ubi-micro. "
                  "Multi-stage means the builder bulk doesn't ship to "
                  "production. The perl modules are in the builder "
                  "only.\n\n"
@@ -2051,19 +2055,21 @@ abidiff --suppressions abi-suppressions.txt \\
                  "consistency across teams, no per-team rediscovery."
              )),
         dict(kind="content-code",
-             title="Worked example — libcurl from source on UBI 9",
+             title="Worked example — libcurl from source on UBI 10",
              body=[
                  para("The Containerfile fragment that actually works:"),
              ],
-             code="""# Builder stage — full UBI 9 with the 15 perl modules
-FROM registry.redhat.io/ubi9:9.4 AS builder
+             code="""# Builder stage — full UBI 10 with the 15 perl modules.
+# gcc/gcc-c++ (14.3.1) come straight from the base appstream —
+# no software collection, no `scl enable`; CRB is on by default.
+FROM registry.access.redhat.com/ubi10/ubi:10.2 AS builder
 
 RUN dnf install -y perl-Carp perl-Data-Dumper perl-Errno \\
     perl-Getopt-Long perl-Pod-Simple perl-PathTools \\
     perl-File-Path perl-File-Temp perl-Digest-MD5 \\
     perl-Encode perl-MIME-Base64 perl-Scalar-List-Utils \\
     perl-Storable perl-Text-ParseWords perl-Thread-Queue \\
-    gcc-toolset-14 cmake ninja-build python3-pip && \\
+    gcc gcc-c++ cmake ninja-build python3-pip && \\
     pip install conan==2.* && dnf clean all
 
 WORKDIR /src
@@ -2075,24 +2081,27 @@ RUN conan install . --build=missing && \\
     cmake --build --preset release
 
 # Runtime: minimal, no perl, no compiler — just the binary
-FROM registry.redhat.io/ubi9-micro:9.4
+FROM registry.access.redhat.com/ubi10/ubi-micro:10.2
 COPY --from=builder /src/build/release/svc /usr/local/bin/svc
 ENTRYPOINT ["/usr/local/bin/svc"]""",
              notes=(
                  "The Containerfile fragment that actually works for "
-                 "libcurl-from-source on UBI 9. Builder stage installs "
+                 "libcurl-from-source on UBI 10. Builder stage installs "
                  "the fifteen perl modules, plus the toolchain and "
-                 "Conan 2. Then `conan install --build=missing` works "
+                 "Conan 2. On UBI 10 the compiler is just base "
+                 "gcc/gcc-c++ 14.3.1 — no gcc-toolset software "
+                 "collection to enable. Then `conan install "
+                 "--build=missing` works "
                  "because the dependency's configure script can find "
                  "all the perl modules it needs.\n\n"
-                 "Runtime stage is ubi9-micro, no perl at all, no "
+                 "Runtime stage is ubi10/ubi-micro, no perl at all, no "
                  "compiler. Just the binary we copy from the builder. "
                  "Final image is tens of megabytes, not hundreds. "
                  "Builder image is large but only exists in your build "
                  "cache, not in production registries.\n\n"
                  "This appendix exists because every team that goes "
-                 "from Ubuntu to UBI 9 hits this. The Ubuntu base "
-                 "images include a fuller perl by default; UBI 9 is "
+                 "from Ubuntu to UBI hits this. The Ubuntu base "
+                 "images include a fuller perl by default; UBI is "
                  "more aggressive about minimization. The first time "
                  "your Conan build fails on a missing perl-Errno "
                  "module is when you realize what's going on. Save "

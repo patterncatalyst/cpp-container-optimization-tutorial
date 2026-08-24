@@ -386,7 +386,7 @@ def build_agenda_slide(prs, total_pages: int) -> None:
         ("§13", "Reproducibility & ABI", C.ACCENT_RED),
         ("§14", "Pitfalls", C.ACCENT_ORANGE),
         ("§15", "Where to go next + bibliography", C.ACCENT_BLUE),
-        ("§16", "Appendix — Conan + UBI 9 perl", C.TEXT_MUTED),
+        ("§16", "Appendix — Conan + UBI's minimal perl", C.TEXT_MUTED),
     ]
     # 2-column grid: 8 per column
     cols = 2
@@ -438,7 +438,8 @@ def build_agenda_slide(prs, total_pages: int) -> None:
         "analysis, debugging, reproducibility, ABI; Demo 7. Section 14 is "
         "pitfalls — the runbook. Section 15 is reading pointers. Section 16 "
         "is an appendix you only need if you're doing Conan from-source on "
-        "UBI 9.\n\n"
+        "UBI — the minimal-perl trap is a property of UBI's minimalism, not "
+        "of any one release.\n\n"
         "Every demo runs with one shell script. Every result you'll see "
         "today was reproduced on Fedora 44, Podman 5.x, GCC 14, rootless. "
         "If anything I say doesn't match what your machine does, open an "
