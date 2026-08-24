@@ -171,6 +171,60 @@ If a third-party image *does* publish to Quay or to a Red Hat registry,
 prefer that path even if the docker.io path also works. The goal is
 to minimize Docker Hub dependency, not just to satisfy a checkbox.
 
+## AI-assisted authoring (optional MCP servers)
+
+The repo ships a project-scoped [`.mcp.json`](./.mcp.json) with two **optional**
+MCP servers for contributors who use Claude Code. They are author-time aids only
+— **not** a prerequisite for building or running the demos (for that, see the
+per-demo READMEs). Claude Code will ask you to approve project servers the first
+time you open the repo; decline if you don't want them.
+
+### `cpp` — semantic C++ navigation ([mcp-cpp](https://github.com/mpsm/mcp-cpp))
+
+Wraps **clangd** + `compile_commands.json` to give symbol search, definitions,
+usages, and call/inheritance graphs across the demo sources — far better than
+`grep`/`cat` for C++ navigation.
+
+```bash
+# Install the server (the --locked flag avoids a dependency-resolution bug in
+# the published 0.2.2 release; without it the build fails on rust-mcp-sdk):
+cargo install mcp-cpp-server --locked
+
+# Prereqs: Rust >= 1.85, clangd >= 11 (20+ recommended), and a
+# compile_commands.json per demo you want indexed. Generate one with:
+cd examples/demo-01-image-strategy && cmake --preset release   # pure-CMake demos
+# Conan-based demos (most of examples/): configure with export on, e.g.
+#   conan install . --output-folder=build/conan -s build_type=Release --build=missing
+#   cmake -B build -DCMAKE_TOOLCHAIN_FILE=build/conan/conan_toolchain.cmake \
+#         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+```
+
+`compile_commands.json` and `build/` are git-ignored (they're machine-specific),
+so each contributor generates their own. The server's `--root` defaults to the
+repo root, and `clangd` is found on `PATH` (or via `CLANGD_PATH`), so no paths
+are hard-coded in `.mcp.json`.
+
+### `context7` — up-to-date library docs ([Context7](https://github.com/upstash/context7))
+
+Injects current, version-specific docs for the libraries the demos use (CMake,
+Conan, gRPC, protobuf, abseil, OpenTelemetry-cpp, liburing) so generated code and
+prose don't drift to a stale API (the Conan 1→2 and gRPC version traps in
+particular). Registered **anonymously** (rate-limited, no secret in the repo).
+For higher limits, add your own key at **user** scope — never commit it:
+
+```bash
+claude mcp add --scope user --transport http \
+  --header "CONTEXT7_API_KEY: <your-key>" \
+  context7 https://mcp.context7.com/mcp
+```
+
+### Not included: semgrep
+
+Deliberately omitted. Its C/C++ analysis is largely redundant with demo-07's
+existing quality pipeline (cppcheck + clang-tidy + ASan/UBSan + abidiff), and its
+stronger niche (IaC/shell/YAML scanning) isn't core to this tutorial. Add it
+per-user if you want ad-hoc scanning of Containerfiles.
+
 ## Reconciliation plan
 
 Every substantive change should leave a corresponding entry in
