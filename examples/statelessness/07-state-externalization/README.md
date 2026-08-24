@@ -82,7 +82,7 @@ still coming up.
 ├── CMakeLists.txt       svc + client; links gRPC + system libpq
 ├── conanfile.py         gRPC + protobuf + abseil (libpq is a system pkg)
 ├── conan.lock           empty placeholder
-├── Containerfile        UBI 9 builder → ubi-minimal (+ libstdc++, libpq)
+├── Containerfile        UBI 10 builder → ubi-minimal (+ libstdc++, libpq)
 ├── compose.yml          postgres + order-svc
 └── demo.sh              the driver
 ```

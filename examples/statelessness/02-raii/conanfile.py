@@ -28,8 +28,9 @@ class Stateless02RaiiConan(ConanFile):
     default_options = {
         # Static linkage everywhere for a portable runtime image.
         "*/*:shared": False,
-        # OpenSSL FIPS skipped (Digest::SHA dependency on UBI 9 without
-        # EPEL — G-16). gRPC pulls OpenSSL transitively.
+        # OpenSSL FIPS skipped (Digest::SHA dependency on UBI without
+        # EPEL — G-16; a property of UBI's minimal perl, not specific
+        # to UBI 9 — see appendix A). gRPC pulls OpenSSL transitively.
         "openssl/*:no_fips": True,
     }
 

@@ -49,7 +49,7 @@ service must close.
 This is also a small worked example of the build setup Doc 11 documents:
 the helpers are Conan-free static libraries; GoogleTest comes via Conan as a
 test-only dependency ([`conanfile.py`](conanfile.py)); the
-[`Containerfile`](Containerfile) is multi-stage (gcc-toolset-14 builder,
+[`Containerfile`](Containerfile) is multi-stage (base gcc builder,
 `ubi-minimal` runtime) and **runs the gtest suite as a build gate** — a
 failing parser test fails the image build. The full Conan profile / library
 inventory / toolchain matrix from Doc 11 is reference prose on the

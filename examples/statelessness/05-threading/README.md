@@ -78,7 +78,7 @@ This is the same delegation that demo-05 (isolation) relies on.
 ├── src/cpu_probe.cpp    prints hardware_concurrency() vs the cgroup quota
 ├── src/pool_bench.cpp   CPU-bound workload across a sized pool; latency percentiles
 ├── CMakeLists.txt       two binaries; no external deps
-├── Containerfile        UBI 9 (gcc-toolset-14 + cmake) → ubi-minimal; no Conan/gRPC
+├── Containerfile        UBI 10 (gcc + cmake) → ubi-minimal; no Conan/gRPC
 └── demo.sh              the driver (podman run --cpus, like demo-05)
 ```
 

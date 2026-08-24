@@ -25,7 +25,9 @@ class Stateless07OutboxPatternConan(ConanFile):
     default_options = {
         # Static linkage everywhere for a portable runtime image.
         "*/*:shared": False,
-        # OpenSSL FIPS skipped (Digest::SHA on UBI 9 without EPEL — G-16).
+        # OpenSSL FIPS skipped (Digest::SHA on UBI without EPEL — G-16;
+        # a property of UBI's minimal perl, not specific to UBI 9 —
+        # see appendix A).
         "openssl/*:no_fips": True,
     }
 

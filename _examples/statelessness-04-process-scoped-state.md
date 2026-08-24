@@ -98,7 +98,7 @@ CI verification: `scripts/test-stateless-demo-04-process-scoped-state.sh`.
 
 ## What you'll see
 
-Representative output on a Fedora 44 host with gcc-toolset-14 and Podman
+Representative output on a Fedora 44 host with GCC 14 and Podman
 5.x — the build order at startup, an eviction under a capacity of 4, then
 the reverse-order teardown on stop:
 
@@ -157,7 +157,7 @@ the reverse-order teardown on stop:
 - `proto/state.proto` — `StateService`: `Lookup` + `Stats`
 - `CMakeLists.txt` — svc + client
 - `conanfile.py` — gRPC + protobuf + abseil (no OTel)
-- `Containerfile` — multi-stage UBI 9 → ubi-minimal
+- `Containerfile` — multi-stage UBI 10 → ubi-minimal
 - `compose.yml` — single service; read-only rootfs + tmpfs
 - `demo.sh` — build, bring up, drive lookups + stats, show teardown
 

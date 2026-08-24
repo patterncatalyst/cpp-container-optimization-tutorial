@@ -379,7 +379,7 @@ longer per-request workloads, the trade-off typically reverses.
 
 The first build with OTel enabled takes **30-60 minutes** on a
 clean Conan cache. Conan rebuilds opentelemetry-cpp, grpc, protobuf,
-abseil, and openssl from source against our gcc-toolset-14 / gnu17
+abseil, and openssl from source against our base gcc 14 / gnu17
 profile. Subsequent rebuilds with the same dep set are ~30 seconds
 (just our app code) — the Conan cache keeps the giant transitive
 deps.

@@ -86,7 +86,7 @@ delegation the isolation demo uses).
 ## What you'll see
 
 Representative output on a Fedora 44 host (22 logical cores) with
-gcc-toolset-14 and Podman 5.x, running the container under `--cpus=2`:
+GCC 14 and Podman 5.x, running the container under `--cpus=2`:
 
 ```
 ==> cpu-probe   (inside --cpus=2)
@@ -127,7 +127,7 @@ gcc-toolset-14 and Podman 5.x, running the container under `--cpus=2`:
 - `src/pool_bench.cpp` — a CPU-bound workload across a sized pool, with
   latency percentiles
 - `CMakeLists.txt` — two binaries; no external dependencies
-- `Containerfile` — UBI 9 (gcc-toolset-14 + cmake) → `ubi-minimal`; no
+- `Containerfile` — UBI 10 (base gcc/gcc-c++ + cmake) → `ubi-minimal`; no
   Conan, no gRPC
 - `demo.sh` — the driver (`podman run --cpus`, like the isolation demo)
 

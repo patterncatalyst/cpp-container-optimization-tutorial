@@ -94,7 +94,7 @@ The host-level end-to-end test:
 │   └── client.cpp         gRPC client
 ├── CMakeLists.txt         four binaries
 ├── conanfile.py           gRPC + protobuf + abseil (libpq + librdkafka are system)
-├── Containerfile          UBI9 + EPEL (librdkafka); ubi-minimal runtime
+├── Containerfile          UBI 10 (librdkafka built from source); ubi-minimal runtime
 └── compose.yml            postgres + kafka (Strimzi) + producer + relay + consumer
 ```
 
@@ -103,9 +103,13 @@ The host-level end-to-end test:
 The producer/relay/consumer are one image running three different
 binaries (`compose.yml` selects each via the command). gRPC, protobuf,
 and abseil come from Conan (the verified pinned trio). libpq comes from
-UBI AppStream. librdkafka has no UBI-native package, so **EPEL** is
-enabled solely for it — a sanctioned exception, in the same spirit as the
-Postgres and Strimzi images.
+UBI AppStream. librdkafka has no el10 package — it's absent from UBI
+AppStream, from the (default-enabled) CodeReady Builder repo, and from
+EPEL 10 alike (EPEL 10 ships only Python Kafka clients, not the C
+library or its headers) — so it's **built from source** in the
+Containerfile instead: a pinned tag, a minimal feature set (no
+SSL/SASL/compression, since the demo speaks plaintext to Kafka),
+installed to `/usr/local` and found via `pkg-config`.
 
 The broker is **Strimzi's Kafka image** (Red Hat ecosystem) run
 standalone in single-node **KRaft** mode (no Zookeeper): the container

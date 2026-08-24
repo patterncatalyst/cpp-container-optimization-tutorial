@@ -88,7 +88,7 @@ GoogleTest is the only Conan dependency, and it's test-only.
 
 ## What you'll see
 
-Actual output from a host run on Fedora 44 (gcc-toolset-14, 22 logical cores,
+Actual output from a host run on Fedora 44 (GCC 14, 22 logical cores,
 Podman 5.x) — the gtest gate, then the same binary under three cap settings:
 
 ```

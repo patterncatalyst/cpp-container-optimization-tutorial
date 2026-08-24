@@ -95,7 +95,7 @@ cd examples/statelessness/02-raii
 ./demo.sh --clean    # tear down
 ```
 
-The first build compiles the gRPC chain from source under the UBI 9
+The first build compiles the gRPC chain from source under the UBI 10
 builder — several minutes on a cold Conan cache, faster than the
 observability demos because there's no OpenTelemetry in the graph. Cached
 builds are 2-3 minutes.
@@ -104,7 +104,7 @@ CI verification: `scripts/test-stateless-demo-02-raii.sh`.
 
 ## What you'll see
 
-Representative output on a Fedora 44 host with gcc-toolset-14 and Podman
+Representative output on a Fedora 44 host with GCC 14 and Podman
 5.x — the three modes driven in sequence, with the acquire/release balance
 summarised at the end:
 
@@ -160,7 +160,7 @@ summarised at the end:
   outstanding-lease counter, clean shutdown
 - `proto/raii_demo.proto` — the trivial `Process(mode)` RPC
 - `CMakeLists.txt` / `conanfile.py` — the gRPC trio, pinned; no OTel
-- `Containerfile` — UBI 9 builder, `ubi-minimal` runtime
+- `Containerfile` — UBI 10 builder, `ubi-minimal` runtime
 - `compose.yml` — the single service
 - `demo.sh` — build, bring up, drive all three modes, print the summary
 

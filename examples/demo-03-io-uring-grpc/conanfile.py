@@ -3,7 +3,8 @@
 Inherits demo-04's hard-won override chain exactly (rounds r28-r52
 documented in the reconciliation plan, gotchas G-22 through G-30).
 Adds standalone `asio` for the Asio-backed echo server. liburing
-itself comes from the UBI 9 system package, not Conan.
+itself comes from the UBI 10 system package (liburing-devel, via the
+CodeReady Builder repo, enabled by default on ubi10/ubi), not Conan.
 
 Why standalone asio not boost::asio: same library code, but Conan
 recipe and option surface is smaller. boost::asio drags in
@@ -44,8 +45,9 @@ class Demo03Conan(ConanFile):
         "opentelemetry-cpp/*:with_otlp_grpc":  True,
         "opentelemetry-cpp/*:with_otlp_http":  False,
 
-        # OpenSSL FIPS skipped (Digest::SHA dependency on UBI 9
-        # without EPEL — G-16).
+        # OpenSSL FIPS skipped (Digest::SHA dependency on UBI
+        # without EPEL — G-16; a property of UBI's minimal perl,
+        # not specific to UBI 9 — see appendix A).
         "openssl/*:no_fips": True,
     }
 

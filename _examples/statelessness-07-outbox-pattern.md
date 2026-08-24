@@ -144,15 +144,17 @@ applying it, then a deliberately duplicated event being deduped:
 - `src/client.cpp` — the gRPC client
 - `CMakeLists.txt` — four binaries
 - `conanfile.py` — gRPC + protobuf + abseil (libpq + librdkafka are system)
-- `Containerfile` — UBI 9 + EPEL (librdkafka); `ubi-minimal` runtime
+- `Containerfile` — UBI 10 builder; librdkafka built from source (no
+  el10 package, EPEL 10 doesn't ship it either); `ubi-minimal` runtime
 - `compose.yml` — postgres + kafka (Strimzi) + producer + relay + consumer
 - `demo.sh` — the three acts
 
 ## Caveats and gotchas
 
-- **librdkafka comes from EPEL.** It has no UBI-native package, so EPEL is
-  enabled solely for it — a sanctioned exception, in the same spirit as the
-  Postgres and Strimzi images. Everything else stays on UBI/Conan.
+- **librdkafka is built from source.** It has no UBI-native package, and
+  unlike on UBI 9 (where it came from EPEL 9), EPEL 10 doesn't ship it
+  either — so the builder stage clones and compiles it. Everything else
+  stays on UBI/Conan.
 - **The consumer commits the offset *after* the DB write, never before.**
   This ordering is what makes at-least-once safe: if it crashes after applying
   but before committing the offset, the event redelivers and the idempotent

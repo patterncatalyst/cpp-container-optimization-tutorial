@@ -66,7 +66,7 @@ assume this discipline is in place.
 ```
 
 The first build pulls and compiles the gRPC chain from source under the
-UBI 9 builder; expect several minutes on a cold Conan cache (faster than
+UBI 10 builder; expect several minutes on a cold Conan cache (faster than
 the observability demos because there's no OpenTelemetry in the graph).
 Cached builds are 2-3 minutes.
 
@@ -87,7 +87,7 @@ CI verification:
 ├── CMakeLists.txt           gRPC codegen + server + client
 ├── conanfile.py             gRPC + protobuf + abseil (no OTel)
 ├── conan.lock               empty placeholder; resolves fresh on first build
-├── Containerfile            multi-stage UBI 9 → ubi-minimal
+├── Containerfile            multi-stage UBI 10 → ubi-minimal
 ├── compose.yml              single service; read-only rootfs + tmpfs
 └── demo.sh                  the driver
 ```

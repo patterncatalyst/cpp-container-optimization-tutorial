@@ -75,7 +75,7 @@ so it's lighter than 03-pmr.
 ├── CMakeLists.txt          svc + client
 ├── conanfile.py            gRPC + protobuf + abseil (no OTel)
 ├── conan.lock              empty placeholder
-├── Containerfile           multi-stage UBI 9 → ubi-minimal
+├── Containerfile           multi-stage UBI 10 → ubi-minimal
 ├── compose.yml             single service; read-only rootfs + tmpfs
 └── demo.sh                 the driver
 ```

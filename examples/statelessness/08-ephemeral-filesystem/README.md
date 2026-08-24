@@ -83,6 +83,6 @@ container layer.
 ├── src/app.cpp        log-stdout / log-file / check-file / scratch modes
 ├── CMakeLists.txt     one binary, spdlog
 ├── conanfile.py       spdlog/1.14.1 (pulls fmt; both static)
-├── Containerfile      UBI9 builder; ubi-minimal runtime + libstdc++
+├── Containerfile      UBI 10 builder; ubi-minimal runtime + libstdc++
 └── demo.sh            podman run under --read-only / --tmpfs
 ```

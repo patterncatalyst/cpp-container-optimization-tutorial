@@ -90,7 +90,7 @@ CI verification: `scripts/test-stateless-demo-10-grpc-microservices.sh`.
 
 ## What you'll see
 
-Actual output from a host run on Fedora 44 (gcc-toolset-14, Podman 5.x) —
+Actual output from a host run on Fedora 44 (GCC 14, Podman 5.x) —
 the three acts, with the real figures from the seeded data:
 
 ```

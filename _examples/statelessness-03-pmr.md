@@ -96,7 +96,7 @@ CI verification: `scripts/test-stateless-demo-03-pmr.sh`.
 
 ## What you'll see
 
-Representative output on a Fedora 44 host with gcc-toolset-14 and Podman
+Representative output on a Fedora 44 host with GCC 14 and Podman
 5.x — the arena path, the benchmark, then the deliberate ASan trap firing:
 
 ```
@@ -153,7 +153,9 @@ READ of size 1 at 0x... thread T0
 - `proto/processor.proto` — `MemoryProcessor`; `mode = arena | bench`
 - `CMakeLists.txt` — svc + client + pmr-trap (ASan, static libasan)
 - `conanfile.py` — gRPC + protobuf + abseil (no OTel)
-- `Containerfile` — multi-stage UBI 9 → ubi-minimal + libstdc++
+- `Containerfile` — multi-stage UBI 10 → ubi-minimal + libstdc++; base
+  gcc 14 has no 64-bit `libasan.a`, so `pmr-trap`'s `-static-libasan`
+  link borrows one from `gcc-toolset-15-libasan-devel`
 - `compose.yml` — single service; read-only rootfs + tmpfs
 - `demo.sh` — build, bring up, run arena + bench + the trap
 

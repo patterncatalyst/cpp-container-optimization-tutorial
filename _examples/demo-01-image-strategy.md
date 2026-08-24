@@ -56,7 +56,7 @@ PGO pass:
 
 1. **`ubi-multistage`** — UBI builder + UBI-minimal runtime,
    multi-stage, LTO on. The recommended production default.
-2. **`ubi-micro`** — UBI builder, runtime is `ubi9/ubi-micro`
+2. **`ubi-micro`** — UBI builder, runtime is `ubi10/ubi-micro`
    (~30 MB) with libstdc++ statically linked into the binary. The
    minimum surface area for a typical C++ service.
 3. **`single-stage-naive`** — A single-stage build that ships the
@@ -82,7 +82,7 @@ size, build time, and a `hey` benchmark for each build.
 
 ## What you'll see
 
-Representative output on a Fedora 44 host with gcc-toolset-14 and
+Representative output on a Fedora 44 host with GCC 14 and
 Podman 5.x:
 
 ```

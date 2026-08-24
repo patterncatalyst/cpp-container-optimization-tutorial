@@ -99,7 +99,7 @@ trap itself — the bug is real regardless.
 ├── CMakeLists.txt           svc + client + pmr-trap (ASan, static libasan)
 ├── conanfile.py             gRPC + protobuf + abseil (no OTel)
 ├── conan.lock               empty placeholder
-├── Containerfile            multi-stage UBI 9 → ubi-minimal + libstdc++
+├── Containerfile            multi-stage UBI 10 → ubi-minimal + libstdc++
 ├── compose.yml              single service; read-only rootfs + tmpfs
 └── demo.sh                  the driver
 ```

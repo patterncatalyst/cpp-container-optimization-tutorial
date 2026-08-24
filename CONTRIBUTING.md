@@ -92,11 +92,11 @@ say so in the body.
 
 ## Container image policy
 
-**All container images we build use Red Hat UBI 9 as the base.**
+**All container images we build use Red Hat UBI 10 as the base.**
 
-- **Builder stage**: `registry.access.redhat.com/ubi9/ubi`
-- **Runtime stage**: `registry.access.redhat.com/ubi9/ubi-minimal` (or
-  `ubi9/ubi-micro` when even microdnf is overkill)
+- **Builder stage**: `registry.access.redhat.com/ubi10/ubi`
+- **Runtime stage**: `registry.access.redhat.com/ubi10/ubi-minimal` (or
+  `ubi10/ubi-micro` when even microdnf is overkill)
 
 This is non-negotiable for any new Containerfile in `examples/`. UBI
 gives us:
@@ -126,7 +126,7 @@ exception.
 
 ### UBI without a Red Hat subscription
 
-Every Containerfile that uses `registry.access.redhat.com/ubi9/ubi:` as
+Every Containerfile that uses `registry.access.redhat.com/ubi10/ubi:` as
 a build stage (the "full" UBI base, which uses `dnf` rather than
 `microdnf`) must include this fragment **right after the `FROM` line**:
 
@@ -153,7 +153,7 @@ everything the demos need. UBI without subscription is a documented,
 supported Red Hat configuration; we just need this one-line opt-out
 of the entitlement plumbing that's also installed by default.
 
-This applies only to **`ubi9/ubi`** stages. **`ubi9/ubi-minimal`**
+This applies only to **`ubi10/ubi`** stages. **`ubi10/ubi-minimal`**
 uses `microdnf`, which has no subscription-manager plugin and no
 `redhat.repo`; runtime stages on `ubi-minimal` need no fix.
 

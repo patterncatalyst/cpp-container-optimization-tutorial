@@ -129,7 +129,7 @@ a restart, and scratch needing an explicit tmpfs:
   modes
 - `CMakeLists.txt` — one binary, spdlog
 - `conanfile.py` — spdlog/1.14.1 (pulls fmt; both static)
-- `Containerfile` — UBI 9 builder; ubi-minimal runtime + libstdc++
+- `Containerfile` — UBI 10 builder; ubi-minimal runtime + libstdc++
 - `demo.sh` — runs the binary under `--read-only` / `--tmpfs`
 
 ## Caveats and gotchas
