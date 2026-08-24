@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Top-level presentation driver — run all seven demos from one terminal.
+# Presentation driver — run all seven demos from one terminal.
 #
-# This is the on-stage cockpit. It does NOT reimplement any demo; it drives
-# each demo's own examples/demo-0X-*/demo.sh with the TTY inherited, so every
-# per-demo pause / callout / code_ref still works exactly as when run
-# standalone. The seven scripts remain fully usable on their own.
+# Lives in examples/ and drives the per-demo scripts beside it. This is the
+# on-stage cockpit. It does NOT reimplement any demo; it runs each demo's own
+# examples/demo-0X-*/demo.sh with the TTY inherited, so every per-demo pause /
+# callout / code_ref still works exactly as when run standalone. The seven
+# scripts remain fully usable on their own.
+#
+# Run from the examples/ directory:  ./demo.sh  (or examples/demo.sh)
 #
 # Order follows the DECK, not the directory numbers:
 #   Demo 1 → 2 → 6 → 3 → 4 → 5 → 7
@@ -25,11 +28,13 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$REPO_ROOT"
+# This script lives in examples/ and drives the per-demo demo.sh scripts that
+# sit beside it (examples/demo-0X-*/demo.sh). Paths below are relative to here.
+EXAMPLES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$EXAMPLES_DIR"
 
-# shellcheck source=scripts/lib/_helpers.sh
-source "$REPO_ROOT/scripts/lib/_helpers.sh"
+# shellcheck source=../scripts/lib/_helpers.sh
+source "$EXAMPLES_DIR/../scripts/lib/_helpers.sh"
 
 # Listed in DECK order; the selector you type is the canonical Demo number
 # (so "Demo 4 — OTel" in the deck is what you press), which is field 1.
@@ -87,15 +92,15 @@ run_one() {  # run_one <canonical Demo number>
   fi
   hr
 
-  if [[ ! -x "examples/$dir/demo.sh" ]]; then
-    log_err "examples/$dir/demo.sh not found or not executable — skipping."
+  if [[ ! -x "$dir/demo.sh" ]]; then
+    log_err "$dir/demo.sh not found or not executable — skipping."
     return 1
   fi
 
   # Run in a subshell so a demo's `cd`/traps/`set -e` can't leak back here.
   # TTY is inherited, so the demo's own pause/callout/code_ref work as usual.
   # A non-zero exit is reported but does NOT abort the whole session.
-  ( cd "examples/$dir" && ./demo.sh ) || log_warn "Demo '$name' exited non-zero (rc=$?) — continuing."
+  ( cd "$dir" && ./demo.sh ) || log_warn "Demo '$name' exited non-zero (rc=$?) — continuing."
 }
 
 clean_all() {
@@ -103,7 +108,7 @@ clean_all() {
   for row in "${DEMOS[@]}"; do
     IFS='|' read -r num dir name _ _ <<<"$row"
     log_step "Cleaning Demo $num — $name"
-    ( cd "examples/$dir" && ./demo.sh --clean ) || log_warn "clean of '$name' returned non-zero — continuing."
+    ( cd "$dir" && ./demo.sh --clean ) || log_warn "clean of '$name' returned non-zero — continuing."
   done
   log_ok "All demos cleaned."
 }
