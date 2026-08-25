@@ -27,6 +27,7 @@
 #   ./demo.sh                 full run (build, bring up, load, verify)
 #   ./demo.sh --workload-only skip build/bring-up; drive an already-up stack
 #   ./demo.sh --bpftrace      also run the kernel-level bpftrace view (sudo)
+#   ./demo.sh --keep          leave the stack up at the end (fast re-runs)
 #   ./demo.sh --no-pause      never stop for Enter (unattended)
 #   ./demo.sh --clean         tear the stack down and remove the image
 # ============================================================================
@@ -48,16 +49,22 @@ SVC_URL="http://127.0.0.1:18401"
 WORKLOAD_ONLY=0
 DO_BPFTRACE=0
 DO_CLEAN=0
+KEEP_UP=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --workload-only) WORKLOAD_ONLY=1; shift;;
     --bpftrace)      DO_BPFTRACE=1;   shift;;
+    --keep)          KEEP_UP=1;       shift;;
     --no-pause)      export DEMO_NO_PAUSE=1; shift;;
     --clean)         DO_CLEAN=1;      shift;;
     -h|--help)       sed -n '2,33p' "$0"; exit 0;;
     *) log_err "unknown arg: $1"; exit 2;;
   esac
 done
+
+# The presentation cockpit can ask us to leave the stack up (DEMO_KEEP_STACK=1)
+# so the next run skips bring-up. Same effect as --keep.
+[[ "${DEMO_KEEP_STACK:-0}" == "1" ]] && KEEP_UP=1
 
 if [[ $DO_CLEAN -eq 1 ]]; then
   "${COMPOSE[@]}" down -v 2>/dev/null || true
@@ -254,12 +261,16 @@ log_info "  Service:    $SVC_URL"
 
 # ── Teardown ────────────────────────────────────────────────────────────────
 echo
-# Under the presentation cockpit, don't invite Ctrl-C — it would SIGINT the
-# whole orchestrated run. Tear down quietly and let the cockpit continue.
-if [[ "${DEMO_ORCHESTRATED:-0}" == "1" ]]; then
-  log_info "Orchestrated run — tearing down demo-04 stack and continuing."
+if (( KEEP_UP == 1 )); then
+  log_ok "Stack left running (Grafana $GRAFANA_URL). Tear down with: ./demo.sh --clean"
 else
-  pause "Explore Grafana now if you like, then press Enter to tear down the stack"
+  # Under the presentation cockpit, don't invite Ctrl-C — it would SIGINT the
+  # whole orchestrated run. Tear down quietly and let the cockpit continue.
+  if [[ "${DEMO_ORCHESTRATED:-0}" == "1" ]]; then
+    log_info "Orchestrated run — tearing down demo-04 stack and continuing."
+  else
+    pause "Explore Grafana now if you like, then press Enter to tear down the stack"
+  fi
+  "${COMPOSE[@]}" down -v 2>/dev/null || true
 fi
-"${COMPOSE[@]}" down -v 2>/dev/null || true
 log_ok "Demo 04 complete."

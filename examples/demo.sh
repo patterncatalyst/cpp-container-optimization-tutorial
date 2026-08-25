@@ -20,15 +20,20 @@
 #   ./demo.sh --no-pause      never stop for Enter (unattended / auto-test)
 #   ./demo.sh --ide=clion     open every code_ref in CLion as it's cued
 #   ./demo.sh --rebuild       force rebuilds (default reuses existing images)
+#   ./demo.sh --keep-stack    leave the LGTM stack up for fast re-runs (demos 3/4)
 #   ./demo.sh --clean         run each demo's own --clean, then exit
 #   ./demo.sh -h              this help
 #
 # By default already-built images are REUSED (fast on stage); the stack demos
-# (3, 4) tear their stacks down between steps without inviting Ctrl-C.
+# (3, 4) tear their stacks down between steps without inviting Ctrl-C. With
+# --keep-stack (or 'k' in the menu) a stack demo leaves its stack running so
+# the next run of it is instant; the cockpit frees the OTHER stack demo first
+# since demos 3 and 4 both bind Grafana on :3000.
 #
 # Env:
 #   DEMO_IDE=clion            same as --ide=clion (code_ref opens in CLion)
 #   DEMO_NO_BUILD=1           reuse existing images (set by default here)
+#   DEMO_KEEP_STACK=1         same as --keep-stack
 # ============================================================================
 
 set -euo pipefail
@@ -36,6 +41,7 @@ set -euo pipefail
 # This script lives in examples/ and drives the per-demo demo.sh scripts that
 # sit beside it (examples/demo-0X-*/demo.sh). Paths below are relative to here.
 EXAMPLES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SELF="$EXAMPLES_DIR/$(basename "${BASH_SOURCE[0]}")"   # absolute path to this script (used by -h after cd)
 cd "$EXAMPLES_DIR"
 
 # shellcheck source=../scripts/lib/_helpers.sh
@@ -66,8 +72,9 @@ while [[ $# -gt 0 ]]; do
     --ide=*)     export DEMO_IDE="${1#*=}"; shift;;
     --ide)       export DEMO_IDE="$2";    shift 2;;
     --rebuild)   export DEMO_NO_BUILD=0;  shift;;
+    --keep-stack) export DEMO_KEEP_STACK=1; shift;;
     --clean)     DO_CLEAN=1;              shift;;
-    -h|--help)   sed -n '2,24p' "$0"; exit 0;;
+    -h|--help)   sed -n '2,37p' "$SELF"; exit 0;;
     *) log_err "unknown arg: $1"; exit 2;;
   esac
 done
@@ -84,6 +91,20 @@ demo_row_by_num() {
     [[ "${row%%|*}" == "$want" ]] && { printf '%s' "$row"; return 0; }
   done
   return 1
+}
+
+# free_other_stack <dir-to-keep> — demos 3 and 4 each bind Grafana on :3000,
+# so only one stack can be up at a time. Before starting a stack demo while
+# keep-stack is on, tear down the OTHER stack demo so its ports are free.
+free_other_stack() {
+  local keep_dir="$1" row dir stack
+  for row in "${DEMOS[@]}"; do
+    IFS='|' read -r _ dir _ _ stack <<<"$row"
+    if [[ "$stack" == "1" && "$dir" != "$keep_dir" ]]; then
+      log_info "keep-stack: freeing ports from $dir before starting the next stack demo"
+      ( cd "$dir" && ./demo.sh --clean ) >/dev/null 2>&1 || true
+    fi
+  done
 }
 
 run_one() {  # run_one <canonical Demo number>
@@ -104,6 +125,11 @@ run_one() {  # run_one <canonical Demo number>
   if [[ ! -x "$dir/demo.sh" ]]; then
     log_err "$dir/demo.sh not found or not executable — skipping."
     return 1
+  fi
+
+  # With keep-stack on, ensure the other stack demo isn't holding :3000.
+  if [[ "${DEMO_KEEP_STACK:-0}" == "1" && "$stack" == "1" ]]; then
+    free_other_stack "$dir"
   fi
 
   # Run in a subshell so a demo's `cd`/traps/`set -e` can't leak back here.
@@ -157,6 +183,9 @@ menu() {
         "$C_BOLD$C_GREEN" "$num" "$C_RESET" "$name" "$C_DIM" "$tag" "$C_RESET" "$marker"
     done
     printf '  %sa%s) run ALL in deck order\n' "$C_BOLD$C_GREEN" "$C_RESET"
+    local keep_state; [[ "${DEMO_KEEP_STACK:-0}" == "1" ]] && keep_state="ON" || keep_state="off"
+    printf '  %sk%s) toggle keep-stack (leave LGTM up for fast re-runs) — now: %s%s%s\n' \
+      "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD" "$keep_state" "$C_RESET"
     printf '  %sc%s) clean every demo (images/stacks)\n' "$C_BOLD$C_GREEN" "$C_RESET"
     printf '  %sq%s) quit\n' "$C_BOLD$C_GREEN" "$C_RESET"
     [[ -n "${DEMO_IDE:-}" ]] && callout "" "DEMO_IDE=$DEMO_IDE — code_ref callouts will open in the IDE."
@@ -170,6 +199,12 @@ menu() {
           log_warn "no Demo #$choice"
         fi;;
       a|A) run_all; pause "Back to the menu — press Enter";;
+      k|K)
+        if [[ "${DEMO_KEEP_STACK:-0}" == "1" ]]; then
+          unset DEMO_KEEP_STACK; log_info "keep-stack OFF — stacks tear down after each demo."
+        else
+          export DEMO_KEEP_STACK=1; log_info "keep-stack ON — stack demos leave the LGTM stack running."
+        fi;;
       c|C) clean_all; pause "Back to the menu — press Enter";;
       q|Q|"") break;;
       *) log_warn "unrecognised choice: $choice";;

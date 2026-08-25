@@ -69,6 +69,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# The presentation cockpit can ask us to leave the stack up (DEMO_KEEP_STACK=1)
+# so the next run of a stack demo skips bring-up. Same effect as --keep.
+[[ "${DEMO_KEEP_STACK:-0}" == "1" ]] && KEEP_UP=1
+
 require podman
 
 OBS="$REPO_ROOT/observability/compose.yml"
