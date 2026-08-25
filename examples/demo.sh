@@ -102,7 +102,9 @@ free_other_stack() {
     IFS='|' read -r _ dir _ _ stack <<<"$row"
     if [[ "$stack" == "1" && "$dir" != "$keep_dir" ]]; then
       log_info "keep-stack: freeing ports from $dir before starting the next stack demo"
-      ( cd "$dir" && ./demo.sh --clean ) >/dev/null 2>&1 || true
+      # --stack-down tears the stack down but KEEPS the image (unlike --clean,
+      # which removes it and would force a slow recompile on the next run).
+      ( cd "$dir" && ./demo.sh --stack-down ) >/dev/null 2>&1 || true
     fi
   done
 }

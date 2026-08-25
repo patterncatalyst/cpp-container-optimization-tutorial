@@ -62,6 +62,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --keep)       KEEP_UP=1; shift ;;
         --clean)      CLEAN_ONLY=1; shift ;;
+        --stack-down) CLEAN_ONLY=1; shift ;;  # demo-03's clean is already image-preserving
         --production) USE_PRODUCTION=1; shift ;;
         --no-pause)   export DEMO_NO_PAUSE=1; shift ;;
         -h|--help) sed -n '2,45p' "$0"; exit 0 ;;

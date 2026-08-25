@@ -56,6 +56,7 @@ SVC_URL="http://127.0.0.1:18401"
 WORKLOAD_ONLY=0
 DO_BPFTRACE=0
 DO_CLEAN=0
+DO_STACK_DOWN=0
 KEEP_UP=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -64,6 +65,7 @@ while [[ $# -gt 0 ]]; do
     --keep)          KEEP_UP=1;       shift;;
     --no-pause)      export DEMO_NO_PAUSE=1; shift;;
     --clean)         DO_CLEAN=1;      shift;;
+    --stack-down)    DO_STACK_DOWN=1; shift;;
     -h|--help)       sed -n '2,33p' "$0"; exit 0;;
     *) log_err "unknown arg: $1"; exit 2;;
   esac
@@ -77,6 +79,14 @@ if [[ $DO_CLEAN -eq 1 ]]; then
   "${COMPOSE[@]}" down -v 2>/dev/null || true
   podman rmi -f cpp-tut/demo-04:latest 2>/dev/null || true
   log_ok "Cleaned."
+  exit 0
+fi
+
+# --stack-down: tear down the running stack but KEEP the image (so a re-run
+# doesn't recompile). Used by the cockpit to free :3000 for the other stack demo.
+if [[ $DO_STACK_DOWN -eq 1 ]]; then
+  "${COMPOSE[@]}" down -v 2>/dev/null || true
+  log_ok "Stack down (image kept)."
   exit 0
 fi
 
