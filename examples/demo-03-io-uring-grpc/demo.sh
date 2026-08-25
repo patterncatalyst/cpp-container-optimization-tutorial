@@ -62,6 +62,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --keep)       KEEP_UP=1; shift ;;
         --clean)      CLEAN_ONLY=1; shift ;;
+        --stack-down) CLEAN_ONLY=1; shift ;;  # demo-03's clean is already image-preserving
         --production) USE_PRODUCTION=1; shift ;;
         --no-pause)   export DEMO_NO_PAUSE=1; shift ;;
         -h|--help) sed -n '2,45p' "$0"; exit 0 ;;
@@ -69,9 +70,18 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# The presentation cockpit can ask us to leave the stack up (DEMO_KEEP_STACK=1)
+# so the next run of a stack demo skips bring-up. Same effect as --keep.
+[[ "${DEMO_KEEP_STACK:-0}" == "1" ]] && KEEP_UP=1
+
 require podman
 
 OBS="$REPO_ROOT/observability/compose.yml"
+
+# Absolute paths for the tutorial dashboard mounts (relative paths in the
+# included observability/compose.yml would resolve against this demo's dir).
+export OBS_DASHBOARDS_DIR="$REPO_ROOT/observability/grafana/dashboards"
+export OBS_PROVIDER_FILE="$REPO_ROOT/observability/grafana/otel-provisioning/tutorial-dashboards.yaml"
 
 if (( USE_PRODUCTION )); then
     # Verify the one-time host setup is in place before bringing up.
@@ -150,12 +160,21 @@ callout \
   "io_uring direct:  :9000    (raw liburing submission/completion ring)" \
   "Asio io_uring:    :9001    (same kernel calls, executor abstraction)" \
   "Grafana:          $GRAFANA_URL          (anonymous viewer)"
+callout "" "Three server heads, three source files worth opening:"
+code_ref "src/grpc_async_server.cpp" 67 "async gRPC completion-queue worker loop (Proceed() state machine)"
+code_ref "src/echo_uring.cpp" 1 "raw liburing submission/completion ring (multishot on kernels ≥6.0)"
+code_ref "proto/echo.proto" 1 "the Echo service contract"
 
 # ── Step 1: Build and bring up ─────────────────────────────────────────
 demo_step "Build the demo image and bring up the stack + LGTM backend"
 callout "First build is ~30-45 min (OTel + gRPC + asio compiled from source" \
         "under the override profile). Warm rebuilds are ~2-3 min."
-if ! "${COMPOSE[@]}" up -d --build; then
+BUILD_FLAG="--build"
+if [[ "${DEMO_NO_BUILD:-0}" == "1" ]] && image_exists "cpp-tut/demo-03:latest"; then
+    log_info "Reusing cpp-tut/demo-03:latest (DEMO_NO_BUILD=1) — starting without --build"
+    BUILD_FLAG=""
+fi
+if ! "${COMPOSE[@]}" up -d ${BUILD_FLAG}; then
     log_err "compose up failed — not going any further (nothing to load)."
     "${COMPOSE[@]}" logs --tail=40 demo-03-svc 2>&1 || true
     exit 1
@@ -276,12 +295,18 @@ pause
 # ── Step 5: Grafana — the gRPC instrumentation ─────────────────────────
 demo_step "Inspect the gRPC instrumentation in Grafana"
 grafana_callout "$GRAFANA_URL" \
-  "Explore → Prometheus / Tempo (no prebuilt demo-03 dashboard)" \
-  "demo3.grpc.latency            — per-method latency histogram (Prometheus)" \
-  "demo3.grpc.requests           — request counter, rolls up by status code" \
-  "demo3.tcp.iouring.connections — direct liburing connection gauge" \
-  "demo3.tcp.asio.connections    — Asio backend connection gauge" \
-  "Traces (Tempo)                — drill into individual RPC spans"
+  "'Demo 03 — io_uring + async gRPC' — Tutorial folder (Dashboards → Browse)" \
+  "gRPC request rate      (stat)        — demo3_grpc_requests_total" \
+  "gRPC latency p50/95/99 (timeseries)  — demo3_grpc_latency_milliseconds histogram" \
+  "TCP conns/s            (timeseries)  — io_uring direct vs Asio" \
+  "Recent gRPC traces     (table)       — Tempo, click a row for the span tree" \
+  "Service logs           (logs)        — Loki"
+callout "" "Prefer Explore? Paste these into a Prometheus Explore query:" \
+        "  sum(rate(demo3_grpc_requests_total[1m]))" \
+        "  histogram_quantile(0.99, sum(rate(demo3_grpc_latency_milliseconds_bucket[1m])) by (le))" \
+        "  sum(rate(demo3_tcp_iouring_connections_total[1m]))" \
+        "  sum(rate(demo3_tcp_asio_connections_total[1m]))" \
+        "…and in a Tempo Explore, TraceQL: { resource.service.name=\"demo-03-svc\" }"
 callout "The TCP echo servers are deliberately un-instrumented (they're the" \
         "'floor'); only the gRPC path carries OTel, so you can see what the" \
         "semantics cost — in latency AND in observable surface area."
@@ -290,7 +315,14 @@ pause
 # ── Teardown ────────────────────────────────────────────────────────────
 echo
 if (( KEEP_UP == 0 )); then
-    pause "Press Enter to tear down the stack (or Ctrl-C to leave it running)"
+    # Under the presentation cockpit, DON'T invite Ctrl-C here — a Ctrl-C at
+    # this prompt would SIGINT the whole orchestrated run. Tear down quietly
+    # (the EXIT trap does the actual work) and let the cockpit move on.
+    if [[ "${DEMO_ORCHESTRATED:-0}" == "1" ]]; then
+        log_info "Orchestrated run — tearing down demo-03 stack and continuing."
+    else
+        pause "Explore Grafana now if you like, then press Enter to tear down the stack"
+    fi
 else
     log_ok "Demo 03 complete — stack left up (--keep)."
 fi

@@ -134,6 +134,67 @@ callout() {
     for line in "$@"; do printf '  %s%s%s\n' "$C_DIM" "$line" "$C_RESET"; done
 }
 
+# ── Build-skip helpers ──────────────────────────────────────────────────
+# For live presentations: when images are already built, rebuilding (even
+# with a warm layer cache) wastes stage time. The presentation cockpit sets
+# DEMO_NO_BUILD=1; each demo guards its build step with should_build so a
+# missing image still builds, but an existing one is reused.
+
+# image_exists <tag> — true if a local image with this tag exists.
+image_exists() { podman image exists "$1" 2>/dev/null; }
+
+# should_build <tag> — return non-zero (skip) when DEMO_NO_BUILD=1 AND the
+# image already exists; zero (build) otherwise. Usage:
+#   if should_build "$IMAGE"; then podman build ... ; fi
+should_build() {
+    if [[ "${DEMO_NO_BUILD:-0}" == "1" ]] && image_exists "$1"; then
+        log_info "Reusing existing image $1 (DEMO_NO_BUILD=1) — skipping build"
+        return 1
+    fi
+    return 0
+}
+
+# ── Code-examination helpers ────────────────────────────────────────────
+# The recurring "now flip to the IDE and look at THIS code" moment. Always
+# prints a clickable file:line. When DEMO_IDE=clion is set, ALSO opens the
+# file at the line in CLion via the JetBrains Toolbox launcher — opt-in so
+# standalone / CI runs stay quiet. Path is resolved to absolute against the
+# caller's $PWD (demo.sh scripts cd into their own dir first) so CLion opens
+# the right file regardless of where the demo was launched from.
+DEMO_IDE="${DEMO_IDE:-}"
+
+# _clion_bin — echo a runnable CLion launcher, or return non-zero.
+_clion_bin() {
+    if command -v clion >/dev/null 2>&1; then command -v clion; return 0; fi
+    local t="$HOME/.local/share/JetBrains/Toolbox/scripts/clion"
+    if [[ -x "$t" ]]; then printf '%s' "$t"; return 0; fi
+    return 1
+}
+
+# code_ref <path> [line] ["caption"] — "examine this in the IDE" callout.
+code_ref() {
+    local path="$1" line="${2:-}" caption="${3:-}"
+    local abs="$path"
+    [[ "$abs" != /* ]] && abs="$PWD/$path"
+    local disp="$path"; [[ -n "$line" ]] && disp="$path:$line"
+    printf '  %s▸ Code:%s  %s%s%s' "$C_BOLD$C_GREEN" "$C_RESET" "$C_GREEN" "$disp" "$C_RESET"
+    [[ -n "$caption" ]] && printf '  %s— %s%s' "$C_DIM" "$caption" "$C_RESET"
+    printf '\n'
+    if [[ "$DEMO_IDE" == "clion" ]]; then
+        local bin
+        if bin="$(_clion_bin)"; then
+            if [[ -n "$line" ]]; then
+                "$bin" --line "$line" "$abs" >/dev/null 2>&1 &
+            else
+                "$bin" "$abs" >/dev/null 2>&1 &
+            fi
+            disown 2>/dev/null || true
+        else
+            log_warn "DEMO_IDE=clion but no CLion launcher found (skipping open)"
+        fi
+    fi
+}
+
 # grafana_callout <url> "Dashboard name" "panel/thing to look at" ...
 # The recurring "now switch to Grafana and look at X" moment.
 grafana_callout() {

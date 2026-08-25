@@ -27,6 +27,7 @@
 #   ./demo.sh                 full run (build, bring up, load, verify)
 #   ./demo.sh --workload-only skip build/bring-up; drive an already-up stack
 #   ./demo.sh --bpftrace      also run the kernel-level bpftrace view (sudo)
+#   ./demo.sh --keep          leave the stack up at the end (fast re-runs)
 #   ./demo.sh --no-pause      never stop for Enter (unattended)
 #   ./demo.sh --clean         tear the stack down and remove the image
 # ============================================================================
@@ -42,27 +43,50 @@ source "$(cd ../../scripts/lib && pwd)/_helpers.sh"
 OBS_COMPOSE="$(cd ../../observability && pwd)/compose.yml"
 COMPOSE=(podman compose -f compose.yml -f "$OBS_COMPOSE")
 
+# Absolute paths for the tutorial dashboard mounts. Relative paths in the
+# included observability/compose.yml would resolve against THIS demo's dir
+# (the compose project dir), so the dashboards must be passed in as absolutes.
+OBS_DIR="$(dirname "$OBS_COMPOSE")"
+export OBS_DASHBOARDS_DIR="$OBS_DIR/grafana/dashboards"
+export OBS_PROVIDER_FILE="$OBS_DIR/grafana/otel-provisioning/tutorial-dashboards.yaml"
+
 GRAFANA_URL="http://127.0.0.1:3000"
 SVC_URL="http://127.0.0.1:18401"
 
 WORKLOAD_ONLY=0
 DO_BPFTRACE=0
 DO_CLEAN=0
+DO_STACK_DOWN=0
+KEEP_UP=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --workload-only) WORKLOAD_ONLY=1; shift;;
     --bpftrace)      DO_BPFTRACE=1;   shift;;
+    --keep)          KEEP_UP=1;       shift;;
     --no-pause)      export DEMO_NO_PAUSE=1; shift;;
     --clean)         DO_CLEAN=1;      shift;;
+    --stack-down)    DO_STACK_DOWN=1; shift;;
     -h|--help)       sed -n '2,33p' "$0"; exit 0;;
     *) log_err "unknown arg: $1"; exit 2;;
   esac
 done
 
+# The presentation cockpit can ask us to leave the stack up (DEMO_KEEP_STACK=1)
+# so the next run skips bring-up. Same effect as --keep.
+[[ "${DEMO_KEEP_STACK:-0}" == "1" ]] && KEEP_UP=1
+
 if [[ $DO_CLEAN -eq 1 ]]; then
   "${COMPOSE[@]}" down -v 2>/dev/null || true
   podman rmi -f cpp-tut/demo-04:latest 2>/dev/null || true
   log_ok "Cleaned."
+  exit 0
+fi
+
+# --stack-down: tear down the running stack but KEEP the image (so a re-run
+# doesn't recompile). Used by the cockpit to free :3000 for the other stack demo.
+if [[ $DO_STACK_DOWN -eq 1 ]]; then
+  "${COMPOSE[@]}" down -v 2>/dev/null || true
+  log_ok "Stack down (image kept)."
   exit 0
 fi
 
@@ -85,7 +109,12 @@ if [[ $WORKLOAD_ONLY -eq 0 ]]; then
   demo_step "Build the service and bring up the LGTM stack"
   callout "First run compiles opentelemetry-cpp from source (~10-20 min)." \
           "Later runs hit the podman layer cache (~2-3 min)."
-  if ! "${COMPOSE[@]}" up -d --build; then
+  BUILD_FLAG="--build"
+  if [[ "${DEMO_NO_BUILD:-0}" == "1" ]] && image_exists "cpp-tut/demo-04:latest"; then
+    log_info "Reusing cpp-tut/demo-04:latest (DEMO_NO_BUILD=1) — starting without --build"
+    BUILD_FLAG=""
+  fi
+  if ! "${COMPOSE[@]}" up -d ${BUILD_FLAG}; then
     log_err "compose up failed — not going any further (nothing to observe)."
     "${COMPOSE[@]}" logs --tail=40 demo-04-svc 2>&1 || true
     exit 1
@@ -121,6 +150,8 @@ callout "Every GET / does three things in ~40 lines of C++:" \
         "  • starts a span 'handle_request' with a child span 'compute'  (TRACE)" \
         "  • increments demo.requests and records demo.request.duration  (METRICS)" \
         "  • emits a 'request handled' log record                        (LOGS)"
+code_ref "src/main.cpp" 162 "the GET / handler — StartSpan, counter->Add, hist->Record, EmitLogRecord"
+code_ref "src/main.cpp" 153 "provider wiring — GetTracer/GetMeter/GetLogger, same as Java/Go"
 echo
 printf '  Priming a few requests: '
 for _ in 1 2 3 4 5; do curl -sf "$SVC_URL/" >/dev/null 2>&1 && printf '.'; done
@@ -247,6 +278,16 @@ log_info "  Service:    $SVC_URL"
 
 # ── Teardown ────────────────────────────────────────────────────────────────
 echo
-pause "Press Enter to tear down the stack (or Ctrl-C to leave it running)"
-"${COMPOSE[@]}" down -v 2>/dev/null || true
+if (( KEEP_UP == 1 )); then
+  log_ok "Stack left running (Grafana $GRAFANA_URL). Tear down with: ./demo.sh --clean"
+else
+  # Under the presentation cockpit, don't invite Ctrl-C — it would SIGINT the
+  # whole orchestrated run. Tear down quietly and let the cockpit continue.
+  if [[ "${DEMO_ORCHESTRATED:-0}" == "1" ]]; then
+    log_info "Orchestrated run — tearing down demo-04 stack and continuing."
+  else
+    pause "Explore Grafana now if you like, then press Enter to tear down the stack"
+  fi
+  "${COMPOSE[@]}" down -v 2>/dev/null || true
+fi
 log_ok "Demo 04 complete."

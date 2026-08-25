@@ -1,0 +1,19 @@
+# Grafana dashboard provider for the tutorial dashboards.
+#
+# Mounted into the otel-lgtm bundle's Grafana provisioning directory
+# (/otel-lgtm/grafana/conf/provisioning/dashboards/) so Grafana loads every
+# *.json under the sibling `tutorial/` directory into a "Tutorial" folder at
+# startup. Without this file the JSONs are just sitting on disk — Grafana
+# only provisions dashboards a provider points at.
+apiVersion: 1
+
+providers:
+  - name: 'tutorial'
+    orgId: 1
+    folder: 'Tutorial'
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /otel-lgtm/grafana/conf/provisioning/dashboards/tutorial
+      foldersFromFilesStructure: false

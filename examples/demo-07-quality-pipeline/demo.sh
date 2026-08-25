@@ -121,6 +121,10 @@ callout \
   "Service:   demo07-svc             (links the library)" \
   "Stages:    analyzer → tests → asan → abi   (Containerfile targets)" \
   "Reports:   reports/               (pulled from each image, for CI gating)"
+callout "" "The ABI-bearing library and its test are the code to open:"
+code_ref "src/include/demo07/channel.hpp" 27 "VirtualChannel (vtable ABI) vs StaticChannel (CRTP) — what abidiff watches"
+code_ref "src/lib/channel.cpp" 1 "the compiled library body"
+code_ref "tests/test_channel.cpp" 1 "the unit test the 'tests' stage gates on"
 
 # ── --abi-bless: promote reports/current.abi to abi-reference/ ──────────────
 # This is the operational counterpart to --abi-only. After running --abi-only

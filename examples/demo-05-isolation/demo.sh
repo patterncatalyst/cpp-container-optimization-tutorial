@@ -84,6 +84,8 @@ callout \
   "tenant-b:   the 'noisy neighbor' — pegs CPU in a tight loop, no limits" \
   "Images:     $IMG_A · $IMG_B" \
   "Knobs:      cpu.weight (bound interference) · cpuset.cpus (dedicate CPUs)"
+callout "" "Both tenants are the SAME binary — behaviour differs only by cgroup:"
+code_ref "src/main.cpp" 84 "the request-path CPU work + tuned httplib thread pool (twin source)"
 
 # ── Step 1: Check the host — cgroup v2 controller delegation ─────────────
 demo_step "Check the host: cgroup v2 controller delegation"
@@ -133,13 +135,17 @@ pause
 demo_step "Build both tenants"
 callout "tenant-a is the HTTP service we probe; tenant-b is the CPU/memory" \
         "hog. First run adds a Conan + Containerfile build (~2-3 min)."
-if ! podman build --target tenant-a -t "$IMG_A" .; then
-  log_err "tenant-a build failed — cannot measure anything without it."
-  exit 1
+if should_build "$IMG_A"; then
+  if ! podman build --target tenant-a -t "$IMG_A" .; then
+    log_err "tenant-a build failed — cannot measure anything without it."
+    exit 1
+  fi
 fi
-if ! podman build --target tenant-b -t "$IMG_B" .; then
-  log_err "tenant-b build failed — cannot run the noisy-neighbor scenarios."
-  exit 1
+if should_build "$IMG_B"; then
+  if ! podman build --target tenant-b -t "$IMG_B" .; then
+    log_err "tenant-b build failed — cannot run the noisy-neighbor scenarios."
+    exit 1
+  fi
 fi
 
 # Detect NUMA topology so we can decide whether the 'pinned' scenario
