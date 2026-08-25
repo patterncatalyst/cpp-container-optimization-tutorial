@@ -91,11 +91,13 @@ code_ref "src/main.cpp" 4 "compile-time variant select: std::allocator · std::p
 demo_step "Build the 3-variant image"
 callout "First run compiles all three variants (~3-5 min on a clean cache)." \
         "mimalloc's CMake build is fast; cached rebuilds are ~30s (app only)."
-if ! podman build -t "$IMAGE" -f Containerfile .; then
-    log_err "podman build failed — nothing to compare. Stopping here."
-    exit 1
+if should_build "$IMAGE"; then
+    if ! podman build -t "$IMAGE" -f Containerfile .; then
+        log_err "podman build failed — nothing to compare. Stopping here."
+        exit 1
+    fi
+    log_ok "Image built: $IMAGE"
 fi
-log_ok "Image built: $IMAGE"
 pause
 
 # ── Step 2: Run all three variants back-to-back ─────────────────────────────

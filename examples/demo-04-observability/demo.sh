@@ -85,7 +85,12 @@ if [[ $WORKLOAD_ONLY -eq 0 ]]; then
   demo_step "Build the service and bring up the LGTM stack"
   callout "First run compiles opentelemetry-cpp from source (~10-20 min)." \
           "Later runs hit the podman layer cache (~2-3 min)."
-  if ! "${COMPOSE[@]}" up -d --build; then
+  BUILD_FLAG="--build"
+  if [[ "${DEMO_NO_BUILD:-0}" == "1" ]] && image_exists "cpp-tut/demo-04:latest"; then
+    log_info "Reusing cpp-tut/demo-04:latest (DEMO_NO_BUILD=1) — starting without --build"
+    BUILD_FLAG=""
+  fi
+  if ! "${COMPOSE[@]}" up -d ${BUILD_FLAG}; then
     log_err "compose up failed — not going any further (nothing to observe)."
     "${COMPOSE[@]}" logs --tail=40 demo-04-svc 2>&1 || true
     exit 1
@@ -249,6 +254,12 @@ log_info "  Service:    $SVC_URL"
 
 # ── Teardown ────────────────────────────────────────────────────────────────
 echo
-pause "Press Enter to tear down the stack (or Ctrl-C to leave it running)"
+# Under the presentation cockpit, don't invite Ctrl-C — it would SIGINT the
+# whole orchestrated run. Tear down quietly and let the cockpit continue.
+if [[ "${DEMO_ORCHESTRATED:-0}" == "1" ]]; then
+  log_info "Orchestrated run — tearing down demo-04 stack and continuing."
+else
+  pause "Explore Grafana now if you like, then press Enter to tear down the stack"
+fi
 "${COMPOSE[@]}" down -v 2>/dev/null || true
 log_ok "Demo 04 complete."

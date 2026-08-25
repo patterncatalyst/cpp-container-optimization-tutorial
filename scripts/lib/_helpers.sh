@@ -134,6 +134,26 @@ callout() {
     for line in "$@"; do printf '  %s%s%s\n' "$C_DIM" "$line" "$C_RESET"; done
 }
 
+# ── Build-skip helpers ──────────────────────────────────────────────────
+# For live presentations: when images are already built, rebuilding (even
+# with a warm layer cache) wastes stage time. The presentation cockpit sets
+# DEMO_NO_BUILD=1; each demo guards its build step with should_build so a
+# missing image still builds, but an existing one is reused.
+
+# image_exists <tag> — true if a local image with this tag exists.
+image_exists() { podman image exists "$1" 2>/dev/null; }
+
+# should_build <tag> — return non-zero (skip) when DEMO_NO_BUILD=1 AND the
+# image already exists; zero (build) otherwise. Usage:
+#   if should_build "$IMAGE"; then podman build ... ; fi
+should_build() {
+    if [[ "${DEMO_NO_BUILD:-0}" == "1" ]] && image_exists "$1"; then
+        log_info "Reusing existing image $1 (DEMO_NO_BUILD=1) — skipping build"
+        return 1
+    fi
+    return 0
+}
+
 # ── Code-examination helpers ────────────────────────────────────────────
 # The recurring "now flip to the IDE and look at THIS code" moment. Always
 # prints a clickable file:line. When DEMO_IDE=clion is set, ALSO opens the

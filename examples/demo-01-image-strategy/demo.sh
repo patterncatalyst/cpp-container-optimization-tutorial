@@ -10,8 +10,9 @@
 #
 #   Image strategy is the lowest-hanging-fruit performance and security win in
 #   containerized C++. A multi-stage build leaves the toolchain (GCC, ld, headers,
-#   build deps) OUT of the runtime image — a ~26× size drop from the naive
-#   single-stage baseline to ubi-micro, and a matching cut in CVE surface — with
+#   build deps) OUT of the runtime image — a ~20-26× size drop from the naive
+#   single-stage baseline to ubi-micro (the script prints the exact multiplier
+#   for this build), and a matching cut in CVE surface — with
 #   NO measurable p50 penalty. LTO plus a representative PGO profile then buys a
 #   further few percent on the hot path, essentially for free once the pipeline
 #   is in place.
@@ -109,29 +110,37 @@ callout "First run compiles from source; later runs hit the podman layer cache."
         "Never proceed to measurement after a failed build — a broken image would" \
         "just show up as a bogus benchmark row."
 
-log_step "Building UBI multi-stage (LTO on, no PGO)"
-if ! podman build -f Containerfile.ubi-multistage -t "${IMG_PREFIX}:ubi-multistage" .; then
-  log_err "ubi-multistage build failed — stopping (nothing valid to measure)."
-  exit 1
+if should_build "${IMG_PREFIX}:ubi-multistage"; then
+  log_step "Building UBI multi-stage (LTO on, no PGO)"
+  if ! podman build -f Containerfile.ubi-multistage -t "${IMG_PREFIX}:ubi-multistage" .; then
+    log_err "ubi-multistage build failed — stopping (nothing valid to measure)."
+    exit 1
+  fi
 fi
 
-log_step "Building UBI-micro (fully-static binary, production answer)"
-if ! podman build -f Containerfile.ubi-micro -t "${IMG_PREFIX}:ubi-micro" .; then
-  log_err "ubi-micro build failed — stopping (nothing valid to measure)."
-  exit 1
+if should_build "${IMG_PREFIX}:ubi-micro"; then
+  log_step "Building UBI-micro (fully-static binary, production answer)"
+  if ! podman build -f Containerfile.ubi-micro -t "${IMG_PREFIX}:ubi-micro" .; then
+    log_err "ubi-micro build failed — stopping (nothing valid to measure)."
+    exit 1
+  fi
 fi
 
-log_step "Building UBI-micro-glibc-mismatch (TEACHING REFERENCE — intentionally fails at runtime)"
-if ! podman build -f Containerfile.ubi-micro-glibc-mismatch -t "${IMG_PREFIX}:ubi-micro-glibc-mismatch" .; then
-  log_err "ubi-micro-glibc-mismatch build failed — stopping (this variant must BUILD;"
-  log_err "it's only meant to fail at RUNTIME, which is the lesson)."
-  exit 1
+if should_build "${IMG_PREFIX}:ubi-micro-glibc-mismatch"; then
+  log_step "Building UBI-micro-glibc-mismatch (TEACHING REFERENCE — intentionally fails at runtime)"
+  if ! podman build -f Containerfile.ubi-micro-glibc-mismatch -t "${IMG_PREFIX}:ubi-micro-glibc-mismatch" .; then
+    log_err "ubi-micro-glibc-mismatch build failed — stopping (this variant must BUILD;"
+    log_err "it's only meant to fail at RUNTIME, which is the lesson)."
+    exit 1
+  fi
 fi
 
-log_step "Building naive single-stage (anti-pattern)"
-if ! podman build -f Containerfile.single-stage-naive -t "${IMG_PREFIX}:single-stage-naive" .; then
-  log_err "single-stage-naive build failed — stopping (nothing valid to measure)."
-  exit 1
+if should_build "${IMG_PREFIX}:single-stage-naive"; then
+  log_step "Building naive single-stage (anti-pattern)"
+  if ! podman build -f Containerfile.single-stage-naive -t "${IMG_PREFIX}:single-stage-naive" .; then
+    log_err "single-stage-naive build failed — stopping (nothing valid to measure)."
+    exit 1
+  fi
 fi
 
 callout "" "Four images built. The single-stage one still ships GCC, ld, and the" \
@@ -141,6 +150,9 @@ pause
 
 # ── Step 2: PGO two-pass build (optional) ────────────────────────────────────
 if [[ $DO_PGO -eq 1 ]]; then
+ if [[ "${DEMO_NO_BUILD:-0}" == "1" ]] && image_exists "${IMG_PREFIX}:pgo"; then
+  log_info "Reusing existing ${IMG_PREFIX}:pgo (DEMO_NO_BUILD=1) — skipping the two-pass PGO build."
+ else
   demo_step "PGO two-pass build: instrument → train → rebuild with the profile"
   callout "GCC PGO is three phases run back-to-back: compile an instrumented" \
           "binary, drive it with a representative workload to gather .gcda profile" \
@@ -202,6 +214,7 @@ if [[ $DO_PGO -eq 1 ]]; then
             "below is PGO alone — nothing else changed."
   fi
   pause
+ fi
 else
   log_info "PGO skipped (--no-pgo)."
 fi
@@ -219,7 +232,20 @@ podman images \
   | sort -u \
   | column -t \
   || true
-callout "" "The naive single-stage image is ~26× the size of ubi-micro, and almost" \
+
+# Compute the naive-vs-micro multiplier from the ACTUAL image bytes rather
+# than hard-coding a number that drifts as base images change. inspect gives
+# raw bytes; awk turns it into a clean "NN×".
+naive_b=$(podman image inspect -f '{{.Size}}' "${IMG_PREFIX}:single-stage-naive" 2>/dev/null || echo 0)
+micro_b=$(podman image inspect -f '{{.Size}}' "${IMG_PREFIX}:ubi-micro" 2>/dev/null || echo 0)
+if [[ "${micro_b}" -gt 0 && "${naive_b}" -gt 0 ]]; then
+  RATIO=$(awk -v n="$naive_b" -v m="$micro_b" 'BEGIN{printf "%.0f", n/m}')
+  RATIO_TXT="~${RATIO}× the size of ubi-micro"
+else
+  RATIO_TXT="many times the size of ubi-micro"
+fi
+
+callout "" "The naive single-stage image is ${RATIO_TXT}, and almost" \
         "all of that gap is the toolchain sitting in production: GCC, ld, headers," \
         "build deps — none needed at runtime, all of them CVE surface. Multi-stage" \
         "drops them; ubi-micro also statically links libstdc++ for the smallest floor." \

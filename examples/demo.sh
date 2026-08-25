@@ -19,11 +19,16 @@
 #   ./demo.sh --all           run every demo in deck order, pausing between
 #   ./demo.sh --no-pause      never stop for Enter (unattended / auto-test)
 #   ./demo.sh --ide=clion     open every code_ref in CLion as it's cued
+#   ./demo.sh --rebuild       force rebuilds (default reuses existing images)
 #   ./demo.sh --clean         run each demo's own --clean, then exit
 #   ./demo.sh -h              this help
 #
+# By default already-built images are REUSED (fast on stage); the stack demos
+# (3, 4) tear their stacks down between steps without inviting Ctrl-C.
+#
 # Env:
 #   DEMO_IDE=clion            same as --ide=clion (code_ref opens in CLion)
+#   DEMO_NO_BUILD=1           reuse existing images (set by default here)
 # ============================================================================
 
 set -euo pipefail
@@ -51,12 +56,16 @@ DEMOS=(
 
 DO_ALL=0
 DO_CLEAN=0
+# Default to reusing already-built images (skip build when the image exists).
+# Pass --rebuild to force every demo to rebuild.
+export DEMO_NO_BUILD=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --all)       DO_ALL=1;                shift;;
     --no-pause)  export DEMO_NO_PAUSE=1;  shift;;
     --ide=*)     export DEMO_IDE="${1#*=}"; shift;;
     --ide)       export DEMO_IDE="$2";    shift 2;;
+    --rebuild)   export DEMO_NO_BUILD=0;  shift;;
     --clean)     DO_CLEAN=1;              shift;;
     -h|--help)   sed -n '2,24p' "$0"; exit 0;;
     *) log_err "unknown arg: $1"; exit 2;;
@@ -116,15 +125,22 @@ clean_all() {
 run_all() {
   banner \
     "C++20/23 Performance Under Container Constraints — full demo run" \
-    "Seven demos, deck order (Demo 1 → 2 → 6 → 3 → 4 → 5 → 7)."
-  local i num
+    "Seven demos in DECK order: 1 → 2 → 6 → 3 → 4 → 5 → 7" \
+    "(deck order, not numeric — the numbers jump on purpose to match the talk)."
+  # DEMO_ORCHESTRATED tells the stack demos (3, 4) to tear down quietly and
+  # continue instead of prompting 'Press Enter / Ctrl-C to leave running' —
+  # a Ctrl-C there would kill this whole run.
+  export DEMO_ORCHESTRATED=1
+  local i num next_num next_name
   for i in "${!DEMOS[@]}"; do
     num="${DEMOS[$i]%%|*}"
     run_one "$num"
     if (( i < ${#DEMOS[@]} - 1 )); then
-      pause "Demo done. Press Enter for the next one"
+      IFS='|' read -r next_num _ next_name _ _ <<<"${DEMOS[$((i + 1))]}"
+      pause "Demo $num done. Next in the deck → Demo $next_num ($next_name). Press Enter"
     fi
   done
+  unset DEMO_ORCHESTRATED
   log_ok "All seven demos complete."
 }
 

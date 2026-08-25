@@ -94,11 +94,13 @@ code_ref "src/main.cpp" 39 "container choices + BM_Lookup_Hit / BM_IterateAndSum
 demo_step "Build the benchmark image"
 callout "First build ~3-5 min (Conan pulls boost + Google Benchmark)." \
         "Subsequent runs hit the podman layer cache (~30s for both phases)."
-if ! podman build -f Containerfile -t "$IMAGE" .; then
-    log_err "podman build failed — nothing to benchmark. Stopping here."
-    exit 1
+if should_build "$IMAGE"; then
+    if ! podman build -f Containerfile -t "$IMAGE" .; then
+        log_err "podman build failed — nothing to benchmark. Stopping here."
+        exit 1
+    fi
+    log_ok "Image built: $IMAGE"
 fi
-log_ok "Image built: $IMAGE"
 pause
 
 # ── Step 2: Phase 1 — baseline (no memory limit) ────────────────────────────

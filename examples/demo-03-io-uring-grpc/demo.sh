@@ -159,7 +159,12 @@ code_ref "proto/echo.proto" 1 "the Echo service contract"
 demo_step "Build the demo image and bring up the stack + LGTM backend"
 callout "First build is ~30-45 min (OTel + gRPC + asio compiled from source" \
         "under the override profile). Warm rebuilds are ~2-3 min."
-if ! "${COMPOSE[@]}" up -d --build; then
+BUILD_FLAG="--build"
+if [[ "${DEMO_NO_BUILD:-0}" == "1" ]] && image_exists "cpp-tut/demo-03:latest"; then
+    log_info "Reusing cpp-tut/demo-03:latest (DEMO_NO_BUILD=1) — starting without --build"
+    BUILD_FLAG=""
+fi
+if ! "${COMPOSE[@]}" up -d ${BUILD_FLAG}; then
     log_err "compose up failed — not going any further (nothing to load)."
     "${COMPOSE[@]}" logs --tail=40 demo-03-svc 2>&1 || true
     exit 1
@@ -280,12 +285,18 @@ pause
 # ── Step 5: Grafana — the gRPC instrumentation ─────────────────────────
 demo_step "Inspect the gRPC instrumentation in Grafana"
 grafana_callout "$GRAFANA_URL" \
-  "Explore → Prometheus / Tempo (no prebuilt demo-03 dashboard)" \
-  "demo3.grpc.latency            — per-method latency histogram (Prometheus)" \
-  "demo3.grpc.requests           — request counter, rolls up by status code" \
-  "demo3.tcp.iouring.connections — direct liburing connection gauge" \
-  "demo3.tcp.asio.connections    — Asio backend connection gauge" \
-  "Traces (Tempo)                — drill into individual RPC spans"
+  "'Demo 03 — io_uring + async gRPC' — Tutorial folder (Dashboards → Browse)" \
+  "gRPC request rate      (stat)        — demo3_grpc_requests_total" \
+  "gRPC latency p50/95/99 (timeseries)  — demo3_grpc_latency_milliseconds histogram" \
+  "TCP conns/s            (timeseries)  — io_uring direct vs Asio" \
+  "Recent gRPC traces     (table)       — Tempo, click a row for the span tree" \
+  "Service logs           (logs)        — Loki"
+callout "" "Prefer Explore? Paste these into a Prometheus Explore query:" \
+        "  sum(rate(demo3_grpc_requests_total[1m]))" \
+        "  histogram_quantile(0.99, sum(rate(demo3_grpc_latency_milliseconds_bucket[1m])) by (le))" \
+        "  sum(rate(demo3_tcp_iouring_connections_total[1m]))" \
+        "  sum(rate(demo3_tcp_asio_connections_total[1m]))" \
+        "…and in a Tempo Explore, TraceQL: { resource.service.name=\"demo-03-svc\" }"
 callout "The TCP echo servers are deliberately un-instrumented (they're the" \
         "'floor'); only the gRPC path carries OTel, so you can see what the" \
         "semantics cost — in latency AND in observable surface area."
@@ -294,7 +305,14 @@ pause
 # ── Teardown ────────────────────────────────────────────────────────────
 echo
 if (( KEEP_UP == 0 )); then
-    pause "Press Enter to tear down the stack (or Ctrl-C to leave it running)"
+    # Under the presentation cockpit, DON'T invite Ctrl-C here — a Ctrl-C at
+    # this prompt would SIGINT the whole orchestrated run. Tear down quietly
+    # (the EXIT trap does the actual work) and let the cockpit move on.
+    if [[ "${DEMO_ORCHESTRATED:-0}" == "1" ]]; then
+        log_info "Orchestrated run — tearing down demo-03 stack and continuing."
+    else
+        pause "Explore Grafana now if you like, then press Enter to tear down the stack"
+    fi
 else
     log_ok "Demo 03 complete — stack left up (--keep)."
 fi

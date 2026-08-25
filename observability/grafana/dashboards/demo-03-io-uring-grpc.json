@@ -1,0 +1,78 @@
+{
+  "annotations": { "list": [] },
+  "editable": false,
+  "graphTooltip": 0,
+  "schemaVersion": 39,
+  "title": "Demo 03 — io_uring + async gRPC",
+  "uid": "tutorial-demo-03",
+  "tags": ["tutorial", "demo-03"],
+  "timezone": "browser",
+  "time": { "from": "now-15m", "to": "now" },
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "gRPC request rate",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 6 },
+      "targets": [
+        {
+          "expr": "sum(rate(demo3_grpc_requests_total[1m]))",
+          "legendFormat": "req/s",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "gRPC Echo latency p50/p95/p99 (ms)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 6, "y": 0, "w": 18, "h": 6 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(demo3_grpc_latency_milliseconds_bucket[1m])) by (le))", "legendFormat": "p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum(rate(demo3_grpc_latency_milliseconds_bucket[1m])) by (le))", "legendFormat": "p95", "refId": "B" },
+        { "expr": "histogram_quantile(0.99, sum(rate(demo3_grpc_latency_milliseconds_bucket[1m])) by (le))", "legendFormat": "p99", "refId": "C" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "TCP echo connections/s — io_uring direct vs Asio",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "sum(rate(demo3_tcp_iouring_connections_total[1m]))", "legendFormat": "io_uring direct (:9000)", "refId": "A" },
+        { "expr": "sum(rate(demo3_tcp_asio_connections_total[1m]))", "legendFormat": "Asio io_uring (:9001)", "refId": "B" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Recent gRPC traces (Tempo)",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "queryType": "traceqlSearch",
+          "query": "{ resource.service.name=\"demo-03-svc\" }",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "logs",
+      "title": "Service logs (Loki)",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "x": 0, "y": 14, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "{service_name=\"demo-03-svc\"}",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
