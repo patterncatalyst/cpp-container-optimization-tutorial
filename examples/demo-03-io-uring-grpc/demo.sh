@@ -77,6 +77,11 @@ require podman
 
 OBS="$REPO_ROOT/observability/compose.yml"
 
+# Absolute paths for the tutorial dashboard mounts (relative paths in the
+# included observability/compose.yml would resolve against this demo's dir).
+export OBS_DASHBOARDS_DIR="$REPO_ROOT/observability/grafana/dashboards"
+export OBS_PROVIDER_FILE="$REPO_ROOT/observability/grafana/otel-provisioning/tutorial-dashboards.yaml"
+
 if (( USE_PRODUCTION )); then
     # Verify the one-time host setup is in place before bringing up.
     # Each check is short; failures point at the corresponding

@@ -48,10 +48,17 @@ services:
     tmpfs:
       - /data
     volumes:
-      # Optional: drop pre-built dashboards into this directory and
-      # they'll show up under the 'Tutorial' folder in Grafana on
-      # next start. Empty for now; demo 4 mounts its own.
-      - ./grafana/dashboards:/otel-lgtm/grafana/conf/provisioning/dashboards/tutorial:ro,Z
+      # Pre-built dashboards → the 'Tutorial' folder in Grafana, plus the
+      # provider yaml that actually tells Grafana to load them.
+      #
+      # These paths are absolute via env vars because relative paths in a
+      # compose file resolve against the PROJECT directory — which, when this
+      # file is included from a demo (podman compose -f <demo> -f <this>), is
+      # the DEMO's directory, not observability/. The demos export
+      # OBS_DASHBOARDS_DIR / OBS_PROVIDER_FILE to absolute paths; the defaults
+      # below are correct for a standalone `compose -f observability/compose.yml`.
+      - ${OBS_DASHBOARDS_DIR:-./grafana/dashboards}:/otel-lgtm/grafana/conf/provisioning/dashboards/tutorial:ro,Z
+      - ${OBS_PROVIDER_FILE:-./grafana/otel-provisioning/tutorial-dashboards.yaml}:/otel-lgtm/grafana/conf/provisioning/dashboards/tutorial-dashboards.yaml:ro,Z
     networks:
       - obs
 

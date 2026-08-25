@@ -43,6 +43,13 @@ source "$(cd ../../scripts/lib && pwd)/_helpers.sh"
 OBS_COMPOSE="$(cd ../../observability && pwd)/compose.yml"
 COMPOSE=(podman compose -f compose.yml -f "$OBS_COMPOSE")
 
+# Absolute paths for the tutorial dashboard mounts. Relative paths in the
+# included observability/compose.yml would resolve against THIS demo's dir
+# (the compose project dir), so the dashboards must be passed in as absolutes.
+OBS_DIR="$(dirname "$OBS_COMPOSE")"
+export OBS_DASHBOARDS_DIR="$OBS_DIR/grafana/dashboards"
+export OBS_PROVIDER_FILE="$OBS_DIR/grafana/otel-provisioning/tutorial-dashboards.yaml"
+
 GRAFANA_URL="http://127.0.0.1:3000"
 SVC_URL="http://127.0.0.1:18401"
 
