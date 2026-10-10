@@ -37,44 +37,11 @@ Diagrams currently in the set:
 | `14-pitfalls-avx512-mismatch`         | §14     | AVX-512 mismatch trap                  |
 | `11-numa-local-remote`                | §11     | NUMA local vs remote access latency    |
 | `13-abi-break-taxonomy`               | §13     | ABI-safe vs ABI-breaking changes       |
-| `08-deadline-budget-flow`             | stateless 07, 10 | deadline budget propagation across hops |
-| `11-cfs-throttling-timeline`          | stateless 05 | CFS quota throttling vs tail latency   |
 
-The last four are supplementary concept diagrams (a second figure for a
+The last two are supplementary concept diagrams (a second figure for a
 section) that visualize a temporal or comparison concept the section's
 primary diagram doesn't. NUMA and the ABI taxonomy live in the main
-tutorial (§11, §13); the deadline-budget and CFS-throttling figures are
-embedded in the statelessness compendium docs where their prose lives
-(deadline propagation in Doc 07 and the capstone Doc 10; CPU-quota
-throttling in Doc 05), so they're listed but not shown in the main gallery.
-
-### Statelessness compendium diagrams
-
-The statelessness companion's diagrams live in
-[`diagrams/statelessness/`](statelessness/), one per compendium doc,
-named `NN-<topic>` to match Docs 01-11:
-
-| File basename                  | Doc   | Topic / thing                          |
-|--------------------------------|-------|----------------------------------------|
-| `01-deployment-posture`        | Doc 01 | three scopes of state; stateless vs stateful |
-| `02-raii`                      | Doc 02 | the `RequestContext` lifecycle         |
-| `03-pmr`                       | Doc 03 | the layered monotonic + pool arena     |
-| `04-process-scoped-state`      | Doc 04 | the composition root in `main()`       |
-| `05-threading`                 | Doc 05 | the CPU quota vs `hardware_concurrency()` |
-| `06-twelve-factor`             | Doc 06 | config binding times                   |
-| `07-state-externalization`     | Doc 07 | the pool + RAII checkout + outbox      |
-| `08-ephemeral-filesystem`      | Doc 08 | read-only rootfs; where writes go      |
-| `09-health-checks`             | Doc 09 | startup/liveness/readiness + shutdown  |
-| `10-grpc-microservices`        | Doc 10 | the capstone composition               |
-| `11-build-tooling`             | Doc 11 | the build stack + the cgroup helper    |
-| `07-outbox-sequence`           | Doc 07 | outbox: atomic write → relay → idempotent consumer |
-| `09-probe-states-shutdown`     | Doc 09 | health state machine + ordered shutdown sequence |
-
-The last two are supplementary sequence diagrams for the outbox example
-and the graceful-shutdown flow, alongside each doc's primary diagram.
-
-These are embedded inline in the compendium docs and in the companion
-deck (`presentation/cpp-statelessness-compendium.pptx`).
+tutorial (§11, §13).
 
 ## Editing a diagram
 
@@ -112,9 +79,8 @@ After editing:
 
 ## Status
 
-The diagrams are drawn — both the main-track set (above) and the
-statelessness compendium set are real hand-style Excalidraw diagrams,
-embedded inline and rendered into their respective decks. When adding a new
-diagram, follow the naming convention and style guidelines above, and
-commit the `.svg` and `.excalidraw` pair together. The reconciliation
-plan tracks diagram history.
+The diagrams are drawn — the main-track set (above) is real hand-style
+Excalidraw diagrams, embedded inline and rendered into the companion
+deck. When adding a new diagram, follow the naming convention and style
+guidelines above, and commit the `.svg` and `.excalidraw` pair together.
+The reconciliation plan tracks diagram history.

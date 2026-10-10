@@ -3,17 +3,18 @@
 A 1.5-3 hour technical presentation, paired Jekyll site, and seven
 runnable Podman demos that teach modern-C++ performance work under
 realistic container constraints — on Fedora 44, end-to-end,
-rootless. Alongside the performance track, a **statelessness
-compendium** (11 reference docs + 10 runnable examples, examples
-02-11 host-verified) develops the architectural concern that
-underpins all of it: what makes a C++ service safe to deploy as a
-replaceable replica.
+rootless. A standalone companion site, the **[statelessness
+compendium](https://patterncatalyst.github.io/cpp-statelessness/)**,
+develops the architectural concern that underpins all of it: what
+makes a C++ service safe to deploy as a replaceable replica. It
+used to live inside this repository; it now ships as its own
+project, linked from the tutorial where relevant.
 
 This repository is the source for the published Jekyll site and
-two PPTX decks — the main performance talk and a companion
-statelessness deck. The tutorial is structured so it can be
-delivered live in 1.5 hours (high-level pass, pre-recorded demos)
-or in 3 hours (every demo run live in front of the audience).
+the main performance PPTX deck. The tutorial is structured so it
+can be delivered live in 1.5 hours (high-level pass, pre-recorded
+demos) or in 3 hours (every demo run live in front of the
+audience).
 
 > **Quick start:** see [onboarding/GETTING-STARTED.md](onboarding/GETTING-STARTED.md)
 > for the step-by-step setup. This README explains what's here and
@@ -70,9 +71,7 @@ See [PRD.md](PRD.md) §3 for the complete non-goals list.
 │   └── STARTING-WITH-CLAUDE.md
 │
 ├── _docs/                       ← tutorial sections (00 outline, 01-15, 16 appendix)
-├── _examples/                   ← per-demo Jekyll pages (7 main + 10 statelessness)
-├── _reference/                  ← reference docs
-│   └── statelessness/           ← Statelessness compendium (00 index + 01-11 docs + research-notes)
+├── _examples/                   ← per-demo Jekyll pages (7 main demos)
 ├── _plans/
 │   └── reconciliation-plan.md   ← what's verified vs. claimed (~24k lines, append-only)
 │
@@ -81,7 +80,6 @@ See [PRD.md](PRD.md) §3 for the complete non-goals list.
 ├── assets/
 │   └── css/                     ← site styles
 ├── diagrams/                    ← paired .svg + .excalidraw per section
-│   └── statelessness/           ← compendium diagrams (01-11)
 │
 ├── examples/                    ← runnable demos (excluded from site build)
 │   ├── demo-01-image-strategy/
@@ -90,18 +88,20 @@ See [PRD.md](PRD.md) §3 for the complete non-goals list.
 │   ├── demo-04-observability/
 │   ├── demo-05-isolation/
 │   ├── demo-06-memory-and-allocators/
-│   ├── demo-07-quality-pipeline/
-│   └── statelessness/           ← 10 compendium demos (02-11; 02-11 host-verified)
+│   └── demo-07-quality-pipeline/
 │
 ├── observability/               ← shared compose stack: grafana/otel-lgtm
-├── presentation/                ← PPTX decks + build notes
+├── presentation/                ← PPTX deck + build notes
 │   ├── cpp-container-tutorial.pptx          ← the main performance deck
-│   ├── cpp-statelessness-compendium.pptx    ← the statelessness companion deck
 │   └── README.md                ← deck rebuild + editing instructions
-├── tools/                       ← deck build tools (main + statelessness generators)
+├── tools/                       ← deck build tools
 ├── scripts/                     ← test-template + per-demo + aggregator + utilities
 └── .github/workflows/           ← Pages build + demo CI
 ```
+
+The statelessness compendium (reference docs, diagrams, runnable
+examples, and its own deck) now lives in a separate repository —
+see [patterncatalyst.github.io/cpp-statelessness](https://patterncatalyst.github.io/cpp-statelessness/).
 
 ## The seven demos
 
@@ -119,33 +119,17 @@ that the aggregator `scripts/test-all-demos.sh` runs in CI.
 | 6 | [`demo-06-memory-and-allocators`](examples/demo-06-memory-and-allocators/) | `std::allocator` vs `std::pmr` vs mimalloc, MAP_HUGETLB, cgroup memory.high |
 | 7 | [`demo-07-quality-pipeline`](examples/demo-07-quality-pipeline/) | cppcheck + clang-tidy + gtest + abidiff + gdbserver sidecar             |
 
-## The statelessness compendium
+## The statelessness compendium (companion site)
 
-A companion track that develops one architectural concern the
-performance demos all touch: what makes a C++ service safe to deploy
-as a replaceable replica under an orchestrator. It pairs a long-form
-reference set (`_reference/statelessness/` — a 00 index, eleven docs,
-and research notes) with ten runnable Podman demos under
-[`examples/statelessness/`](examples/statelessness/). Examples 02-11
-are host-verified end to end on Fedora 44; each has its own `demo.sh`
-and a `scripts/test-stateless-demo-NN-*.sh`, aggregated by
-`scripts/test-all-stateless-demos.sh`.
-
-| # | Example                                                                              | Pattern                                                       |
-|---|--------------------------------------------------------------------------------------|---------------------------------------------------------------|
-| 02 | [`02-raii`](examples/statelessness/02-raii/)                                         | `RequestContext` RAII; cleanup on every exit path             |
-| 03 | [`03-pmr`](examples/statelessness/03-pmr/)                                           | the layered PMR request arena; the lifetime trap under ASan   |
-| 04 | [`04-process-scoped-state`](examples/statelessness/04-process-scoped-state/)         | the composition root in `main()`; bounded caches              |
-| 05 | [`05-threading`](examples/statelessness/05-threading/)                               | the cgroup CPU budget; `hardware_concurrency()` vs the quota  |
-| 07 | [`07-state-externalization`](examples/statelessness/07-state-externalization/)       | a libpq pool, RAII checkout, DB-authoritative idempotency     |
-| 07 | [`07-outbox-pattern`](examples/statelessness/07-outbox-pattern/)                     | atomic order+event, a Kafka relay, an idempotent consumer     |
-| 08 | [`08-ephemeral-filesystem`](examples/statelessness/08-ephemeral-filesystem/)         | the read-only rootfs forcing function; the spdlog EROFS trap  |
-| 09 | [`09-health-checks`](examples/statelessness/09-health-checks/)                       | startup/liveness/readiness; the graceful-shutdown sequence    |
-| 10 | [`10-grpc-microservices`](examples/statelessness/10-grpc-microservices/)             | the capstone: every pattern composed in one pricing service   |
-| 11 | [`11-build-tooling`](examples/statelessness/11-build-tooling/)                       | the vendored cgroup/PSI helpers, gtest-gated, swept under caps |
-
-A dedicated companion deck, `presentation/cpp-statelessness-compendium.pptx`,
-covers this track (rebuild with `tools/build-statelessness-deck.sh`).
+A standalone companion project that develops one architectural
+concern the performance demos all touch: what makes a C++ service
+safe to deploy as a replaceable replica under an orchestrator. It's
+a long-form reference set (a 00 index, eleven docs, and research
+notes) paired with ten runnable Podman demos, published at
+[patterncatalyst.github.io/cpp-statelessness](https://patterncatalyst.github.io/cpp-statelessness/).
+This tutorial links out to it wherever a section's topic overlaps
+(§3 RAII, §7 PMR, §11 threading, §13 build tooling, §14 pitfalls,
+§15 where to go next).
 
 ## Reference materials
 

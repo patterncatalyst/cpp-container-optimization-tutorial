@@ -327,7 +327,7 @@ delegation once, re-login, and all four scenarios run.
 - [cgroups v2 admin guide](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html)
   for the full surface area of the `cpu` and `cpuset`
   controllers and the unified hierarchy semantics
-- The [statelessness compendium, Doc 05]({{ '/reference/statelessness/05-threading/' | relative_url }})
+- The [statelessness compendium, Doc 05](https://patterncatalyst.github.io/cpp-statelessness/docs/05-threading/)
   goes deep on the application side of CPU limits: CFS quota
   mechanics, throttling as a tail-latency source, the thread-pool
   stack-memory budget, allocator arena counts under cgroup limits,
