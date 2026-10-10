@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Example demos
-description: Runnable companion demos covering image strategy, STL & layout, I/O, observability, isolation, memory, the quality pipeline, and the statelessness compendium (RAII, PMR, externalization, health checks, the gRPC capstone). Each runs via ./demo.sh on Fedora 44.
+description: Runnable companion demos covering image strategy, STL & layout, I/O, observability, isolation, memory, and the quality pipeline. Each runs via ./demo.sh on Fedora 44.
 permalink: /examples/
 ---
 
@@ -47,32 +47,6 @@ permalink: /examples/
     </div>
 </section>
 
-<section class="section">
-    <div class="container">
-        <h2 class="section-heading">Compendium examples</h2>
-        <p class="section-lead">
-            Runnable companions to the
-            <a href="{{ '/reference/statelessness/00-index/' | relative_url }}">statelessness compendium</a>.
-            Each one makes a single pattern from the compendium concrete
-            and runnable; they share the main demos' one-command
-            <code>./demo.sh</code> shape.
-        </p>
-        <div class="cards">
-        {%- assign sorted_examples = site.examples | sort: "order" -%}
-        {%- for e in sorted_examples -%}
-        {%- if e.order >= 200 -%}
-            <a class="card" href="{{ e.url | relative_url }}">
-                <div class="card__eyebrow">{{ e.card_eyebrow }}</div>
-                <h3 class="card__title">{{ e.card_title }}</h3>
-                <p class="card__desc">{{ e.card_blurb }}</p>
-                <div class="card__meta"><span>Read page &rarr;</span></div>
-            </a>
-        {%- endif -%}
-        {%- endfor %}
-        </div>
-    </div>
-</section>
-
 <section class="section" style="background: var(--bg-soft);">
     <div class="container container-prose">
         <h2 class="section-heading">Running every demo</h2>
@@ -89,8 +63,6 @@ cd {{ site.github_repo }}/examples/demo-01-image-strategy
 # ... or run them all in sequence:
 cd {{ site.github_repo }}
 ./scripts/test-all-demos.sh
-# ... or just the statelessness compendium examples:
-./scripts/test-all-stateless-demos.sh
 </code></pre>
 
         <h2 class="section-heading">If a demo fails</h2>

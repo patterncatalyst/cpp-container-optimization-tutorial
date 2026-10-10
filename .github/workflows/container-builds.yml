@@ -42,9 +42,7 @@ jobs:
           #   * demo-01 Containerfile.pgo — two-pass PGO; the optimized stage
           #     COPYs pgo-profiles/ (.gcda files captured by demo.sh's training
           #     run). Build it via `demo.sh` / the --target flow, not here.
-          #   * 11-build-tooling — COPYs vendor/, which is gitignored and
-          #     populated by the demo. Covered by its demo.sh instead.
-          exclude='examples/demo-01-image-strategy/Containerfile.pgo|examples/statelessness/11-build-tooling/Containerfile$'
+          exclude='examples/demo-01-image-strategy/Containerfile.pgo'
           echo "Excluded (demo.sh-driven, not standalone-buildable):"
           find examples -name 'Containerfile*' -type f | sort | grep -E "$exclude" | sed 's/^/  - /' || true
           files=$(find examples -name 'Containerfile*' -type f | sort | grep -vE "$exclude" \

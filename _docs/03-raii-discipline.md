@@ -246,9 +246,9 @@ The pattern itself is simple. The discipline is using it
 matter." In a container, no resource is small enough not to
 matter.
 
-> **Go deeper in the compendium.** This section introduces RAII
+> **Go deeper in the companion site.** This section introduces RAII
 > as a resource-discipline mechanic. The [statelessness
-> compendium, Doc 02]({{ '/reference/statelessness/02-raii/' | relative_url }})
+> compendium, Doc 02](https://patterncatalyst.github.io/cpp-statelessness/docs/02-raii/)
 > develops it into a full request-scope discipline for a
 > stateless service: the `RequestContext` pattern that bundles
 > per-request state into one RAII type, the gRPC callback API as

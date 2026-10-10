@@ -197,12 +197,16 @@ section is self-contained enough to enter cold.
 | 15 | Where to Go Next                                                       | Pointers to deeper resources; bibliography page; the four reference books                              | 3 min     | —    |
 | 16 | Appendix A — Conan, autotools, and UBI 9's minimal perl                | Reference appendix: how the perl-modules dependency cascade landed; not presented in the deck          | (ref only) | — |
 
-### Reference companion: the Statelessness section
+### Reference companion: the Statelessness compendium (standalone site)
 
-In addition to the linear §0–§16 tutorial body, the site hosts a
-12-document **Statelessness reference** at
-[`/reference/statelessness/`](/reference/statelessness/). This is
-the depth track: the conceptual material that the main tutorial
+In addition to the linear §0–§16 tutorial body, several sections
+link out to the **statelessness compendium**, a 12-document
+reference now published as its own site at
+[patterncatalyst.github.io/cpp-statelessness](https://patterncatalyst.github.io/cpp-statelessness/).
+It was originally embedded in this repository under
+`/reference/statelessness/`; it has since been extracted to a
+standalone project (see the Decision log, §13). It remains the
+depth track: the conceptual material that the main tutorial
 sections gesture at but don't have room to develop. Each doc
 stands alone (1500-4000 words) with its own diagram. The
 collection covers the deployment-posture / RAII / PMR / process-
@@ -223,27 +227,27 @@ parameter cheat-sheet, C: ABI break worked example); their
 material landed inline in §9 and §13 respectively rather than
 needing dedicated appendices.
 
-### The statelessness compendium (sub-project)
+### The statelessness compendium (now a standalone sub-project)
 
 A parallel body of opinionated reference work covering stateless
-C++ service design for containerized deployment ships under
-[`_reference/statelessness/`](_reference/statelessness/). 13
-reader documents (~52,000 words) plus 11 paired SVG +
-Excalidraw diagrams covering the request-scope / process-scope /
-external-state vocabulary, RAII discipline for request scope, PMR
-allocator strategy, CFS-quota-aware threading, 12-Factor adapted
-to C++, state externalization, the ephemeral-filesystem trap,
-health checks, and a gRPC capstone.
+C++ service design for containerized deployment originally shipped
+under `_reference/statelessness/` in this repository. 13 reader
+documents (~52,000 words) plus 11 paired SVG + Excalidraw diagrams
+cover the request-scope / process-scope / external-state
+vocabulary, RAII discipline for request scope, PMR allocator
+strategy, CFS-quota-aware threading, 12-Factor adapted to C++,
+state externalization, the ephemeral-filesystem trap, health
+checks, and a gRPC capstone.
 
 The compendium is opinionated reference-style; the main tutorial
-is walking-tutorial-style. The two are peer deliverables with
+is walking-tutorial-style. The two were peer deliverables with
 bidirectional cross-references where they overlap (RAII, PMR,
-CFS, build tooling). A separate sub-project PRD at
-[`_plans/statelessness-compendium-prd.md`](_plans/statelessness-compendium-prd.md)
-covers the compendium's integration with the main tutorial, its
-terminology normalization, and its examples roadmap (8 new
-runnable Podman projects under
-`examples/statelessness/NN-slug/`).
+CFS, build tooling); that relationship is unchanged now that the
+compendium is a standalone project — it's published at
+[patterncatalyst.github.io/cpp-statelessness](https://patterncatalyst.github.io/cpp-statelessness/)
+and this tutorial links out to it instead of embedding it. Its
+own sub-project PRD (formerly `_plans/statelessness-compendium-prd.md`
+in this repo) now lives with the compendium's own repository.
 
 ---
 
@@ -355,9 +359,10 @@ model diagram).
 - `14-pitfalls-avx512-mismatch.svg` — the SIGILL trap visualized,
   build host vs runtime host (§14)
 
-The depth-track reference collection at
-`/reference/statelessness/` has its own diagram set (one per
-doc, ~12 additional SVGs) not enumerated here.
+The depth-track statelessness compendium, now published at
+[patterncatalyst.github.io/cpp-statelessness](https://patterncatalyst.github.io/cpp-statelessness/),
+has its own diagram set (one per doc, ~12 additional SVGs) not
+enumerated here.
 
 ### How diagrams reach the PPTX deck
 

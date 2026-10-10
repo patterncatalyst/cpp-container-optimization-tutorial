@@ -237,7 +237,7 @@ look for, the gap closes quickly.
 This one is subtler than the abstraction taxes above, because it
 isn't a *cost* — it's a *correctness* bug that only appears once
 the timing is wrong, which makes it a textbook pitfall. It bit
-the [outbox-pattern reference example](../../reference/statelessness/07-state-externalization/)
+the [outbox-pattern reference example](https://patterncatalyst.github.io/cpp-statelessness/docs/07-state-externalization/)
 during host verification, and the failure mode is worth studying
 because the same shape recurs across every C API that takes a
 buffer "by reference now, reads it later."
@@ -560,7 +560,7 @@ illustrated by a demo elsewhere in the tutorial:
 | EPERM/EACCES security rubric | demo-03 (the io_uring + container security story) |
 | Tutorial vs production security | demo-03's `compose.production.yml` |
 | perf symbol resolution | demo-04 + demo-06 (perf record against containerized processes) |
-| Async-buffer lifetime (librdkafka F_COPY) | [statelessness/07-outbox-pattern](../../reference/statelessness/07-state-externalization/) (caught live during host verification) |
+| Async-buffer lifetime (librdkafka F_COPY) | [statelessness/07-outbox-pattern](https://patterncatalyst.github.io/cpp-statelessness/docs/07-state-externalization/) (caught live during host verification) |
 
 ## For deeper coverage
 
