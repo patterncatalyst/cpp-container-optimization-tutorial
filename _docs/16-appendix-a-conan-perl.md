@@ -1,5 +1,5 @@
 ---
-title: "Appendix A — Conan, autotools, and UBI's minimal perl"
+title: "Appendix A: Conan, autotools, and UBI's minimal perl"
 order: 16
 description: "A survival guide for building autotools-based C++ deps (libcurl, c-ares, openssl, etc.) on UBI via Conan, learned the hard way on UBI 9 during demo-04."
 duration: "10 minutes"
@@ -11,7 +11,7 @@ redirect_from:
 
 This tutorial's demo-04 took six rounds of build failures to converge.
 None of them were demo-04 bugs. All of them were the same underlying issue
-in a different costume: **UBI ships a deliberately minimal perl, and
+in a different costume: **UBI ships a minimal perl, and
 Conan's bundled build tools assume the system perl is "complete."** When
 the assumption fails, you get this:
 
@@ -29,15 +29,15 @@ have to repeat the journey.
 > the tutorial's original development, and the failures above are exactly
 > what we saw there. The tutorial now targets **UBI 10** (see
 > [§4](../04-image-strategy/)), and the recipes below have been updated
-> to the UBI 10 toolchain. The *shape* of the trap — a minimal system
-> perl versus Conan's from-source autotools builds — is a property of
-> UBI's deliberate minimalism, not of any one release, so keep the
-> defensive shopping list handy regardless of which UBI you build on.
+> to the UBI 10 toolchain. The *shape* of the trap, a minimal system
+> perl set against Conan's from-source autotools builds, is a property
+> of UBI's minimal design, not of any one release. Keep the defensive
+> shopping list handy regardless of which UBI you build on.
 
 The lesson generalizes well beyond demo-04. **libcurl, c-ares, openssl,
 nghttp2, and several other staples of the C++ ecosystem use autotools
 under the hood**. If you're building any of them via Conan on UBI (or
-RHEL, Rocky, Alma — same packaging model), you can meet these walls.
+RHEL, Rocky, Alma, which share the same packaging model), you can meet these walls.
 
 ## The pattern
 
@@ -45,8 +45,8 @@ Three things conspire:
 
 1. **Conan from-source builds.** Conan Center pre-builds packages for
    common profiles (gcc 11/12 with cppstd=17, libstdc++11 ABI). Profiles
-   off this main path — a newer GCC (14.3.1 on UBI 10), cppstd=23,
-   all-static-linkage — often miss pre-builts and fall through to a
+   off this main path (a newer GCC such as 14.3.1 on UBI 10, cppstd=23,
+   all-static linkage) often miss pre-builts and fall through to a
    from-source compile.
 2. **From-source builds run perl scripts.** OpenSSL's `Configure` is
    perl. `mk-fipsmodule-cnf.pl` is perl. autotools' `aclocal`,
@@ -58,14 +58,14 @@ Three things conspire:
    core. Anything else needs `dnf install perl-<Module>`.
 
 A normal Fedora or Debian developer environment hides this because those
-distros ship a more complete perl in the base. UBI's deliberate
-minimalism makes the gap visible.
+distros ship a more complete perl in the base. UBI's minimalism makes
+the gap visible.
 
 ## The complete shopping list
 
 Three categories, by what consumes the modules:
 
-### OpenSSL `Configure` script — 10 modules
+### OpenSSL `Configure` script: 10 modules
 
 OpenSSL 3.x's `Configure` is a perl program. Its full required-modules
 list is in `openssl/INSTALL.md`:
@@ -83,7 +83,7 @@ perl-Time-Piece
 perl-Getopt-Long
 ```
 
-### OpenSSL FIPS post-build — 1 module (or skip FIPS)
+### OpenSSL FIPS post-build: 1 module (or skip FIPS)
 
 After OpenSSL compiles, `util/mk-fipsmodule-cnf.pl` runs and computes a
 SHA-256 hash of `providers/fips.so` for runtime integrity verification.
@@ -100,12 +100,12 @@ perl-Digest-SHA
 openssl/*:no_fips=True
 ```
 
-For demos and most non-compliance use cases, `no_fips=True` is fine —
+For demos and most non-compliance use cases, `no_fips=True` is fine:
 it shrinks the static library, cuts build time, and removes the
 Digest::SHA dependency. Keep FIPS on if you have a regulatory
 requirement.
 
-### Autotools (automake / aclocal / autoreconf) — 4 modules
+### Autotools (automake / aclocal / autoreconf): 4 modules
 
 Automake's perl scripts use the threading primitives heavily:
 `Automake/Channels.pm` builds a `Thread::Queue` of work items per
@@ -122,7 +122,7 @@ A footnote: **none of these are in the `perl-core` metapackage** even
 on systems where `perl-core` exists. They're standalone packages. If
 you're tempted to "just install perl-core and call it a day," you'll
 still hit `Can't locate threads.pm in @INC` because the threading
-modules are intentionally separate.
+modules are packaged separately.
 
 `perl-Term-ANSIColor` isn't strictly required to build; it's used by
 some autotools error formatting paths. Including it heads off a near-
@@ -243,8 +243,8 @@ RUN cmake -S . -B build -G Ninja \
 
 `conan install . --build=missing` will:
 
-1. Download zlib, openssl from Conan Center (or build them — openssl
-   often builds from source on uncommon profiles).
+1. Download zlib, openssl from Conan Center (or build them locally;
+   openssl often builds from source on uncommon profiles).
 2. Build libcurl from source, invoking `autoreconf -fi` which calls
    aclocal, autoheader, automake, autoconf.
 3. Run libcurl's `configure` script (POSIX shell, no perl).
@@ -310,7 +310,7 @@ zero from-source-build cost and zero perl-module gymnastics.
 
 `compiler.cppstd=17` and an older `compiler.version` (11/12) hit the
 most pre-built coverage on Conan Center. UBI 10's base gcc is 14.3.1,
-so `conan profile detect` writes `compiler.version=14` by default —
+so `conan profile detect` writes `compiler.version=14` by default,
 which is exactly the off-the-main-path profile that falls through to
 from-source builds. If you can live without C++23 features in your
 dep tree, drop the cppstd (and, if you like, the compiler version):
@@ -321,7 +321,7 @@ RUN conan profile detect --force && \
         /root/.conan2/profiles/default
 ```
 
-Your application code can still use C++23 — `CMAKE_CXX_STANDARD 23`
+Your application code can still use C++23: `CMAKE_CXX_STANDARD 23`
 in your `CMakeLists.txt` controls that target's flags independently
 of the Conan profile. Only the Conan deps build at C++17 then, and
 they reach pre-built parity.
@@ -341,14 +341,14 @@ they reach pre-built parity.
 This appendix synthesizes lessons documented in the project's
 reconciliation plan as gotchas:
 
-- **G-13** — UBI BaseOS+AppStream don't carry the modern C++
+- **G-13**: UBI BaseOS+AppStream don't carry the modern C++
   ecosystem; switch to Conan or enable EPEL.
-- **G-14** — Even EPEL doesn't have everything; refactor to
+- **G-14**: Even EPEL doesn't have everything; refactor to
   Conan-managed deps.
-- **G-15** — OpenSSL Configure script needs ten perl modules.
-- **G-16** — OpenSSL FIPS post-build needs Digest::SHA, or skip
+- **G-15**: OpenSSL Configure script needs ten perl modules.
+- **G-16**: OpenSSL FIPS post-build needs Digest::SHA, or skip
   FIPS via `no_fips=True`.
-- **G-17** — Autotools (libcurl's build chain) needs four more
+- **G-17**: Autotools (libcurl's build chain) needs four more
   perl modules; or skip the consumer.
 
 [§13 (Reproducibility & ABI)](../13-reproducibility-abi/) is the curriculum's chapter on Conan

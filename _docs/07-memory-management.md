@@ -7,7 +7,7 @@ duration: "10 minutes"
 
 ## Learning objectives
 
-By the end of this section you can:
+By the end of this chapter you can:
 
 - Replace the default allocator with `std::pmr::monotonic_buffer_resource`
   on a request-scoped path and explain the cost model.
@@ -28,6 +28,26 @@ By the end of this section you can:
 
 {% include excalidraw.html name="07-allocator-stack" caption="Allocator stack: app → PMR → malloc → page cache → cgroups → host." %}
 
+## Why this matters
+
+A C++ service in a container answers to two memory authorities at
+once: its own allocator and the cgroup wrapped around it. Neither
+one is optional, and they interact in ways that surprise teams who
+have only tuned one or the other. PMR can cut allocation latency in
+half on a batch workload and do nothing measurable on a request-
+per-call service; a heap that looks healthy by RSS can still get
+OOM-killed because the cgroup counts page cache the process never
+directly allocated.
+
+This chapter's allocator-stack diagram and cgroup material matter
+because the standard answer, "just use a faster allocator," is
+true only in some measurement frames and false in others. Knowing
+where allocation cost actually lives (the page fault after the
+first write, not the `malloc()` call itself) and which cgroup knob
+degrades gracefully versus which one invokes the OOM killer is
+what separates a service that survives memory pressure from one
+that gets killed by it.
+
 ## Where the cost lives
 
 Allocation cost isn't `malloc()`. It's the page fault that follows
@@ -43,8 +63,8 @@ in this section. The conceptual model: a fixed buffer (often
 all allocations within a scope; "freeing" inside that scope is a
 no-op; the entire buffer resets when the scope ends. Allocation
 becomes a pointer bump. Deallocation becomes free. The trade-off
-is generality — you can't free individual objects independently
-— for raw speed.
+is generality for raw speed: you can't free individual objects
+independently.
 
 Composed with `std::pmr::unsynchronized_pool_resource` as the
 upstream, you get an arena that bump-allocates small objects
@@ -54,8 +74,8 @@ with many short-lived allocations, this is close to ideal.
 
 **But the advantage isn't unconditional.**
 
-Demo-06 measures three allocator strategies — `std::allocator`,
-`std::pmr` (monotonic + sync_pool), and `mimalloc` — on the same
+Demo-06 measures three allocator strategies: `std::allocator`,
+`std::pmr` (monotonic + sync_pool), and `mimalloc`, on the same
 workload, twice. The first measurement is batch mode: each
 variant runs as a CLI tool that does 200 iterations of the
 workload per invocation and prints percentile statistics. The
@@ -99,14 +119,14 @@ playing out exactly as the mechanism predicts.
 The PMR variant uses a 1 MB `thread_local` inline buffer backing
 a `monotonic_buffer_resource`. When this buffer is hot in L1/L2
 cache, every `pmr::vector::push_back` is a pointer bump and a
-small mark-as-used update — no syscalls, no free-list walk, no
+small mark-as-used update: no syscalls, no free-list walk, no
 contention. With 200 iterations per invocation, you do enough
 allocations against the same arena that the entire data
 structure stays cache-resident; the bump allocator wins.
 
 In serve mode, each `/run` request does ONE iteration. Between
 requests, the request scope ends and the arena's `release()` is
-called — which doesn't return memory to the OS, but does reset
+called, which doesn't return memory to the OS, but does reset
 the bump pointer and discard cached metadata. The next request
 arrives at a "warm but reset" arena that has to re-fault the
 same pages and re-build the same small free lists. By the time
@@ -114,7 +134,7 @@ the data structure is hot enough for PMR's bump-allocation to
 dominate, the request is done.
 
 **The teaching point is this**: PMR is not a free win. It's a
-specific trade-off — give up generality, get a cache-locality
+specific trade-off: give up generality, get a cache-locality
 bonus. The bonus materializes only when you do enough
 allocations per arena to amortize the reset cost. If your
 service handles short-lived requests with light allocation per
@@ -140,7 +160,7 @@ When to reach for PMR:
 - Inner loops of analytical workloads (parsing, indexing,
   aggregation) where the per-call cost amortizes across many
   small allocations
-- Anywhere you'd otherwise consider a custom pool allocator —
+- Anywhere you'd otherwise consider a custom pool allocator:
   PMR is the standard-library version of that pattern
 
 When PMR won't help:
@@ -252,7 +272,7 @@ concern.
 
 References worth following:
 
-- *Safeguarding Presto C++ memory usage with LinuxMemoryChecker* —
+- *Safeguarding Presto C++ memory usage with LinuxMemoryChecker*:
   the Presto blog post that introduced the pattern; concrete code,
   concrete numbers.
 
@@ -276,17 +296,17 @@ runs a complementary workload focused on data-structure layout,
 with and without huge pages, under a tight `memory.high`. The
 output is a small Grafana dashboard showing RSS,
 `memory.current`, latency, and major page faults for each
-combination — useful for seeing how the *layout* decisions from
+combination: useful for seeing how the *layout* decisions from
 §6 interact with the *allocator* decisions from §7 under
 *memory pressure* from cgroup limits.
 
 ## For deeper coverage
 
-- Andrist & Sehr, *C++ High Performance*, ch. 7 — memory
+- Andrist & Sehr, *C++ High Performance*, ch. 7: memory
   management, custom allocators, the page-fault cost model.
-- Enberg, *Latency*, ch. 4 — memory and the page cache as a
+- Enberg, *Latency*, ch. 4: memory and the page cache as a
   latency layer.
-- Ghosh, *Building Low Latency Applications with C++*, ch. 5–6 —
+- Ghosh, *Building Low Latency Applications with C++*, ch. 5-6:
   custom memory pools and allocator design from a low-latency
   trading perspective; the patterns generalize beyond HFT.
 - The cgroups v2 admin guide
@@ -294,7 +314,7 @@ combination — useful for seeing how the *layout* decisions from
   for the full memory controller surface area; everything above is
   a tour of the bits that bite C++ services.
 - The [statelessness compendium, Doc 03](https://patterncatalyst.github.io/cpp-statelessness/docs/03-pmr/)
-  treats PMR as *architectural statelessness* — the in-language
+  treats PMR as *architectural statelessness*: the in-language
   realization of "the request brings its own memory, all releases
   together." It covers `monotonic_buffer_resource` mechanics, the
   layered monotonic + `unsynchronized_pool_resource` recipe, the

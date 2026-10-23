@@ -7,21 +7,21 @@ duration: "15 minutes"
 
 ## Learning objectives
 
-By the end of this section you can:
+By the end of this chapter you can:
 
 - Explain why a binary built with `-march=native` on the build
   farm SIGILLs on a smaller production host, and pick a
   portable micro-architecture target (`x86-64-v3` or function
   multi-versioning) instead.
-- Identify abstraction-induced overhead — `std::function` on a
+- Identify abstraction-induced overhead (`std::function` on a
   hot loop, `std::shared_ptr` refcount churn, virtual dispatch
-  behind a "polymorphic" interface — by reading flame graphs.
+  behind a "polymorphic" interface) by reading flame graphs.
 - Diagnose why a container build takes 7 minutes when the
   bare-metal build takes 30 seconds, and apply BuildKit-style
   cache mounts to fix it.
 - Use the EPERM/EACCES rubric to tell which container security
   layer (capabilities, seccomp, SELinux/AppArmor, sysctl)
-  denied a syscall — because the fix is layer-specific.
+  denied a syscall: the fix is layer-specific.
 - Recognize the tutorial-default security pattern
   (`seccomp=unconfined`, `label=disable`) and **not ship it**
   to production by accident.
@@ -29,6 +29,24 @@ By the end of this section you can:
 ## Diagram
 
 {% include excalidraw.html name="14-pitfalls-avx512-mismatch" caption="AVX-512 mismatch: build host has it, runtime doesn't → SIGILL." %}
+
+## Why this matters
+
+Every pitfall in this chapter shares a shape: code that builds clean,
+passes review, and passes CI, then fails once it meets a production
+host, a real load pattern, or a security policy the development
+environment never enforced. A binary compiled with `-march=native`
+runs fine on the build farm and SIGILLs on a smaller customer host.
+A `std::shared_ptr` copy that looks free in a unit test costs real
+atomic operations under production concurrency. A seccomp profile
+relaxed for local convenience is easy to carry into a deployment where
+it shouldn't be.
+
+None of this shows up by inspecting the code in isolation; it shows up
+by running the service somewhere closer to where it actually has to
+work. The earlier chapters build the measurement toolchain; this one
+is the catalog of places that toolchain has already paid for itself,
+collected so the next service skips the discovery step.
 
 ## The shape of a pitfall
 
@@ -42,8 +60,8 @@ pass code review, they pass CI, they fail in production.
 
 They all reward the same defense: *measure on something close
 to the real deployment target*. The remaining sections of this
-tutorial — particularly [§10's observability stack](../10-observability-profiling/)
-and [§11's noisy-neighbor isolation](../11-noisy-neighbors/) —
+tutorial (particularly [§10's observability stack](../10-observability-profiling/)
+and [§11's noisy-neighbor isolation](../11-noisy-neighbors/))
 are what makes that measurement practical.
 
 ## AVX-512 / `-march=native` mismatch
@@ -78,7 +96,7 @@ passes; production deploy fails on first request**.
 The fix is to **stop using `-march=native` for container
 builds**. The portable alternatives:
 
-**Option 1 — x86-64 micro-architecture levels (recommended for
+**Option 1: x86-64 micro-architecture levels (recommended for
 most workloads):**
 
 | Level | Required CPU features | Hardware era |
@@ -89,7 +107,7 @@ most workloads):**
 | `x86-64-v4` | + AVX-512 | Skylake-X+, Sapphire Rapids+ |
 
 For most cloud and on-prem deployments in 2026, **`x86-64-v3`
-is the sane default** — it covers everything Haswell-or-newer
+is the sane default**: it covers everything Haswell-or-newer
 on the Intel side and Zen-2-or-newer on the AMD side, while
 giving the compiler access to AVX2 and FMA (which between them
 explain ~80% of the speedup `-march=native` would have
@@ -101,7 +119,7 @@ add_compile_options(-march=x86-64-v3)
 add_link_options(-march=x86-64-v3)
 ```
 
-**Option 2 — function multi-versioning:** compile *multiple*
+**Option 2: function multi-versioning.** Compile *multiple*
 versions of hot functions and have glibc's `ifunc` resolver
 pick at runtime:
 
@@ -132,8 +150,8 @@ LABEL ai.cpp-tutorial.multi-versioned-funcs="sum_of_squares,fft_radix2"
 ## Silent abstraction overhead
 
 The three abstractions that look free in the type system but
-cost real bytes and cycles on a hot path — already introduced
-in [§6's "over-abstraction trap" section](../06-stl-layout/) —
+cost real bytes and cycles on a hot path, already introduced
+in [§6's "over-abstraction trap" section](../06-stl-layout/),
 deserve a second pass here because they're the most common
 *pitfall* category, not just a category of choice.
 
@@ -152,7 +170,7 @@ Each call goes through:
 
 For 100k iterations, the overhead is ~200-500 ns/call × 100k =
 ~20-50 ms of pure overhead. Flame graphs show it as time
-spent in `std::function::operator()` — *not* in the function
+spent in `std::function::operator()`, *not* in the function
 you intended to time.
 
 The fix: **template the callable** if you can know it at compile
@@ -192,10 +210,10 @@ ownership** (you usually don't):
 void process(const Request& r);  // No refcount touch
 ```
 
-When you genuinely do need shared ownership (the most common
+When you do need shared ownership (the most common
 example: a callback that outlives its caller), still pass by
 `const shared_ptr<T>&` to functions that aren't taking
-ownership — they don't need to increment the count.
+ownership: they don't need to increment the count.
 
 **Virtual dispatch in a hot loop**:
 
@@ -235,7 +253,7 @@ look for, the gap closes quickly.
 ## The async-buffer lifetime trap
 
 This one is subtler than the abstraction taxes above, because it
-isn't a *cost* — it's a *correctness* bug that only appears once
+isn't a *cost*: it's a *correctness* bug that only appears once
 the timing is wrong, which makes it a textbook pitfall. It bit
 the [outbox-pattern reference example](https://patterncatalyst.github.io/cpp-statelessness/docs/07-state-externalization/)
 during host verification, and the failure mode is worth studying
@@ -257,7 +275,7 @@ void produce(const std::string& topic, const std::string& key,
 }
 ```
 
-And the caller — a relay loop — looks equally fine:
+And the caller, a relay loop, looks equally fine:
 
 ```cpp
 for (int i = 0; i < n; ++i) {
@@ -272,18 +290,18 @@ The bug: `rd_kafka_producev` does **not** copy the payload by
 default. It stores the caller's pointer and reads the bytes
 *later*, asynchronously, when `flush()` actually transmits to the
 broker. But `payload` is a loop-local `std::string` that is
-destroyed at the end of each iteration — long before `flush()`.
+destroyed at the end of each iteration, long before `flush()`.
 By send time, librdkafka dereferences freed heap memory and ships
 whatever now occupies it. Downstream, PostgreSQL rejected the
 garbage with `invalid byte sequence for encoding "UTF8": 0xde
-0x1f` — bytes that are simply reused heap, not anything the
+0x1f`, bytes that are simply reused heap, not anything the
 program ever wrote.
 
 Three properties make it a pitfall, not an ordinary bug:
 
 1. **It compiles cleanly and passes a naive test.** Send one
    message and flush immediately, inside the same scope, and the
-   buffer is still alive — it works. The bug needs the buffer to
+   buffer is still alive: it works. The bug needs the buffer to
    die *between* enqueue and send, which only the batch-then-flush
    shape produces.
 2. **Short strings hide it.** The `event_id` survived where the
@@ -295,10 +313,10 @@ Three properties make it a pitfall, not an ordinary bug:
 3. **The corruption surfaces three components away.** The relay
    produced it, Kafka transported it, the consumer read it, and
    PostgreSQL was the one that finally complained. Nothing in the
-   relay's own logs looked wrong — it cheerfully reported
+   relay's own logs looked wrong; it cheerfully reported
    `published 1 event(s)`.
 
-The fix is one flag — tell librdkafka to copy at enqueue:
+The fix is one flag: tell librdkafka to copy at enqueue:
 
 ```cpp
 rd_kafka_producev(
@@ -310,7 +328,7 @@ rd_kafka_producev(
 ```
 
 The general rule: **when a C API takes a pointer and defers the
-read, you own the buffer until the API is done with it — not until
+read, you own the buffer until the API is done with it, not until
 your function returns.** Either keep the buffer alive across the
 deferred operation (hoist it out of the loop, or store it in a
 container that outlives `flush()`), or tell the API to take its
@@ -324,7 +342,7 @@ plausible data appearing somewhere far downstream.
 ## Container build slowness
 
 "The CI build takes 7 minutes and the bare-metal build takes
-30 seconds. Why?" — three common causes, in roughly the order
+30 seconds. Why?" Three common causes, in roughly the order
 they bite:
 
 **Layer cache invalidation by source change**: every change to
@@ -358,7 +376,7 @@ RUN --mount=type=cache,target=/root/.ccache,sharing=locked \
     cmake --build --preset conan-release
 ```
 
-The cache mount is **not** a layer in the resulting image —
+The cache mount is **not** a layer in the resulting image:
 the cache survives across builds in `~/.local/share/containers/cache/`
 on the host but doesn't ship in the image. Conan dependency
 resolution drops from "fetch and rebuild" (1-3 minutes) to
@@ -375,14 +393,14 @@ Demo-01's `Containerfile.ubi-multistage` uses the cache-mount
 pattern explicitly; demo-04's hermetic-build setup uses
 lockfile-driven resolution. Compare the wall-clock times in
 demo-01's `./demo.sh` between a clean build and a re-build
-after a `.cpp` change — the difference is usually 5-10×.
+after a `.cpp` change: the difference is usually 5-10×.
 
 ## Container security layers and the EPERM/EACCES rubric
 
 When a syscall fails inside a container with a permission
 error, **which error code you get tells you which security
 layer denied you**. This matters because the fix is layer-
-specific — blindly bypassing one layer when a different layer
+specific: blindly bypassing one layer when a different layer
 is the actual denier wastes time, or worse, opens the wrong
 security hole.
 
@@ -408,11 +426,11 @@ A worked example from demo-03's development history (gotcha G-32):
    on `io_uring_setup`. Suspected seccomp; verified with
    `strace`. Added `security_opt: seccomp=unconfined` to the
    compose file.
-2. Re-run — failed with a *different* errno, `EACCES`, on the
-   same syscall. The fact that the errno changed proved
+2. Re-run; failed with a *different* errno, `EACCES`, on the
+   same syscall. The errno change proved
    seccomp had been the first gate and SELinux was a separate
    one. Added `security_opt: label=disable`.
-3. Re-run — io_uring worked.
+3. Re-run; io_uring worked.
 
 The general principle: **don't blanket-disable a security
 layer to make one feature work**. Find the specific
@@ -430,7 +448,7 @@ dedicated container type. The development `compose.yml` uses
 the blanket-disable for first-run convenience; **don't deploy
 the development compose to production**.
 
-The rubric also applies to other deny scenarios — `mount`
+The rubric also applies to other deny scenarios: `mount`
 returning `EPERM` is usually capabilities (no `CAP_SYS_ADMIN`);
 `bind()` to a low port returning `EACCES` is usually SELinux;
 opening `/proc/PID/mem` returning `EACCES` is SELinux blocking
@@ -447,7 +465,7 @@ The tutorial compose files use `security_opt: seccomp=unconfined`
 and `security_opt: label=disable` for io_uring services because
 the alternative (custom seccomp profile + custom SELinux module
 + `sudo semodule -i ...` to install) is a heavy first-run
-hurdle. **This is a deliberate pedagogical choice for tutorial
+hurdle. **This is a pedagogical choice made for tutorial
 demos.**
 
 The pitfall: it's easy to copy the tutorial compose pattern
@@ -455,9 +473,9 @@ into a service that's about to deploy somewhere real. *Don't*.
 
 Demo-03's directory ships two compose files side by side:
 
-- `compose.yml` — tutorial-friendly; first-run works without
+- `compose.yml`: tutorial-friendly; first-run works without
   sudo; security boundaries dropped wholesale.
-- `compose.production.yml` — audit-grade; ships a custom
+- `compose.production.yml`: audit-grade; ships a custom
   seccomp profile + a custom SELinux policy module that
   surgically grants exactly the `io_uring` syscalls and
   policy class; passes a security audit.
@@ -475,10 +493,10 @@ For non-io_uring services, the tutorial default of `ubi10-micro`
 into "the prod image is minimal + locked-down; the diagnostic
 tooling lives in a separate ephemeral sidecar."
 
-## Profiling perf inside containers — the symbol resolution trap
+## Profiling perf inside containers: the symbol resolution trap
 
 `perf record` inside a container appears to work but the
-flame graphs you generate are missing function names — all the
+flame graphs you generate are missing function names: all the
 samples resolve to `[unknown]` or to hex addresses. The cause:
 `perf` needs access to the binary's debug symbols, which live
 on the host where the binary was built, not inside the
@@ -510,13 +528,13 @@ podman run --rm \
 [§12 covers the debug-sidecar pattern in full](../12-analysis-debugging/).
 The pitfall is shipping a stripped-binary prod image without
 the corresponding debug-symbol artifact archived somewhere
-recoverable — when an incident demands a flame graph, the
+recoverable: when an incident demands a flame graph, the
 symbols need to exist somewhere.
 
 ## Why these are pitfalls and not bugs
 
 Every pattern in this section *works* on the developer's
-machine, *passes* CI, *deploys* successfully — and then fails
+machine, *passes* CI, *deploys* successfully, and then fails
 under conditions the development environment didn't cover.
 That's the shape of a pitfall:
 
@@ -572,13 +590,13 @@ illustrated by a demo elsewhere in the tutorial:
   documentation](https://gcc.gnu.org/onlinedocs/gcc/x86-Function-Attributes.html)
 - [Podman BuildKit-style cache mounts
   reference](https://docs.podman.io/en/latest/markdown/podman-build.1.html#mount)
-- [Red Hat — Container security: the bigger
+- [Red Hat: Container security, the bigger
   picture](https://www.redhat.com/en/topics/security/container-security)
 
 ## What's next
 
 [§15 closes the loop](../15-where-to-go-next/) and points at
 the books, papers, and resources you'll want once you've
-finished this tutorial — Enberg, Andrist & Sehr, Iglberger,
+finished this tutorial: Enberg, Andrist & Sehr, Iglberger,
 the Brendan Gregg performance books, and the smaller set of
 "if you have time for one more thing" reads.

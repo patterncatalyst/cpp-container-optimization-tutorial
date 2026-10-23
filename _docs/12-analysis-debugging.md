@@ -7,7 +7,7 @@ duration: "25 minutes"
 
 ## Learning objectives
 
-By the end of this section you can:
+By the end of this chapter you can:
 
 - Run cppcheck and clang-tidy as part of a CI build inside a
   container, with a curated check set that signals without
@@ -19,7 +19,7 @@ By the end of this section you can:
   (and friends) baked in, and run it under load in a container
   to catch leaks and use-after-frees that ordinary tests miss.
 - Use Valgrind selectively (~10-50× slowdown) for the problems
-  sanitizers can't catch — complex custom allocators, cache-miss
+  sanitizers can't catch: complex custom allocators, cache-miss
   hot spots, call-graph profiling.
 - Use Meta's Object Introspection to answer "what does this
   data structure actually cost in RAM" for a running service.
@@ -34,6 +34,26 @@ By the end of this section you can:
 ## Diagram
 
 {% include excalidraw.html name="12-debug-sidecar-pattern" caption="Ephemeral gdb sidecar sharing the service's PID namespace." %}
+
+## Why this matters
+
+C++ gives you no safety net by default. The compiler will happily let a
+service read freed memory, overrun a buffer, or race on a shared
+counter, and none of that shows up as a compile error. Catching it
+requires a layered toolchain: static analysis before the code runs,
+sanitizers and tests while it runs under controlled conditions, and a
+debugger or introspection tool for the failures that reach production
+anyway.
+
+Containers change how each of these tools gets invoked, not whether
+you need them. A minimal runtime image strips out `gdb` and debug
+symbols to keep the attack surface small, which means attaching a
+debugger means spawning a sidecar rather than installing a package.
+Sanitizer builds need their own container variant because the
+instrumentation changes memory layout. Getting this toolchain right
+once, and understanding why the container adds a layer of indirection
+to each tool, pays off every time a service misbehaves under load
+instead of in a unit test.
 
 ## Why analysis-and-debugging is one section
 
@@ -52,19 +72,19 @@ healthy C++ service invests in all three. **This section
 walks through the toolchain for each, with the container
 context that changes how they're invoked.**
 
-## Static analysis — cppcheck + clang-tidy
+## Static analysis: cppcheck + clang-tidy
 
 Two tools, complementary:
 
-- **cppcheck** finds "obvious" bugs — uninitialized reads,
+- **cppcheck** finds "obvious" bugs: uninitialized reads,
   array bounds, shadowed variables, leaks in straight-line
   code. Fast (~2-5 seconds per 100 KLOC). Reasonable
   false-positive rate (~5% with default checks).
 - **clang-tidy** is the C++ linter for modernization,
   stylistic conventions, and a much wider set of checks.
   Slower (~30 seconds per 100 KLOC on a single core,
-  parallelizable). Higher false-positive rate by default
-  — the curated check set is what keeps it useful.
+  parallelizable). Higher false-positive rate by default;
+  the curated check set is what keeps it useful.
 
 A `.clang-tidy` file in the project root pins which checks
 fire. The pattern that holds up at scale:
@@ -90,7 +110,7 @@ WarningsAsErrors: 'bugprone-*,clang-analyzer-*,performance-*'
 ```
 
 The principle: **enable broad check categories, then
-selectively disable individual checks that produce noise** —
+selectively disable individual checks that produce noise**,
 not the other way around. The negation lines turn off the
 specific checks that are common false positives in C++
 codebases without disabling the whole category.
@@ -109,22 +129,22 @@ RUN clang-tidy -p build/compile_commands.json --warnings-as-errors='*' src/*.cpp
 
 The build fails if either tool reports a warning marked as
 error. Demo-07's `Containerfile` runs this exact pattern. By
-default the demo ships clean — production code that passes its
-own analyzers — but a `--demo-findings` flag lets you see what
+default the demo ships clean (production code that passes its
+own analyzers), but a `--demo-findings` flag lets you see what
 the failure mode looks like.
 
-### Seeing the analyzers fire — `./demo.sh --demo-findings`
+### Seeing the analyzers fire: `./demo.sh --demo-findings`
 
 The reports/ directory after a clean run is informative but
 quiet: `cppcheck.xml` is 129 bytes (just the XML header), and
-`clang-tidy.txt` is empty. That's correct production behavior —
-clean code, no findings — but it doesn't teach readers what
+`clang-tidy.txt` is empty. That's correct production behavior
+(clean code, no findings), but it doesn't teach readers what
 findings actually look like.
 
 The `--demo-findings` flag in demo-07 fixes this by temporarily
-appending a deliberately bad function to `src/lib/channel.cpp`,
+appending a bad function to `src/lib/channel.cpp`,
 building through an `analyzer-soft` stage that captures findings
-WITHOUT gating, then restoring `channel.cpp` on exit. The bad
+without gating, then restoring `channel.cpp` on exit. The bad
 code is engineered to trigger several distinct checks across both
 tools:
 
@@ -173,7 +193,7 @@ src/lib/channel.cpp:NN:NN: warning: variable 'uninit_var' is not initialized
 
 Two design points worth internalizing:
 
-**1. The stage is split — `analyzer-soft` captures, `analyzer` gates.**
+**1. The stage is split: `analyzer-soft` captures, `analyzer` gates.**
 This is the same pattern as `abi-diff` (always captures) vs `abi`
 (gates on captured evidence). It exists so that `--demo-findings`
 can build only through the capture stage without the gating step
@@ -182,7 +202,7 @@ firing. Production `--analyze-only` still builds through the full
 
 **2. The modification is ephemeral.** `--demo-findings` uses
 `mktemp` to back up `channel.cpp`, then sets a bash `EXIT` trap
-that restores the file when the script exits — clean exit, ^C,
+that restores the file when the script exits: clean exit, ^C,
 build failure, anything. The repository never sees the bad code
 committed. Readers can run the flag repeatedly without it
 "sticking."
@@ -193,7 +213,7 @@ display findings without forcing the developer to choose between
 "run the analyzer" and "have a passing build." Split stages give
 you both.
 
-## Tests — GoogleTest + gmock
+## Tests: GoogleTest + gmock
 
 The C++ test framework most C++ projects converge to.
 GoogleTest for unit tests, gmock for mocking, both consumed
@@ -238,11 +258,11 @@ ENTRYPOINT ["/myservice"]
 
 If `ctest` returns nonzero, the build fails. The test binary
 never reaches the runtime image. Test discovery is automatic
-via `gtest_discover_tests` — adding a `TEST(MyFixture, ...)`
+via `gtest_discover_tests`: adding a `TEST(MyFixture, ...)`
 makes it run on the next CMake configure.
 
 [§13 covers the coverage measurement workflow](../13-reproducibility-abi/)
-that pairs with GoogleTest — gcov/lcov for GCC builds and
+that pairs with GoogleTest: gcov/lcov for GCC builds and
 clang source-based coverage for LLVM builds.
 
 ## Understanding the `reports/` directory
@@ -256,23 +276,23 @@ always tell you which schema they're in. Here's the legend:
 | `gtest.xml` | JUnit XML | `ctest --output-junit` (release-debuginfo run) | One `<testcase>` per CTest test |
 | `asan.xml` | JUnit XML | `ctest --output-junit` (ASan+UBSan run) | Same schema as gtest.xml, but the underlying tests ran instrumented |
 | `asan.txt` | plain text | `tee` of the ASan ctest stdout | Human-readable; includes any ASan/UBSan stack traces if a sanitizer fires |
-| `cppcheck.xml` | cppcheck XML | `cppcheck --xml --xml-version=2` | Different schema — `<results>` → `<errors>` → `<error>` |
+| `cppcheck.xml` | cppcheck XML | `cppcheck --xml --xml-version=2` | Different schema: `<results>` → `<errors>` → `<error>` |
 | `clang-tidy.txt` | plain text | `run-clang-tidy` | One human-readable section per check that fired (empty when clean) |
 | `current.abi` | libabigail XML | `abidw` | Symbolic representation of every public ABI surface for `libdemo07_channel.so.1` |
 | `abidiff.txt` | plain text | `abidiff` | The semantic diff between `current.abi` and `abi-reference/`; empty file means no ABI changes |
-| `coverage-gcc.xml` | JUnit XML | `ctest --output-junit` (coverage-instrumented run) | Test results from the coverage build (different binary than `gtest.xml`'s — instrumented with `--coverage`) |
+| `coverage-gcc.xml` | JUnit XML | `ctest --output-junit` (coverage-instrumented run) | Test results from the coverage build (different binary than `gtest.xml`'s, instrumented with `--coverage`) |
 | `coverage.json` | gcovr JSON | `gcovr --json` | Machine-readable coverage data; per-file line and branch hit counts |
 | `coverage-cobertura.xml` | Cobertura XML | `gcovr --cobertura` | Industry-standard coverage format (originally from Java's Cobertura); Jenkins/GitLab/Azure DevOps ingest this natively into coverage dashboards |
 | `coverage-summary.txt` | plain text | `gcovr --txt` | Per-file table with line and branch coverage percentages |
-| `coverage-gcc/index.html` | HTML | `gcovr --html-details` | Source-browseable HTML — click into files to see per-line hit counts colored green (hit) / red (miss) |
+| `coverage-gcc/index.html` | HTML | `gcovr --html-details` | Source-browseable HTML: click into files to see per-line hit counts colored green (hit) / red (miss) |
 
 The two files worth a longer note: `gtest.xml` and `asan.xml`.
 
 ### "JUnit XML" is a schema, not a framework
 
 The "JUnit" label is the schema's name, not a statement about which
-test framework produced the file. JUnit's XML format — defined for
-Apache Ant's `<junit>` task in the early 2000s — became the industry
+test framework produced the file. JUnit's XML format, defined for
+Apache Ant's `<junit>` task in the early 2000s, became the industry
 standard for test reporting. Nearly every language's test runner can
 emit it now: pytest, RSpec, mocha, ctest, googletest, JUnit (Java),
 NUnit, xUnit, you name it.
@@ -296,9 +316,9 @@ is CMake 3.21+'s built-in JUnit emitter. The output looks like:
 </testsuite>
 ```
 
-Why this matters operationally: every CI system in common use —
-Jenkins, GitLab CI, GitHub Actions test-reporter, CircleCI, Azure
-DevOps, Bamboo, Buildkite — ingests JUnit XML natively. Drop
+Why this matters operationally: every CI system in common use
+(Jenkins, GitLab CI, GitHub Actions test-reporter, CircleCI, Azure
+DevOps, Bamboo, Buildkite) ingests JUnit XML natively. Drop
 `gtest.xml` into a Jenkins job's "Publish JUnit results" step and you
 get test-by-test charts with zero extra plumbing. The same XML you
 extracted from a podman build powers the dashboard.
@@ -310,7 +330,7 @@ the outer one:
 
 | Mechanism | Granularity | When to use |
 |---|---|---|
-| `ctest --output-junit path.xml` (what we use) | One `<testcase>` per `add_test()` / `gtest_discover_tests()` test | Standard choice — works for any test framework CTest can run |
+| `ctest --output-junit path.xml` (what we use) | One `<testcase>` per `add_test()` / `gtest_discover_tests()` test | Standard choice: works for any test framework CTest can run |
 | `./demo07_tests --gtest_output=xml:path.xml` | One `<testcase>` per individual `TEST_F`/`TEST_P`/`TEST` in the C++ source | Use when you don't have CTest in the loop, or when you want finer reporting |
 
 In our demo they produce similar output because `gtest_discover_tests()`
@@ -324,7 +344,7 @@ Either path lands at JUnit XML, which is why the label still fits.
 
 ### cppcheck has its own schema
 
-`cppcheck.xml` is **not** JUnit — cppcheck uses a custom schema:
+`cppcheck.xml` is **not** JUnit: cppcheck uses a custom schema:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -351,7 +371,7 @@ natively produces; CI integration is the next layer up.
 exported symbol, type, function signature, and inheritance relationship
 in the .so. It's not meant to be human-friendly (the file from our
 demo is ~98 KB for a tiny library), but it diffs reliably. abidiff
-compares two .abi files semantically — it knows that re-ordering
+compares two .abi files semantically: it knows that re-ordering
 struct fields is meaningful but re-ordering function definitions in
 the source isn't.
 
@@ -371,7 +391,7 @@ That 44% total looks bad, but it's misleading without context. Three
 things to internalize before reading any coverage report:
 
 **1. Coverage % depends entirely on what you measure.** The demo's
-gcovr invocation includes everything under `src/` — both the library
+gcovr invocation includes everything under `src/`: both the library
 (`channel.hpp` + `channel.cpp`) and the service entrypoint
 (`svc/main.cpp`). The unit tests exercise the **library**; nothing
 runs `main.cpp` during `ctest`. So `main.cpp` shows 0%, which drags
@@ -380,10 +400,10 @@ the project-level number from "great" (90%+ on the library) to
 
 In a real project you'd usually want two coverage reports:
 
-- **Library coverage** — `--filter src/include/` `--filter src/lib/`
+- **Library coverage**: `--filter src/include/` `--filter src/lib/`
   to focus on the testable units. This is the number that goes on
   the team dashboard.
-- **Full-tree coverage** — what we ship in the demo. Useful for
+- **Full-tree coverage**: what we ship in the demo. Useful for
   spotting "I forgot to test this entire subdirectory" but bad as a
   KPI.
 
@@ -392,7 +412,7 @@ answer: "is the library well-tested?" or "what fraction of all source
 lines was exercised?"
 
 **2. Branch coverage is almost always much lower than line coverage.**
-The demo reports `branches: 5.3% (2/38)` which sounds catastrophic —
+The demo reports `branches: 5.3% (2/38)` which sounds catastrophic,
 until you realize where those branches come from. gcc emits branch
 information for:
 
@@ -409,8 +429,8 @@ happens if the heap is exhausted at this point"). Branch coverage
 is a useful **diagnostic** ("are my error paths tested?") but a poor
 **KPI**.
 
-If your team genuinely wants meaningful branch coverage numbers,
-filter for branches in your own code only — `gcovr` has
+If your team wants meaningful branch coverage numbers,
+filter for branches in your own code only: `gcovr` has
 `--exclude-throw-branches` and `--exclude-unreachable-branches` for
 exactly this purpose. We don't enable them in the demo because seeing
 the raw numbers first makes the lesson land.
@@ -428,7 +448,7 @@ issue regardless of what the project-level number says.
 The take-away for the reports/ directory as a whole: **every file is
 designed to be machine-consumable by something**. The XML ones plug
 into CI. The .abi file plugs into abidiff. The .txt files are the
-human fallback. None of them is the "primary" output — they're
+human fallback. None of them is the "primary" output; they're
 parallel evidence streams that different audiences (CI, developer,
 ABI tooling) consume independently.
 
@@ -439,12 +459,12 @@ The four to know:
 | Sanitizer | Catches | Slowdown | When to use |
 |---|---|---|---|
 | **ASan** | OOB reads/writes, use-after-free, use-after-return, leaks | 2-3× | Always-on for CI test runs |
-| **UBSan** | Signed overflow, alignment, null-deref, type confusion, etc. | <1.5× | Pair with ASan — effectively free |
+| **UBSan** | Signed overflow, alignment, null-deref, type confusion, etc. | <1.5× | Pair with ASan: effectively free |
 | **MSan** | Use of uninitialized memory | 3× | Hard to use (needs full instrumented stdlib); reach when ASan/UBSan aren't enough |
 | **TSan** | Data races on shared memory | 5-15× | Pre-merge for any concurrent code |
 
 ASan + UBSan can be enabled together with no extra cost.
-TSan is *mutually exclusive* with ASan — the instrumentation
+TSan is *mutually exclusive* with ASan: the instrumentation
 patterns conflict; pick one or the other for any given build.
 MSan needs an instrumented C++ standard library, which Conan
 doesn't ship pre-built; it's the most painful to set up and
@@ -488,7 +508,7 @@ A leak materializes in `LeakSanitizer:` output at exit; an
 out-of-bounds read materializes immediately with a stack
 trace. The `ASAN_OPTIONS=halt_on_error=0` keeps the service
 running through findings rather than crashing on the first
-one — useful for collecting *all* the issues a load run
+one, which is useful for collecting *all* the issues a load run
 exposes, not just the first.
 
 **Running ASan in a container is the right pattern, not bare
@@ -497,22 +517,22 @@ metal**: you get the same runtime environment as production
 allocator, same fork-exec patterns). ASan findings are
 representative of what production would hit.
 
-**How ASan catches these — and why the container sometimes
+**How ASan catches these, and why the container sometimes
 fights it.** AddressSanitizer works by keeping a *shadow* of
 your process's memory. For every 8 bytes of application
 memory it reserves 1 byte of shadow, at a fixed address
 offset, encoding how many of those 8 bytes are currently
 legal to touch: `0` means all eight are addressable, `1`–`7`
 means only the first N are, and a negative marker means the
-region is poisoned — a redzone planted around an allocation,
+region is poisoned: a redzone planted around an allocation,
 freed memory, or a stack slot that's gone out of scope. The
 compiler instruments every load and store to first compute
 the shadow address (`shadow = (addr >> 3) + offset`), read
 that one byte, and report immediately if the access lands on
 poisoned memory. That shadow is why ASan reserves a large,
 contiguous slice of the virtual address space (roughly an
-eighth of it) at startup — and why a use-after-free is caught
-the instant the freed memory is *read*, rather than whenever
+eighth of it) at startup, and why a use-after-free is caught
+the instant the freed memory is *read* rather than whenever
 it happens to be reused. Without the sanitizer, the same bug
 is silent until the freed bytes get overwritten by something
 else, which is exactly why it surfaces as "random" corruption
@@ -523,7 +543,7 @@ with the container's memory layout. Two distinct failure modes
 produce a near-identical startup error
 (`==<PID>==Shadow memory range interleaves with an existing
 memory mapping` or `failed to allocate`), and they have
-different fixes — knowing which you're looking at saves a lot
+different fixes. Knowing which you're looking at saves a lot
 of flailing:
 
 - **High ASLR entropy (newer kernels).** When
@@ -531,7 +551,7 @@ of flailing:
   the loader can place an ordinary library mapping inside the
   range ASan wants for its shadow, and ASan aborts before your
   code ever runs. On bare metal you can reduce randomization
-  for just that process with `setarch -R <binary>` — but inside
+  for just that process with `setarch -R <binary>`, but inside
   a container that usually fails with `failed to set
   personality: Function not implemented`, because the
   `personality` syscall it relies on is filtered by the default
@@ -561,16 +581,16 @@ In both cases, setting `ASAN_OPTIONS="abort_on_error=1:disable_coredump=1"`
 keeps the failure clean and avoids dumping a multi-gigabyte
 core of the shadow region.
 
-## Valgrind — when it's worth the slowdown
+## Valgrind: when it's worth the slowdown
 
 Valgrind catches things sanitizers can't:
 
 - **Complex leak patterns with custom allocators** that
   confuse ASan's heap tracking. Valgrind's `memcheck` walks
   every allocation regardless of allocator hooks.
-- **Cache-miss hot spots** — `cachegrind` simulates the cache
+- **Cache-miss hot spots**: `cachegrind` simulates the cache
   hierarchy and shows per-line cache miss counts.
-- **Call-graph profiling** — `callgrind` produces a complete
+- **Call-graph profiling**: `callgrind` produces a complete
   call graph with cost-per-function-call metrics that
   `perf record` doesn't.
 
@@ -606,12 +626,12 @@ faster than reproducing the leak with ASan; for cache
 profiling, the simulated cost model is good enough to find
 hot spots even when the absolute numbers are slow.
 
-## Object Introspection — what does this thing actually cost in RAM
+## Object Introspection: what does this thing actually cost in RAM
 
 Meta's open-source [Object Introspection](https://github.com/facebookexperimental/object-introspection)
 tool answers a question that's surprisingly hard otherwise:
 "this running C++ process has a `std::unordered_map<std::string,
-MyStruct>` somewhere in its working set — exactly how much
+MyStruct>` somewhere in its working set: exactly how much
 memory does it occupy, including all the indirected strings,
 bucket overhead, and alignment slack?"
 
@@ -637,7 +657,7 @@ strings), `sizeof()` lies by orders of magnitude because the
 size of indirected storage doesn't appear in the type size.
 OI gives you the receipts.
 
-OI is heavy to set up — DWARF needed on the running binary,
+OI is heavy to set up: DWARF needed on the running binary,
 per-type code generation, a host setup that supports running
 the probe. Worth it when:
 
@@ -652,7 +672,7 @@ the probe. Worth it when:
 [§7 covers the allocator-side of the same investigation](../07-memory-management/);
 OI is the tool for the data-structure side.
 
-## The debug sidecar pattern — gdb without rebuilding the image
+## The debug sidecar pattern: gdb without rebuilding the image
 
 The single most useful pattern for debugging a containerized
 C++ service. The runtime image stays small (`ubi10-micro` from
@@ -664,7 +684,7 @@ that:
    (`--pid=container:<service>`).
 2. Has `CAP_SYS_PTRACE` to attach to processes
    (`--cap-add=SYS_PTRACE`).
-3. Carries the heavy tooling — gdb, eu-stack, strace, perf,
+3. Carries the heavy tooling: gdb, eu-stack, strace, perf,
    and the matching debug symbols.
 
 ```bash
@@ -688,8 +708,8 @@ share the namespace. `set sysroot /proc/1/root` tells gdb
 where to find the service's libraries (`/proc/1/root` is the
 service's filesystem from the sidecar's view). The
 `--volume /home/me/symbols:/symbols:ro` mounts a host
-directory containing the unstripped debug symbols, which the
-small runtime image deliberately left out.
+directory containing the unstripped debug symbols that the
+small runtime image leaves out to stay minimal.
 
 When the sidecar exits, the production container is untouched.
 No `gdb` binary leaked into the runtime image; no process state
@@ -702,11 +722,11 @@ from a sidecar against a stripped runtime image) and [§14's
 profiling-perf-in-containers discussion](../14-pitfalls/) (the
 symbol-resolution trap).
 
-## `gdbserver` — the alternative when sidecar isn't enough
+## `gdbserver`: the alternative when sidecar isn't enough
 
-When the PID-namespace approach hits a wall — different host,
+When the PID-namespace approach hits a wall (different host,
 security policy that disallows the share, rootless setups
-where namespace-joining fails — `gdbserver` is the alternative.
+where namespace-joining fails), `gdbserver` is the alternative.
 
 The production container exposes `gdbserver` on a port (only
 when debug mode is requested); the developer's gdb connects
@@ -776,7 +796,7 @@ Document this in your runbook; it's the kind of thing nobody
 remembers in the middle of an incident. Demo-07's README
 includes the full ulimit + core_pattern recipe.
 
-## Production diagnostic — when to reach for which tool
+## Production diagnostic: when to reach for which tool
 
 When something's wrong, the right tool depends on what you
 know:
@@ -822,7 +842,7 @@ Go has a race detector built into `go test -race`. Rust catches
 most memory-safety bugs at compile time. Java's JVM detects
 many forms of corruption automatically and the GC eliminates
 most "use-after-free" patterns. **C++ has none of these as
-defaults** — the language gives you the freedom that creates
+defaults**: the language gives you the freedom that creates
 the bugs in the first place.
 
 The compensating discipline is the toolchain in this section:
@@ -833,10 +853,10 @@ is optional in any given build, but a production C++ service
 that ships *without* any of them is shipping with no safety
 net.
 
-The container context changes the *invocation* of each tool —
-sanitized variant lives in a separate image, gdb lives in an
-ephemeral sidecar, core_pattern needs a host bind-mount — but
-the tools themselves are the same ones a bare-metal C++
+The container context changes the *invocation* of each tool:
+the sanitized variant lives in a separate image, gdb lives in an
+ephemeral sidecar, core_pattern needs a host bind-mount. The
+tools themselves are the same ones a bare-metal C++
 service uses. **The discipline is portable; the recipes are
 container-specific.**
 
@@ -846,8 +866,8 @@ container-specific.**
 runs the full pipeline:
 
 - cppcheck and clang-tidy as build stages (each ships one
-  deliberate finding to demonstrate the failure mode).
-- GoogleTest suite (with both passing and one deliberately
+  finding to demonstrate the failure mode).
+- GoogleTest suite (with both passing and one
   failing case behind a feature flag).
 - ASan + UBSan instrumented variant built in a separate stage.
 - `compose.debug.yml` for the debug-sidecar pattern.
@@ -859,11 +879,11 @@ been wired up with each.
 
 ## For deeper coverage
 
-- Iglberger, *C++ Software Design*, ch. 3 — testability as a
+- Iglberger, *C++ Software Design*, ch. 3: testability as a
   design property; the right shape of the seam between code
   and tests.
-- Ghosh, *Building Low Latency Applications with C++*, ch. 11
-  — testing and debugging a low-latency C++ service
+- Ghosh, *Building Low Latency Applications with C++*, ch. 11:
+  testing and debugging a low-latency C++ service
   end-to-end; pairs sanitizers and `perf` as the right tools
   for production code paths.
 - The clang-tidy [check list and rationale per

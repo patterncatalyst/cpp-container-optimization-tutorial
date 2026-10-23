@@ -7,7 +7,7 @@ duration: "10 minutes"
 
 ## Learning objectives
 
-By the end of this section you can:
+By the end of this chapter you can:
 
 - Explain why a naïve single-stage build produces a 689 MB image
   even when the binary is 4 MB, and what each of the other 685 MB
@@ -17,7 +17,7 @@ By the end of this section you can:
   (no compiler, no `dnf`), and explain what `COPY --from=build`
   does at the layer level.
 - Choose between `ubi`, `ubi-minimal`, and `ubi-micro` for a
-  runtime base — and predict what you give up at each tier
+  runtime base, and predict what you give up at each tier
   (no shell, no `ldd`, no `strace` to attach).
 - Order `COPY` and `RUN` lines so dependency installs survive a
   source-only change and the build cache stays useful.
@@ -28,6 +28,27 @@ By the end of this section you can:
 ## Diagram
 
 {% include excalidraw.html name="04-image-strategy-multistage" caption="Single-stage vs multi-stage Containerfile." %}
+
+## Why this matters
+
+A naive Containerfile ships the entire C++ toolchain alongside
+the binary it produced: the compiler, the dependency cache, every
+intermediate build artifact. That excess travels through the
+registry on every pull, sits in the runtime image's attack
+surface, and slows every cold start, even though none of it runs
+after the build finishes. The image strategy in this chapter
+turns that waste into a design decision: a multi-stage
+Containerfile compiles in a heavy stage and ships only the
+binary and the libraries it actually links against.
+
+The choice of runtime base (`ubi`, `ubi-minimal`, or `ubi-micro`)
+sets the incident-response posture for the service: whether a
+responder can `podman exec` into a live container or has to reach
+for a debug sidecar instead. The ABI labels and glibc-mismatch
+discussion matter because C++ has no runtime that carries its own
+standard library the way a JVM or a Go binary does; a C++ image's
+dynamic-linking assumptions are implicit until a version mismatch
+turns them into a crash loop in production.
 
 ## The 689 MB problem
 
@@ -60,7 +81,7 @@ to be present at runtime:
 
 The container has to pull all 685 MB from the registry every time
 the image is pulled. The container has to surface all 685 MB in
-its attack surface — every dnf-installed package, every Conan-
+its attack surface: every dnf-installed package, every Conan-
 cached transitive dependency, every CVE-scannable component
 travels with the binary forever. The container has to walk all
 685 MB of overlay layers on cold start. The actual program is
@@ -69,7 +90,7 @@ travels with the binary forever. The container has to walk all
 **The fix isn't to shrink the toolchain. The fix is to leave the
 toolchain behind.**
 
-## Multi-stage builds — the mechanism
+## Multi-stage builds: the mechanism
 
 A multi-stage `Containerfile` declares two (or more) `FROM`
 lines. Each `FROM` starts a new image; you give it an alias with
@@ -98,8 +119,8 @@ ENTRYPOINT ["/usr/local/bin/myservice"]
 The `COPY --from=build` line is the entire trick. It says: "from
 the image we just finished building under the alias `build`,
 copy this one file into our new image." None of stage 1's other
-contents — not the compiler, not the Conan cache, not the
-intermediate `.o` files, not the source tree — make it into the
+contents (not the compiler, not the Conan cache, not the
+intermediate `.o` files, not the source tree) make it into the
 final image. They die with stage 1.
 
 Demo-01's `Containerfile.ubi-multistage` produces a **114 MB**
@@ -107,8 +128,8 @@ image with this pattern (UBI 10 base + your binary + dynamic
 libs). Switching the runtime base from `ubi` to `ubi-micro`
 (see the next section) gets it to **26.4 MB**.
 
-The build *time* is roughly the same as the single-stage version
-— you're still compiling the same code. What changes is what
+The build *time* is roughly the same as the single-stage version.
+You're still compiling the same code. What changes is what
 ships.
 
 ## Choosing your runtime base
@@ -139,7 +160,7 @@ that comfort.
 
 `ubi10/ubi-micro` is what you ship when you've measured everything.
 Roughly 14 MB on disk before you copy your binary in. No shell.
-No `dnf`. No `ldd`, no `strace`, no `bash` — you can't even
+No `dnf`. No `ldd`, no `strace`, no `bash`; you can't even
 `podman exec -it ... bash` into it because there's no `bash` to
 exec. Your binary plus its dynamic libraries plus a working
 `glibc` is what's there. If your binary needs `libssl` or
@@ -160,7 +181,7 @@ this tutorial but exist in the same space as `ubi10/ubi-micro`: very
 small bases that assume you've moved diagnosis into a separate
 sidecar.
 
-## Layer caching — order COPY and RUN deliberately
+## Layer caching: ordering COPY and RUN instructions
 
 `podman build` caches each Containerfile instruction. A cached
 instruction is reused if its inputs (the previous layer plus the
@@ -203,10 +224,10 @@ busy team this is the difference between fast feedback and the
 team turning the build cache off because it "doesn't help".
 
 The Conan lockfile reference ties into [§13's reproducibility
-story](../13-reproducibility-abi/) — pinning the lockfile is what
+story](../13-reproducibility-abi/): pinning the lockfile is what
 makes the cached `conan install` layer trustworthy across CI runs.
 
-## ABI labels — tell future-you what's inside
+## ABI labels: tell future-you what's inside
 
 A small `ubi10/ubi-micro` image is opaque. You can't `dnf list
 installed`. You can't `ldd` your binary. Six months from now,
@@ -235,26 +256,26 @@ ENTRYPOINT ["/usr/local/bin/myservice"]
 `podman inspect myservice:1.4.2 | jq '.[0].Labels'` reads them
 all back at incident time. The `org.opencontainers.image.*`
 labels are the standard set; the `ai.cpp-tutorial.*` labels are
-ours and you should adapt the prefix to your org. **The point is
-that a 26 MB image is too small to hold "the toolchain that
-built me" — so write the toolchain identity in as metadata
-instead.**
+ours and you should adapt the prefix to your org. **A 26 MB
+image is too small to hold "the toolchain that built me," so
+write the toolchain identity in as metadata instead.**
 
 ## The glibc-mismatch story
 
-`ubi10/ubi-micro:10.2` ships glibc 2.39. So does `ubi10/ubi:10.2`
-— which is exactly why, if you build *and* run on UBI 10, this
+`ubi10/ubi-micro:10.2` ships glibc 2.39. So does `ubi10/ubi:10.2`,
+which is exactly why, if you build *and* run on UBI 10, this
 whole class of failure never appears: both stages share the same
 glibc, so every versioned symbol your binary references is present
 at runtime. The drift only shows up when the build stage and the
 runtime stage come from *different* glibc lineages.
 
-To make that failure reproducible on demand, demo-01 engineers it
-deliberately. `Containerfile.ubi-micro-glibc-mismatch` builds the
+To make that failure reproducible on demand, demo-01 ships a
+dedicated variant that triggers it.
+`Containerfile.ubi-micro-glibc-mismatch` builds the
 service on `docker.io/library/fedora:42` (glibc 2.41) and runs it on
 `ubi10/ubi-micro:10.2` (glibc 2.39). It compiles with
 `-static-libstdc++ -static-libgcc` and a forced link reference,
-`-Wl,--require-defined=sched_setattr` — and `sched_setattr` is
+`-Wl,--require-defined=sched_setattr`, and `sched_setattr` is
 versioned `GLIBC_2.41` in Fedora 42's libc, a version node that
 glibc 2.39 does not carry at all. The container starts, the dynamic
 linker goes looking for that symbol version in the runtime's
@@ -268,23 +289,23 @@ The lesson holds regardless of which two distros you cross: **the
 build image and the runtime image are not guaranteed to share a
 glibc, and `-static-libstdc++` is not enough to save you.** Static
 linking libstdc++ pulls the C++ runtime into the binary, but glibc
-stays *dynamically* linked — so a newer symbol version baked in at
+stays *dynamically* linked, so a newer symbol version baked in at
 build time is still resolved against whatever `libc.so.6` the
 runtime image happens to ship. The fix is to link glibc statically
 too: `-static -static-libgcc -static-libstdc++`, as in demo-01's
 working `Containerfile.ubi-micro` variant, which has no dynamic
-libc dependency to mismatch. The simpler discipline — **use the
-same UBI release for the build stage and the runtime stage** — is
-why UBI-10-on-UBI-10 sidesteps the problem without any static
-linking at all. The general "build host vs runtime host CPU"
-version of this problem — AVX-512 in the binary, an older CPU
-in production — is what [§14](../14-pitfalls/) covers; the
+libc dependency to mismatch. The simpler discipline is to **use
+the same UBI release for the build stage and the runtime stage**.
+That is why UBI-10-on-UBI-10 sidesteps the problem without any
+static linking at all. The general "build host vs runtime host
+CPU" version of this problem (AVX-512 in the binary, an older CPU
+in production) is what [§14](../14-pitfalls/) covers; the
 toolchain mismatch story is its sibling.
 
-## Production diagnostic — what's actually inside this image?
+## Production diagnostic: what's actually inside this image?
 
 When triage starts with "what version of `libstdc++` is in
-that image?" — here's the recipe:
+that image?", here's the recipe:
 
 ```bash
 # 1. inspect labels you wrote at build time
@@ -334,7 +355,7 @@ are not portable across CPU feature sets: a binary built with
 `-march=native` on a build host with AVX-512 will SIGILL on a
 runtime host without it. The labels above (`ai.cpp-tutorial.march`)
 make that decision visible. [§14 walks through the AVX-512
-pitfall in detail](../14-pitfalls/) — it's where this section's
+pitfall in detail](../14-pitfalls/); it's where this section's
 "build base vs runtime base" theme meets "build host CPU vs
 runtime host CPU".
 
@@ -349,7 +370,7 @@ verified sizes:
 | `single-stage-naive` | 689 MB | (baseline) |
 | `ubi-multistage` | 114 MB | toolchain, Conan cache, intermediates, source |
 | `ubi-micro` | 26.4 MB | + bash, dnf, every utility |
-| `ubi-micro-glibc-mismatch` | 25.2 MB | broken — dies on `GLIBC_2.41` not found |
+| `ubi-micro-glibc-mismatch` | 25.2 MB | broken: dies on `GLIBC_2.41` not found |
 
 Run `./demo.sh` to build and tag all four; `./demo.sh inspect`
 walks through the diagnostic recipe above on each variant.

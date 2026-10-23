@@ -7,7 +7,7 @@ duration: "15 minutes"
 
 ## Learning objectives
 
-By the end of this section you can:
+By the end of this chapter you can:
 
 - Predict the cache behaviour of `std::vector`, `std::deque`,
   `std::list`, `std::map`, and `std::unordered_map` on a hot
@@ -16,8 +16,8 @@ By the end of this section you can:
   `boost::container::flat_map` (today; C++23 `std::flat_map`
   once compilers ship it), and a sorted `std::vector` of pairs
   based on insert pattern, lookup pattern, and N.
-- Identify "silent overhead" — `std::function`, `std::shared_ptr`
-  refcounts, `std::any`, virtual dispatch on a hot path — and
+- Identify "silent overhead": `std::function`, `std::shared_ptr`
+  refcounts, `std::any`, virtual dispatch on a hot path, and
   decide whether each is worth what it costs you.
 - Use `std::span` (C++20) and `std::mdspan` (C++23) to pass views
   without sharing ownership and without copying.
@@ -28,10 +28,30 @@ By the end of this section you can:
 
 {% include excalidraw.html name="06-stl-layout-flat-vs-node" caption="Memory layout: contiguous vector vs node-based containers." %}
 
+## Why this matters
+
+Picking a container in C++ looks like a two-minute decision, but
+it quietly sets how many cache lines the CPU has to fetch on
+every access. The gap between a contiguous container and a
+node-based one on the same workload is not a rounding error: this
+chapter's benchmark shows `boost::container::flat_map` beating
+`std::unordered_map` by 2.5× and `std::map` by roughly 35× on a
+plain iterate-and-sum loop, with no algorithmic difference between
+them.
+
+That gap matters more, not less, once the service runs in a
+container with a memory ceiling. Under `memory.high` pressure,
+scattered node-based containers degrade several times faster than
+contiguous ones, because every reclaimed page becomes a fault on
+the next access. The same reasoning applies to `std::function`,
+`std::shared_ptr`, and `std::any`: each looks free in the type
+system, but each carries a measurable cost in cache misses,
+indirection, or allocation that a hot path pays for on every call.
+
 ## The 2.5× hidden in your container choice
 
 On the same `N=262144` workload, with the same payload struct,
-on the same kernel — demo-02 measures these iterate-and-sum
+on the same kernel, demo-02 measures these iterate-and-sum
 median times:
 
 | Container | Median iterate time | Relative |
@@ -56,18 +76,18 @@ The CPU is reading from L1 most of the time, occasionally L2,
 rarely main memory. Each value costs roughly 1 nanosecond.
 
 A node-based container puts each value in its own heap
-allocation, somewhere in the heap. The prefetcher can't help —
+allocation, somewhere in the heap. The prefetcher can't help;
 it has no way to know where the next node lives until the
 current node's `next` pointer is dereferenced. Every node is a
 fresh cache miss back to L2 or main memory. Each value costs
 roughly 15-40 ns, sometimes 100+ ns under pressure.
 
 **The data structure didn't change between contiguous and
-scattered — the layout did.** This section is about making
-that layout decision deliberately, before it shows up as a 2.5×
+scattered: the layout did.** This section is about making
+that layout decision by design, before it shows up as a 2.5×
 gap on the dashboard.
 
-## Why contiguous wins — a cache-line view
+## Why contiguous wins: a cache-line view
 
 The diagram above shows the two memory layouts side by side, but
 the numeric mechanism is worth one paragraph more.
@@ -75,8 +95,8 @@ the numeric mechanism is worth one paragraph more.
 Modern x86-64 has 64-byte L1 cache lines. An `int` is 4 bytes,
 so 16 ints fit in one line. A `std::vector<int>` stores them
 back-to-back: line 1 holds elements 0-15, line 2 holds 16-31,
-and so on. Iterating 1,000 elements touches ~63 cache lines —
-and the L1 hardware prefetcher recognizes the linear stride and
+and so on. Iterating 1,000 elements touches ~63 cache lines;
+the L1 hardware prefetcher recognizes the linear stride and
 fetches lines 2, 3, 4 *ahead of* line 1's load arriving in the
 register file. By the time the CPU asks for element 16, the
 line containing it is already in L1.
@@ -105,7 +125,7 @@ clustered they are.
 
 ## The four containers in question
 
-Demo-02 benchmarks these four, deliberately:
+Demo-02 benchmarks these four containers by design:
 
 ```cpp
 // 1. Hash table — O(1) lookup, scattered storage
@@ -128,7 +148,7 @@ std::vector<std::pair<int, Payload>> v;
 C++23's `std::flat_map` (the standard version exists on paper
 but library implementations are still catching up). It's a
 header-only Boost component; including it doesn't pull the rest
-of Boost. It implements the C++23 `flat_map` semantics — a
+of Boost. It implements the C++23 `flat_map` semantics: a
 sorted vector of `pair<K,V>` under the hood, with a `map`-shaped
 interface on top.
 
@@ -138,8 +158,8 @@ The trade-off shape is:
 |---|---|---|---|---|---|
 | `unordered_map` | **O(1) avg** | O(1) amortized | O(1) amortized | slow (scattered) | bucket pointer + node header ≈ 24-48 bytes |
 | `map` | O(log N) | O(log N) | O(log N) | slowest (RB-tree traversal) | 3 pointers + color flag ≈ 32-48 bytes |
-| `flat_map` | O(log N) | O(1) amortized | **O(N)** | **fast (contiguous)** | ~0 — just the pair |
-| `vector<pair>` linear | O(N) | O(1) amortized | O(N) | **fast (contiguous)** | ~0 — just the pair |
+| `flat_map` | O(log N) | O(1) amortized | **O(N)** | **fast (contiguous)** | ~0, just the pair |
+| `vector<pair>` linear | O(N) | O(1) amortized | O(N) | **fast (contiguous)** | ~0, just the pair |
 
 The choice is workload-shaped:
 
@@ -167,12 +187,12 @@ contiguous ones**. Why: every reclaimed node-page triggers a
 page fault on the next access; contiguous containers fault
 once per N elements, scattered ones fault closer to once per
 element. The "pressure ratio" column in demo-02's output
-makes this concrete — `flat_map` typically shows a 1.0-1.2×
+makes this concrete: `flat_map` typically shows a 1.0-1.2×
 slowdown under pressure; `unordered_map` shows 2-5×; `map`
 can be 10-50× worse depending on N.
 
 This is the same mechanism that makes [§11's noisy-neighbor
-scenario costly](../11-noisy-neighbors/) — once the system is
+scenario costly](../11-noisy-neighbors/); once the system is
 reclaiming pages, latency-sensitive containers with scattered
 working sets pay the most.
 
@@ -186,7 +206,7 @@ Reach for `std::vector` first. The four cases where it's wrong:
    `std::map` keep iterators valid. If you're holding an
    iterator across an insertion, vector fails.
 2. **You insert in the middle frequently.** Vector's middle
-   insert is O(N) — every element after the insertion shifts.
+   insert is O(N): every element after the insertion shifts.
    Above a few hundred elements with frequent middle-inserts,
    `std::deque` or `std::list` wins.
 3. **You need O(1) lookup by key, not by index.** Vector
@@ -194,10 +214,10 @@ Reach for `std::vector` first. The four cases where it's wrong:
    binary search (use `flat_map` instead) or a hash table.
 4. **The element type is enormous and the container is tiny.**
    A `std::vector<std::array<char, 4096>>` of 3 elements is
-   probably better as `std::array<std::array<char, 4096>, 3>`
-   — the heap allocation is overhead.
+   probably better as `std::array<std::array<char, 4096>, 3>`;
+   the heap allocation is overhead.
 
-In every other case — and this is most cases — `std::vector` is
+In every other case (and this is most cases), `std::vector` is
 the default that wins on cache locality, allocator simplicity,
 and code readability all at once.
 
@@ -218,14 +238,14 @@ Library support is still catching up:
 | `boost::container::flat_map` | shipping (Boost 1.48+, header-only) |
 
 For the tutorial demos in 2026, **`boost::container::flat_map`
-is the portable choice** — it ships in `boost-headers-only` on
+is the portable choice**: it ships in `boost-headers-only` on
 UBI's package channels, doesn't pull the rest of Boost, and
 has the same API as the standard version. Migrating to
 `std::flat_map` when libstdc++ catches up is a header change
 and a namespace change.
 
 The "vector + linear scan" alternative is *fine* for very small
-N — under ~100, the constant-factor wins of a linear scan in
+N: under ~100, the constant-factor wins of a linear scan in
 contiguous memory beat the O(log N) of binary search. Above ~100,
 move to `flat_map`.
 
@@ -234,7 +254,7 @@ move to `flat_map`.
 Three abstractions that look free in the type system but cost
 real bytes and cycles:
 
-**`std::function<R(Args...)>`** — type-erased callable. Internally
+**`std::function<R(Args...)>`**: type-erased callable. Internally
 holds a small-buffer-optimized storage (typically 16-32 bytes) and
 a virtual function pointer for dispatch. Each call goes through
 indirect call instruction. A `std::function` member adds ~48 bytes
@@ -242,20 +262,20 @@ to your class size and turns every invocation into a likely
 cache miss on the captured state. For hot-path callbacks, prefer
 a typed function pointer or a template parameter.
 
-**`std::shared_ptr<T>`** — reference-counted ownership. The
+**`std::shared_ptr<T>`**: reference-counted ownership. The
 shared_ptr itself is 2 pointers (16 bytes on x86-64), and the
 referenced control block is another 24-32 bytes for the
 refcount, weak count, and deleter. Every copy is two atomic
 increments; every destruction is a possible atomic decrement
 and a possible deallocation. If you don't *need* shared
-ownership — and most code that uses `shared_ptr` doesn't — use
+ownership (and most code that uses `shared_ptr` doesn't), use
 `unique_ptr` or pass-by-reference.
 
-**`std::any`** — type-erased storage. Holds a `void*` plus a
+**`std::any`**: type-erased storage. Holds a `void*` plus a
 type-info pointer plus a small-buffer-optimization region.
 Every `any_cast` is a `typeid` comparison. Every modification
 may reallocate. `std::any` is "I don't want to be in the type
-system" — sometimes the right call (config parsers, plugin
+system", sometimes the right call (config parsers, plugin
 boundaries), often not.
 
 **Virtual dispatch in containers.** A `std::vector<Shape*>` of
@@ -269,7 +289,7 @@ dispatches without an indirect call. Iglberger's *C++ Software Design*
 chapter 4 walks through this conversion in detail; the runtime gap
 is typically 3-10× on iterate-heavy workloads.
 
-## `std::span` and `std::mdspan` — views, not copies, not pointers
+## `std::span` and `std::mdspan`: views, not copies, not pointers
 
 C++20 `std::span<T>` is a non-owning view: a pointer + a length.
 It's the right return type for "I want to read your contiguous
@@ -288,7 +308,7 @@ sum_of_squares(my_array);            // array → span conversion
 sum_of_squares({raw_ptr, length});   // raw memory → span
 ```
 
-This is API hygiene as much as performance — `span` doesn't
+This is API hygiene as much as performance: `span` doesn't
 constrain the caller's storage choice, which lets the *caller*
 pick the right container without the API forcing one. Iglberger's
 *C++ Software Design* chapter 9 on type erasure trade-offs
@@ -296,7 +316,7 @@ develops this further.
 
 C++23 `std::mdspan<T, Extents>` is the same idea for
 multi-dimensional layouts. A 2D image, a 3D voxel grid, a
-matrix — instead of passing a `std::vector<std::vector<float>>`
+matrix: instead of passing a `std::vector<std::vector<float>>`
 (two indirections per access, terrible cache locality) you
 pass a `std::mdspan<float, extents<dynamic_extent, dynamic_extent>>`
 that views a single contiguous buffer. Strides are computed
@@ -313,7 +333,7 @@ at the view level; the underlying storage stays flat.
 - A 1D `span` plus `i * cols + j` indexing is clearer.
 - The "matrix" is 3×3 and lives in a single cache line anyway.
 
-## Production diagnostic — measure cache effects
+## Production diagnostic: measure cache effects
 
 When a service's hot loop is slower than the algorithm should
 predict, the data layout is suspect. Three commands to look at:
@@ -353,8 +373,8 @@ ordered iteration you sort a slice. The language
 opinions are narrow, and the cache cost of those opinions is
 baked in.
 
-C++ gives you the full spectrum — hash, tree, sorted-vector,
-unsorted-vector, custom layouts — and the cache cost of each
+C++ gives you the full spectrum: hash, tree, sorted-vector,
+unsorted-vector, custom layouts, and the cache cost of each
 is yours to measure. **That freedom is the lever**, but it also
 means the wrong choice silently costs 2.5× on iterations and
 35× on tree traversals. The standard library default isn't
@@ -391,7 +411,7 @@ are from this demo's instrumented run.
   iterators), ch. 5 (algorithms with cache-awareness)
 - Iglberger, *C++ Software Design*, ch. 4 (the abstraction tax),
   ch. 9 (type erasure trade-offs)
-- [cppreference.com — `std::flat_map`](https://en.cppreference.com/w/cpp/container/flat_map)
+- [cppreference.com: `std::flat_map`](https://en.cppreference.com/w/cpp/container/flat_map)
   (C++23, status of library implementations)
 - [Boost.Container's `flat_map`
   documentation](https://www.boost.org/doc/libs/release/doc/html/boost/container/flat_map.html)
@@ -404,5 +424,5 @@ it](../07-memory-management/): now that the data layout is
 decided, the next lever is where the memory those structures
 sit on comes from. `std::pmr::monotonic_buffer_resource` and
 `std::pmr::unsynchronized_pool_resource` are the two arenas
-that move the number — and the cost actually lives in page
+that move the number; the cost actually lives in page
 faults, not malloc.

@@ -7,20 +7,37 @@ duration: "10 minutes"
 kind: Concepts
 ---
 
-# RAII & Container Resource Discipline
+## Learning objectives
 
-Most C++ resources you'll meet in a service — heap memory,
-file descriptors, sockets, mutexes, log handles, gRPC channels
-— are *acquirable*: there's a system call or constructor that
-hands you a handle and an obligation to give it back. **RAII —
-Resource Acquisition Is Initialization** — is the C++ idiom
+By the end of this chapter you can:
+
+- Explain how RAII ties resource cleanup to object lifetime so the
+  destructor runs on every exit path: normal return, early return,
+  and exception.
+- Calculate how a small per-request leak compounds into an `EMFILE`
+  failure or a cgroup-OOM kill under container resource limits
+  (`nofile`, `pids.max`, `memory.high`).
+- Write a minimal RAII wrapper (`unique_fd`) that closes a file
+  descriptor on every exit path without a manual `close()` call in
+  the calling function.
+- Apply `std::lock_guard` in place of manual `mutex.lock()` /
+  `unlock()` to remove deadlock-prone early returns.
+- Recognize what RAII does not protect against: circular
+  `shared_ptr` ownership, throwing destructors, the cgroup
+  OOM-killer, and memory-layout problems.
+
+## Why this matters
+
+Most C++ resources you'll meet in a service: heap memory,
+file descriptors, sockets, mutexes, log handles, gRPC channels,
+are *acquirable*. There's a system call or constructor that
+hands you a handle and an obligation to give it back. **RAII
+(Resource Acquisition Is Initialization)** is the C++ idiom
 that ties that obligation to the *lifetime* of an object on the
 stack instead of to a remembered call to `cleanup()` somewhere
 in the function. Constructor acquires; destructor releases;
 the language runs both for you on every exit path, including
 the exit paths you forgot existed.
-
-{% include excalidraw.html name="03-raii-discipline" caption="RAII vs manual cleanup: destructors fire on every exit path." %}
 
 On a development workstation with 64 cores, 64 GB of RAM, and
 nothing else competing, leaking a few hundred file descriptors
@@ -49,6 +66,8 @@ the function and accidentally adds a third early-exit. The
 of time on tools that find leaks; this section is about making
 the leaks impossible to write in the first place.
 
+{% include excalidraw.html name="03-raii-discipline" caption="RAII vs manual cleanup: destructors fire on every exit path." %}
+
 ## What RAII actually is
 
 The mechanic is two language features working together:
@@ -56,7 +75,7 @@ The mechanic is two language features working together:
 1. **Object lifetime is bound to scope.** When you write
    `Connection conn{...};` in a function, the `Connection`
    object's storage is on the stack frame. When the function
-   returns — by any path — the destructor `~Connection()`
+   returns (by any path), the destructor `~Connection()`
    runs.
 2. **Destructors run during stack unwinding.** When an
    exception propagates out of a function, the stack unwinds
@@ -108,7 +127,7 @@ The three failure modes:
    blame won't point at this function.
 3. **Refactoring adds a fourth exit path** that nobody
    updated to call `close()`. This one is the most common
-   in practice — a function with three exit paths is fine
+   in practice: a function with three exit paths is fine
    today and broken six months from now.
 
 The RAII version handles all three by tying the fd's lifetime
@@ -198,9 +217,9 @@ mtx.unlock();
 }
 ```
 
-## What this section does NOT promise
+## What this chapter does not promise
 
-A few honest caveats so you don't oversell RAII to teammates:
+A few blunt caveats so you don't oversell RAII to teammates:
 
 - **RAII does not save you from circular ownership.** A
   `shared_ptr<A>` holding a `shared_ptr<B>` that holds a
@@ -238,7 +257,7 @@ RAII shows up in every later section as a baseline assumption:
   shutdown is clean rather than racy.
 - {% include section.html n=12 %} (Debugging) covers what
   AddressSanitizer, LeakSanitizer, and Valgrind tell you when
-  RAII is *missing* — the resource still ends up in their
+  RAII is *missing*: the resource still ends up in their
   reports.
 
 The pattern itself is simple. The discipline is using it
@@ -258,7 +277,7 @@ matter.
 > moves). Read it when you're designing a service rather than
 > learning the idiom.
 
-## Lab tip — see the failure on your machine
+## Lab tip: see the failure on your machine
 
 If you want to feel the difference rather than read about it,
 the smallest reproducer is a tight loop that opens files
