@@ -22,7 +22,7 @@
       "groupIds": [],
       "fontSize": 20,
       "fontFamily": 1,
-      "text": "The C++ allocator stack — where the cost actually lives",
+      "text": "The C++ allocator stack: where the cost actually lives",
       "textAlign": "center",
       "verticalAlign": "middle"
     },
@@ -358,7 +358,7 @@
       "groupIds": [],
       "fontSize": 11,
       "fontFamily": 1,
-      "text": "PMR result (r96)\nbatch, 200 iters/req\n\nstd::allocator:\n  p50  8.66 µs\n  p99 15.29 µs\n\nstd::pmr:\n  p50  4.08 µs\n  p99  5.61 µs\n  2.12× faster\n\n(serve mode: no\nwin — see §7)",
+      "text": "PMR result (r96)\nbatch, 200 iters/req\n\nstd::allocator:\n  p50  8.66 µs\n  p99 15.29 µs\n\nstd::pmr:\n  p50  4.08 µs\n  p99  5.61 µs\n  2.12× faster\n\n(serve mode: no\nwin: see §7)",
       "textAlign": "left",
       "verticalAlign": "top"
     },

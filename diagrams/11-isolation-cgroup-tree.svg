@@ -45,7 +45,7 @@
   <rect width="900" height="580" fill="url(#grid)" opacity="0.4"/>
 
   <!-- Title -->
-  <text x="450" y="30" class="ttl-big" text-anchor="middle">cgroup v2 hierarchy — demo-05 isolation scenarios</text>
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">cgroup v2 hierarchy: demo-05 isolation scenarios</text>
 
   <!-- Host root cgroup -->
   <rect class="band b-root" x="340" y="50" width="220" height="46"/>
@@ -76,7 +76,7 @@
   <!-- tenant-a (demo05-a, latency-sensitive) -->
   <rect class="band b-a" x="80" y="320" width="280" height="140"/>
   <text x="220" y="343" class="ttl" text-anchor="middle">demo05-a</text>
-  <text x="220" y="360" class="role role-a" text-anchor="middle">tenant-a — latency-sensitive C++ HTTP server</text>
+  <text x="220" y="360" class="role role-a" text-anchor="middle">tenant-a: latency-sensitive C++ HTTP server</text>
   <line x1="100" y1="370" x2="340" y2="370" stroke="#4a73b8" stroke-width="0.5" opacity="0.5"/>
   <text x="100" y="388" class="mono">cpu.weight     = 100  (default)</text>
   <text x="100" y="406" class="mono">cpuset.cpus    = 0-10</text>
@@ -87,7 +87,7 @@
   <!-- tenant-b (demo05-b, noisy neighbor) -->
   <rect class="band b-b" x="540" y="320" width="280" height="140"/>
   <text x="680" y="343" class="ttl" text-anchor="middle">demo05-b</text>
-  <text x="680" y="360" class="role role-b" text-anchor="middle">tenant-b — CPU-bound batch workload</text>
+  <text x="680" y="360" class="role role-b" text-anchor="middle">tenant-b: CPU-bound batch workload</text>
   <line x1="560" y1="370" x2="800" y2="370" stroke="#b86742" stroke-width="0.5" opacity="0.5"/>
   <text x="560" y="388" class="mono">cpu.weight     = </text>
   <text x="660" y="388" class="accent-t">10</text>

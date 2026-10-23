@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 540" role="img"
-     aria-label="Profile-guided optimization is a three-pass build. Pass 1 compiles the source with -fprofile-generate to produce an instrumented binary that is slightly slower but records runtime statistics. Pass 2 runs the instrumented binary against a representative workload, generating .profraw files; these are merged with llvm-profdata into a profile data file. Pass 3 compiles the source again with -fprofile-use, applying the recorded profile data to make inlining, layout, and branch-prediction decisions; the result is the optimized production binary. The feedback loop from Pass 2 back into Pass 3 — the recorded profile data — is the entire mechanism, shown in red. LTO is orthogonal: -flto is applied in both Pass 1 and Pass 3.">
+     aria-label="Profile-guided optimization is a three-pass build. Pass 1 compiles the source with -fprofile-generate to produce an instrumented binary that is slightly slower but records runtime statistics. Pass 2 runs the instrumented binary against a representative workload, generating .profraw files; these are merged with llvm-profdata into a profile data file. Pass 3 compiles the source again with -fprofile-use, applying the recorded profile data to make inlining, layout, and branch-prediction decisions; the result is the optimized production binary. The feedback loop from Pass 2 back into Pass 3: the recorded profile data: is the entire mechanism, shown in red. LTO is orthogonal: -flto is applied in both Pass 1 and Pass 3.">
   <defs>
     <style><![CDATA[
       .bg       { fill: #fdfbf7; }
@@ -45,7 +45,7 @@
   <rect width="900" height="540" fill="url(#grid)" opacity="0.4"/>
 
   <!-- Title -->
-  <text x="450" y="30" class="ttl-big" text-anchor="middle">Profile-guided optimization — three-pass build, one feedback loop</text>
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">Profile-guided optimization: three-pass build, one feedback loop</text>
 
   <!-- Source code -->
   <rect class="band b-src" x="30" y="160" width="120" height="80"/>
@@ -59,7 +59,7 @@
 
   <!-- Pass 1: Instrument -->
   <rect class="band b-pass1" x="200" y="80" width="200" height="240"/>
-  <text x="300" y="104" class="ttl" text-anchor="middle">Pass 1 — Instrument</text>
+  <text x="300" y="104" class="ttl" text-anchor="middle">Pass 1: Instrument</text>
   <text x="300" y="120" class="sec" text-anchor="middle">compile with profile counters</text>
 
   <rect class="b-bin-p1" x="220" y="136" width="160" height="48" stroke-dasharray="2 2"/>
@@ -81,7 +81,7 @@
 
   <!-- Pass 2: Profile collection -->
   <rect class="band b-pass2" x="450" y="80" width="200" height="240"/>
-  <text x="550" y="104" class="ttl" text-anchor="middle">Pass 2 — Profile</text>
+  <text x="550" y="104" class="ttl" text-anchor="middle">Pass 2: Profile</text>
   <text x="550" y="120" class="sec" text-anchor="middle">run against representative load</text>
 
   <rect class="b-bin-p2" x="470" y="136" width="160" height="48" stroke-dasharray="2 2"/>
@@ -98,13 +98,13 @@
   <text x="550" y="296" class="sec" text-anchor="middle">the entire feedback loop:</text>
   <text x="550" y="310" class="accent-l" text-anchor="middle">"what the binary actually does"</text>
 
-  <!-- Arrow pass 2 -> pass 3 (RED — the feedback loop) -->
+  <!-- Arrow pass 2 -> pass 3 (RED: the feedback loop) -->
   <line x1="650" y1="200" x2="700" y2="200" class="arrow-r" marker-end="url(#arrowhead-r)"/>
   <text x="675" y="192" class="accent-l" text-anchor="middle">profile data</text>
 
   <!-- Pass 3: Optimize -->
   <rect class="band b-pass3" x="700" y="80" width="180" height="240"/>
-  <text x="790" y="104" class="ttl" text-anchor="middle">Pass 3 — Optimize</text>
+  <text x="790" y="104" class="ttl" text-anchor="middle">Pass 3: Optimize</text>
   <text x="790" y="120" class="sec" text-anchor="middle">compile with feedback</text>
 
   <rect class="b-bin-p3" x="720" y="136" width="140" height="48" stroke-dasharray="2 2"/>

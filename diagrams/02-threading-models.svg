@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 580" role="img"
-     aria-label="Threading models laid out on two axes — stackful vs stackless and kernel-visible vs invisible — with notes on which fits I/O-bound versus CPU-bound workloads">
+     aria-label="Threading models laid out on two axes: stackful vs stackless and kernel-visible vs invisible: with notes on which fits I/O-bound versus CPU-bound workloads">
   <defs>
     <style><![CDATA[
       .bg       { fill: #fdfbf7; }
@@ -61,7 +61,7 @@
        the rotation drama. -->
   <line x1="100" y1="500" x2="100" y2="100" class="axis" marker-end="url(#ah)"/>
 
-  <!-- Quadrant labels — these carry the Y-axis dimension now that the
+  <!-- Quadrant labels: these carry the Y-axis dimension now that the
        rotated axis labels are gone. Top row = M:N (kernel-invisible),
        bottom row = 1:1 (kernel-visible). -->
   <text x="280" y="155" class="quad-l">stackful · M:N</text>
@@ -111,10 +111,10 @@
        overlap any pill. Arrow direction points INTO the region the label
        describes:
          I/O label sits above the top pills, ↓ points to the top half
-                  (M:N / kernel-invisible — models that fit I/O-bound,
+                  (M:N / kernel-invisible: models that fit I/O-bound,
                    high-fan-out workloads).
          CPU label sits below the bottom pill, ↑ points to the bottom half
-                  (1:1 / kernel-visible — models that fit CPU-bound work,
+                  (1:1 / kernel-visible: models that fit CPU-bound work,
                    pools sized to the cgroup CPU quota). -->
   <text x="460" y="145" class="annot annot-io" text-anchor="middle">
     ↓ I/O-bound · high fan-out region

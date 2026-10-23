@@ -11,7 +11,7 @@ permalink: /bibliography/
         <h1>The four reference books, and where each one extends this tutorial.</h1>
         <p class="hero__lead">
             This tutorial is positioned as a runnable companion to a small
-            set of excellent books — not a replacement for any of them.
+            set of excellent books, not a replacement for any of them.
             Each book has its own angle, its own depth on a specific
             axis, and a different reading order. Below: what each book
             covers, when to reach for it, and the section-by-section
@@ -22,8 +22,8 @@ permalink: /bibliography/
         </p>
         <p class="hero__lead">
             These same books anchor the
-            <a href="https://patterncatalyst.github.io/cpp-statelessness/docs/00-index/">statelessness compendium</a>
-            — a standalone companion site on stateless C++ service
+            <a href="https://patterncatalyst.github.io/cpp-statelessness/docs/00-index/">statelessness compendium</a>,
+            a standalone companion site on stateless C++ service
             design. The cross-reference matrix below covers both this
             tutorial and the compendium.
         </p>
@@ -33,12 +33,12 @@ permalink: /bibliography/
 <section class="section">
     <div class="container container-prose">
 
-<h2>Andrist &amp; Sehr — <em>C++ High Performance</em>, 2nd Edition</h2>
+<h2>Andrist &amp; Sehr: <em>C++ High Performance</em>, 2nd Edition</h2>
 
 <p>
 Björn Andrist and Viktor Sehr, Packt, 2020.
 The closest analogue to this tutorial in book form. Deep on language
-machinery, lighter on container context — which is exactly the gap
+machinery, lighter on container context, which is exactly the gap
 this tutorial fills.
 </p>
 
@@ -61,21 +61,21 @@ measures.
 on each technique before seeing it measured in a container. <strong>After
 this tutorial</strong> if you want to extend any pattern (PMR, lock-free
 queues, parallel algorithms) into territory this tutorial only points
-at. The two work in either order — they answer adjacent questions.
+at. The two work in either order; they answer adjacent questions.
 </p>
 
 <h3>What this tutorial points at it for</h3>
 
 <ul>
-<li><a href="{{ '/docs/05-compile-time-wins/' | relative_url }}"><strong>§5</strong></a> (Compile-time wins) — the LTO/PGO mechanics</li>
-<li><a href="{{ '/docs/06-stl-layout/' | relative_url }}"><strong>§6</strong></a> (STL &amp; layout) — cache-conscious container choice</li>
-<li><a href="{{ '/docs/07-memory-management/' | relative_url }}"><strong>§7</strong></a> (Memory management) — PMR design rationale, custom allocators, the whole chapter 7</li>
-<li><a href="{{ '/docs/08-io-latency/' | relative_url }}"><strong>§8</strong></a> (I/O latency) — async patterns, coroutines that we didn't cover</li>
-<li><a href="{{ '/docs/11-noisy-neighbors/' | relative_url }}"><strong>§11</strong></a> (Noisy neighbors) — the parallel STL and thread-pool material</li>
-<li><a href="{{ '/docs/14-pitfalls/' | relative_url }}"><strong>§14</strong></a> (Pitfalls) — the over-abstraction and silent-overhead patterns</li>
+<li><a href="{{ '/docs/05-compile-time-wins/' | relative_url }}"><strong>§5</strong></a> (Compile-time wins): the LTO/PGO mechanics</li>
+<li><a href="{{ '/docs/06-stl-layout/' | relative_url }}"><strong>§6</strong></a> (STL &amp; layout): cache-conscious container choice</li>
+<li><a href="{{ '/docs/07-memory-management/' | relative_url }}"><strong>§7</strong></a> (Memory management): PMR design rationale, custom allocators, the whole chapter 7</li>
+<li><a href="{{ '/docs/08-io-latency/' | relative_url }}"><strong>§8</strong></a> (I/O latency): async patterns, coroutines that we didn't cover</li>
+<li><a href="{{ '/docs/11-noisy-neighbors/' | relative_url }}"><strong>§11</strong></a> (Noisy neighbors): the parallel STL and thread-pool material</li>
+<li><a href="{{ '/docs/14-pitfalls/' | relative_url }}"><strong>§14</strong></a> (Pitfalls): the over-abstraction and silent-overhead patterns</li>
 </ul>
 
-<h2>Iglberger — <em>C++ Software Design</em></h2>
+<h2>Iglberger: <em>C++ Software Design</em></h2>
 
 <p>
 Klaus Iglberger, O'Reilly, 2022. Design principles and patterns for
@@ -86,8 +86,8 @@ survives at scale and what doesn't.
 <h3>What it covers</h3>
 
 <p>
-The classical design patterns rebuilt for modern C++ — Strategy,
-Visitor, Command, Bridge, Adapter — with hard-won opinions about
+The classical design patterns rebuilt for modern C++ (Strategy,
+Visitor, Command, Bridge, Adapter), with hard-won opinions about
 which ones are still worth carrying and which were artifacts of
 pre-template C++. The book's central argument is that loose coupling
 through value-based polymorphism (<code>std::variant</code>,
@@ -109,15 +109,15 @@ into ABI corners.
 <h3>What this tutorial points at it for</h3>
 
 <ul>
-<li><a href="{{ '/docs/02-introduction/' | relative_url }}"><strong>§2</strong></a> (Introduction) — the four-layer mental model loosely tracks Iglberger's separation-of-concerns argument</li>
-<li><a href="{{ '/docs/06-stl-layout/' | relative_url }}"><strong>§6</strong></a> (STL &amp; layout) — value-based polymorphism vs virtual dispatch trade-offs</li>
-<li><a href="{{ '/docs/12-analysis-debugging/' | relative_url }}"><strong>§12</strong></a> (Static analysis &amp; debugging) — what a clean type design enables for the analyzers</li>
-<li><a href="{{ '/docs/13-reproducibility-abi/' | relative_url }}"><strong>§13</strong></a> (Reproducibility &amp; ABI) — ABI stability follows from Iglberger's loose-coupling argument</li>
-<li><a href="{{ '/docs/14-pitfalls/' | relative_url }}"><strong>§14</strong></a> (Pitfalls) — over-abstraction is the dual problem to under-abstraction</li>
-<li>The <a href="https://patterncatalyst.github.io/cpp-statelessness/">statelessness compendium</a> draws on Iglberger throughout — especially Doc 02 (RAII), Doc 03 (PMR), and Doc 06 (12-factor) where lifetime ownership intersects design pattern</li>
+<li><a href="{{ '/docs/02-introduction/' | relative_url }}"><strong>§2</strong></a> (Introduction): the four-layer mental model loosely tracks Iglberger's separation-of-concerns argument</li>
+<li><a href="{{ '/docs/06-stl-layout/' | relative_url }}"><strong>§6</strong></a> (STL &amp; layout): value-based polymorphism vs virtual dispatch trade-offs</li>
+<li><a href="{{ '/docs/12-analysis-debugging/' | relative_url }}"><strong>§12</strong></a> (Static analysis &amp; debugging): what a clean type design enables for the analyzers</li>
+<li><a href="{{ '/docs/13-reproducibility-abi/' | relative_url }}"><strong>§13</strong></a> (Reproducibility &amp; ABI): ABI stability follows from Iglberger's loose-coupling argument</li>
+<li><a href="{{ '/docs/14-pitfalls/' | relative_url }}"><strong>§14</strong></a> (Pitfalls): over-abstraction is the dual problem to under-abstraction</li>
+<li>The <a href="https://patterncatalyst.github.io/cpp-statelessness/">statelessness compendium</a> draws on Iglberger throughout: especially Doc 02 (RAII), Doc 03 (PMR), and Doc 06 (12-factor) where lifetime ownership intersects design pattern</li>
 </ul>
 
-<h2>Enberg — <em>Latency: Reduce delay in software systems</em></h2>
+<h2>Enberg: <em>Latency: Reduce delay in software systems</em></h2>
 
 <p>
 Pekka Enberg, Manning, 2024.
@@ -128,7 +128,7 @@ problem and walks through the techniques.
 <h3>What it covers</h3>
 
 <p>
-What latency actually is and where it accumulates — syscalls,
+What latency actually is and where it accumulates: syscalls,
 context switches, cache misses, network hops, lock contention.
 Detailed treatment of the alternatives to traditional blocking I/O
 (<code>io_uring</code>, kernel bypass, busy-spin vs futex), what
@@ -152,21 +152,21 @@ section that talks about scheduling, I/O, or kernel-side behavior.
 <h3>What this tutorial points at it for</h3>
 
 <ul>
-<li><a href="{{ '/docs/07-memory-management/' | relative_url }}"><strong>§7</strong></a> (Memory management) — the allocator-tax thesis, chapter 3 is the canonical reference</li>
-<li><a href="{{ '/docs/08-io-latency/' | relative_url }}"><strong>§8</strong></a> (I/O latency) — <code>io_uring</code> motivation, the syscall-cost model</li>
-<li><a href="{{ '/docs/09-networking-kernel/' | relative_url }}"><strong>§9</strong></a> (Networking &amp; kernel) — kernel-bypass alternatives and their trade-offs</li>
-<li><a href="{{ '/docs/10-observability-profiling/' | relative_url }}"><strong>§10</strong></a> (Observability) — where to look in the kernel for latency that doesn't show up in application telemetry</li>
-<li><a href="{{ '/docs/11-noisy-neighbors/' | relative_url }}"><strong>§11</strong></a> (Noisy neighbors) — CPU scheduling and the priority-inheritance discussion</li>
-<li><a href="{{ '/docs/14-pitfalls/' | relative_url }}"><strong>§14</strong></a> (Pitfalls) — the patterns of why low-level performance work goes wrong</li>
+<li><a href="{{ '/docs/07-memory-management/' | relative_url }}"><strong>§7</strong></a> (Memory management): the allocator-tax thesis, chapter 3 is the canonical reference</li>
+<li><a href="{{ '/docs/08-io-latency/' | relative_url }}"><strong>§8</strong></a> (I/O latency): <code>io_uring</code> motivation, the syscall-cost model</li>
+<li><a href="{{ '/docs/09-networking-kernel/' | relative_url }}"><strong>§9</strong></a> (Networking &amp; kernel): kernel-bypass alternatives and their trade-offs</li>
+<li><a href="{{ '/docs/10-observability-profiling/' | relative_url }}"><strong>§10</strong></a> (Observability): where to look in the kernel for latency that doesn't show up in application telemetry</li>
+<li><a href="{{ '/docs/11-noisy-neighbors/' | relative_url }}"><strong>§11</strong></a> (Noisy neighbors): CPU scheduling and the priority-inheritance discussion</li>
+<li><a href="{{ '/docs/14-pitfalls/' | relative_url }}"><strong>§14</strong></a> (Pitfalls): the patterns of why low-level performance work goes wrong</li>
 </ul>
 
-<h2>Ghosh — <em>Building Low Latency Applications with C++</em></h2>
+<h2>Ghosh: <em>Building Low Latency Applications with C++</em></h2>
 
 <p>
 Sourav Ghosh, Packt, 2023.
 The full worked example. Where the other three books cover individual
 techniques, Ghosh builds an entire low-latency trading ecosystem
-from scratch in modern C++ — order book, matching engine, market
+from scratch in modern C++: order book, matching engine, market
 data feed, network layer, the lot.
 </p>
 
@@ -178,7 +178,7 @@ pattern this tutorial introduces composed into one running system.
 Lock-free queues for the matching engine, custom memory pools for
 per-message allocation, busy-spin vs futex for the producer-consumer
 boundary, NUMA-aware thread placement, kernel-bypass networking with
-solarflare/onload — all in one body of code. The book is also a
+solarflare/onload, all in one body of code. The book is also a
 case study in the discipline of latency-sensitive C++ design:
 nothing dynamic on the hot path, no exceptions in the matcher, all
 allocations pre-sized at startup.
@@ -189,7 +189,7 @@ allocations pre-sized at startup.
 <p>
 <strong>Read it after this tutorial</strong> if you want to see the patterns at
 full scale. <strong>Read it before</strong> if you want a worked example to
-compare ours against — Ghosh's design choices are an excellent
+compare ours against. Ghosh's design choices are an excellent
 anchor for &ldquo;wait, why didn't this tutorial do it that way?&rdquo;
 conversations.
 </p>
@@ -197,11 +197,11 @@ conversations.
 <h3>What this tutorial points at it for</h3>
 
 <ul>
-<li><a href="{{ '/docs/07-memory-management/' | relative_url }}"><strong>§7</strong></a> (Memory management) — pre-allocated pools and the &ldquo;no allocation on hot path&rdquo; discipline</li>
-<li><a href="{{ '/docs/08-io-latency/' | relative_url }}"><strong>§8</strong></a> (I/O latency) — the kernel-bypass walkthroughs and busy-spin vs futex decision</li>
-<li><a href="{{ '/docs/11-noisy-neighbors/' | relative_url }}"><strong>§11</strong></a> (Noisy neighbors) — NUMA-aware design at the architectural level</li>
-<li><a href="{{ '/docs/12-analysis-debugging/' | relative_url }}"><strong>§12</strong></a> (Static analysis &amp; debugging) — what an &ldquo;all sanitizers, all the time&rdquo; CI looks like for latency-sensitive code</li>
-<li><a href="{{ '/docs/15-where-to-go-next/' | relative_url }}"><strong>§15</strong></a> (Where to go next) — Ghosh is the &ldquo;build a complete system&rdquo; recommendation for any reader who wants to extend this tutorial's patterns into a full architecture</li>
+<li><a href="{{ '/docs/07-memory-management/' | relative_url }}"><strong>§7</strong></a> (Memory management): pre-allocated pools and the &ldquo;no allocation on hot path&rdquo; discipline</li>
+<li><a href="{{ '/docs/08-io-latency/' | relative_url }}"><strong>§8</strong></a> (I/O latency): the kernel-bypass walkthroughs and busy-spin vs futex decision</li>
+<li><a href="{{ '/docs/11-noisy-neighbors/' | relative_url }}"><strong>§11</strong></a> (Noisy neighbors): NUMA-aware design at the architectural level</li>
+<li><a href="{{ '/docs/12-analysis-debugging/' | relative_url }}"><strong>§12</strong></a> (Static analysis &amp; debugging): what an &ldquo;all sanitizers, all the time&rdquo; CI looks like for latency-sensitive code</li>
+<li><a href="{{ '/docs/15-where-to-go-next/' | relative_url }}"><strong>§15</strong></a> (Where to go next): Ghosh is the &ldquo;build a complete system&rdquo; recommendation for any reader who wants to extend this tutorial's patterns into a full architecture</li>
 </ul>
 
 <h2>Cross-reference matrix</h2>
@@ -253,10 +253,10 @@ prose.
 </tbody>
 </table>
 
-<h2>One more — the gotcha book</h2>
+<h2>One more: the gotcha book</h2>
 
 <p>
-A fifth book worth mentioning separately, since the
+A fifth book belongs here too, since the
 <a href="https://patterncatalyst.github.io/cpp-statelessness/">statelessness compendium</a>
 cites it heavily:
 </p>
@@ -267,7 +267,7 @@ A pattern-language treatment of the specific mistakes that show
 up over and over in production C++. Allocator type-erasure traps,
 container/allocator mismatches, dangling references across
 ownership boundaries, lifetime confusion in the presence of
-exceptions — the cluster of mistakes that PMR in particular makes
+exceptions: the cluster of mistakes that PMR in particular makes
 easy to commit. Less foundational than the four reference books
 above, but the highest-density-per-page treatment of &ldquo;here's
 exactly the thing you're about to do wrong&rdquo; that we found.
@@ -277,8 +277,8 @@ exactly the thing you're about to do wrong&rdquo; that we found.
 
 <p>
 Per the project's editorial constraint: every citation in this
-tutorial is a <strong>pointer</strong> — &ldquo;see Iglberger ch. 4 for the full
-pattern&rdquo; — not a displacing summary. The books exist; if this
+tutorial is a <strong>pointer</strong> (&ldquo;see Iglberger ch. 4 for the full
+pattern&rdquo;), not a displacing summary. The books exist; if this
 tutorial replaced reading them, we'd be doing the authors and the
 reader a disservice. This bibliography is meant to make the
 pointers easier to follow, not to compress the books into bullet
@@ -299,7 +299,7 @@ Andrist &amp; Sehr (for language refresh) → this tutorial → Enberg (for the 
 <li><strong>If you're preparing for a perf-focused interview:</strong>
 this tutorial → Enberg (theory of latency) → Andrist &amp; Sehr (language deep-dive). The questions you'll get are mostly in the intersection.</li>
 <li><strong>If you've never measured anything you've optimized:</strong>
-this tutorial first — every claim has a runnable demo with a number on it. Then Enberg for the framework that makes measurement a habit.</li>
+this tutorial first: every claim has a runnable demo with a number on it. Then Enberg for the framework that makes measurement a habit.</li>
 </ul>
 
 <p>

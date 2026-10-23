@@ -39,7 +39,7 @@ collections:
         output: true
         permalink: /docs/:name/
     plans:
-        output: true
+        output: false
         permalink: /plans/:name/
     examples:
         output: true

@@ -10,7 +10,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": [],
       "fontSize": 20, "fontFamily": 1,
-      "text": "io_uring — two rings, shared memory, syscall amortization",
+      "text": "io_uring: two rings, shared memory, syscall amortization",
       "textAlign": "center", "verticalAlign": "middle"
     },
     {
@@ -46,7 +46,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": [],
       "fontSize": 12, "fontFamily": 1,
-      "text": "shared memory (mmap)  —  this boundary is the entire point  —  no copy, no syscall per op",
+      "text": "shared memory (mmap) :  this boundary is the entire point :  no copy, no syscall per op",
       "textAlign": "center", "verticalAlign": "middle"
     },
     {
@@ -100,7 +100,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": [],
       "fontSize": 13, "fontFamily": 1,
-      "text": "Kernel\nio_uring worker reads SQEs, dispatches to vfs / network / block layer, writes CQEs on completion\nwith IORING_SETUP_SQPOLL the kernel polls the SQ on its own — zero syscalls for steady-state I/O",
+      "text": "Kernel\nio_uring worker reads SQEs, dispatches to vfs / network / block layer, writes CQEs on completion\nwith IORING_SETUP_SQPOLL the kernel polls the SQ on its own: zero syscalls for steady-state I/O",
       "textAlign": "center", "verticalAlign": "middle"
     },
     {

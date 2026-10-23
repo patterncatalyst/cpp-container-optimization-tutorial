@@ -16,15 +16,15 @@ levers from compile time to runtime cgroup. That's a lot.
 If you want one to read next, in order of how directly each
 extends what we did:
 
-- **Andrist & Sehr, *C++ High Performance, 2nd Edition*** —
-  the closest analogue to this tutorial in book form, with
+- **Andrist & Sehr, *C++ High Performance, 2nd Edition***: the
+  closest analogue to this tutorial in book form, with
   more language depth and less container context. Particularly
   ch. 6 (CPU/micro-arch), ch. 7 (memory), ch. 11 (concurrency).
-- **Enberg, *Latency: Reduce delay in software systems*** — the
+- **Enberg, *Latency: Reduce delay in software systems***: the
   systems-side complement. Where this tutorial said "use
   `io_uring`," Enberg explains *why* the syscall model has been
   the bottleneck and what alternatives have looked like.
-- **Ghosh, *Building Low Latency Applications with C++*** — a
+- **Ghosh, *Building Low Latency Applications with C++***: a
   full worked example: a complete low-latency trading ecosystem
   built from scratch in modern C++. The trading domain is
   incidental; the value is seeing every pattern this tutorial
@@ -32,14 +32,14 @@ extends what we did:
   placement, kernel bypass) composed into one running system. Read
   it after this if you want to see the patterns at full scale,
   before it if you want a worked example to compare ours against.
-- **Iglberger, *C++ Software Design*** — what to do once your
+- **Iglberger, *C++ Software Design***: what to do once your
   service is fast. The architectural patterns that survive scale
   and that don't paint you into ABI corners.
 
-For the full annotated bibliography — extended treatment of each
+For the full annotated bibliography, with extended treatment of each
 book, suggested reading orders depending on where you're starting
 from, and a section-by-section cross-reference of which book this
-tutorial points at where — see the
+tutorial points at where, see the
 [**Bibliography page**]({{ '/bibliography/' | relative_url }}).
 
 ## Go deeper: the statelessness compendium (companion site)
@@ -49,33 +49,33 @@ model, the **[statelessness compendium](https://patterncatalyst.github.io/cpp-st
 is a separate, standalone site that goes deep on *service design*
 for the same environment. It's a thirteen-document, opinionated
 reference on what makes a C++ service safe to kill, replace, and
-replicate at the orchestrator's discretion — and how C++ language
+replicate at the orchestrator's discretion, and on how C++ language
 features, library choices, and operational patterns either support
 that property or quietly undermine it.
 
 It's reference-style rather than walking-tutorial-style, and it
 overlaps this tutorial in a few places while going much deeper:
 
-- [Doc 02 — RAII](https://patterncatalyst.github.io/cpp-statelessness/docs/02-raii/)
+- [Doc 02: RAII](https://patterncatalyst.github.io/cpp-statelessness/docs/02-raii/)
   extends §3's resource discipline into the full `RequestContext`
   request-scope pattern.
-- [Doc 03 — PMR](https://patterncatalyst.github.io/cpp-statelessness/docs/03-pmr/)
+- [Doc 03: PMR](https://patterncatalyst.github.io/cpp-statelessness/docs/03-pmr/)
   extends §7's allocator coverage into the request-arena design
   pattern.
-- [Doc 05 — Threading](https://patterncatalyst.github.io/cpp-statelessness/docs/05-threading/)
+- [Doc 05: Threading](https://patterncatalyst.github.io/cpp-statelessness/docs/05-threading/)
   extends §11's isolation demo into the in-process threading
   discipline under CFS limits.
-- [Doc 11 — Build tooling](https://patterncatalyst.github.io/cpp-statelessness/docs/11-build-tooling/)
+- [Doc 11: Build tooling](https://patterncatalyst.github.io/cpp-statelessness/docs/11-build-tooling/)
   extends §13's reproducibility principle into a worked
   service-project configuration.
 
-The capstone, [Doc 10](https://patterncatalyst.github.io/cpp-statelessness/docs/10-grpc-microservices/),
+The final project, [Doc 10](https://patterncatalyst.github.io/cpp-statelessness/docs/10-grpc-microservices/),
 composes every pattern into one realistic order-pricing gRPC
 service. Start at the
 [compendium index](https://patterncatalyst.github.io/cpp-statelessness/docs/00-index/),
 which has a reading guide and a scenario-based jump table.
 
-## Topics deliberately skipped
+## Topics out of scope
 
 - **Coroutines (C++20).** Worth a tutorial of their own; the
   async-gRPC story in §7 used callbacks and completion queues
@@ -92,8 +92,6 @@ which has a reading guide and a scenario-based jump table.
 
 ## Final pointer
 
-The reconciliation plan in [`_plans/`](../../plans/reconciliation-plan/)
-is the truthful state of this tutorial — what's verified versus
-what's drafted. If you found a claim that doesn't match what
-your machine does, please open an issue with the section and
-your `uname -r` and `lscpu` output.
+If you found a claim that does not match what your machine does,
+open an issue with the section and your `uname -r` and `lscpu`
+output.

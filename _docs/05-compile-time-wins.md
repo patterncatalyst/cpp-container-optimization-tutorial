@@ -1,13 +1,13 @@
 ---
 title: "Compile-Time Wins: LTO, PGO, constexpr"
 order: 5
-description: Three compiler-side levers that move runtime performance — link-time optimization, profile-guided optimization, and constexpr — what each costs in build time, and a worked PGO pipeline that doesn't skip the workload step.
+description: Three compiler-side levers that move runtime performance, link-time optimization, profile-guided optimization, and constexpr, what each costs in build time, and a worked PGO pipeline that doesn't skip the workload step.
 duration: "15 minutes"
 ---
 
 ## Learning objectives
 
-By the end of this section you can:
+By the end of this chapter you can:
 
 - Explain what LTO does that `-O3` alone can't, and why thin
   LTO is usually the right default.
@@ -26,11 +26,29 @@ By the end of this section you can:
 
 {% include excalidraw.html name="05-compile-time-pgo-flow" caption="Three-pass PGO: instrument → profile → optimize." %}
 
+## Why this matters
+
+C++ has no JIT and no default cross-translation-unit inlining,
+so the gap between a plain `-O3` build and one that also uses
+LTO and PGO can be a factor of two on the right workload. That
+gap is decided entirely at build time, before the binary ever
+reaches the container runtime, which makes this chapter's levers
+some of the highest-leverage changes available for a C++ service:
+no code logic changes, only how the compiler and linker treat it.
+
+The PGO pipeline also illustrates a trap worth internalizing
+early: a profile collected from an unrepresentative workload can
+make a binary slower in production than the unoptimized build,
+because the compiler faithfully optimizes for whatever it was
+shown. The `constexpr` material matters for the same reason the
+image-strategy chapter does: moving work out of the runtime path
+entirely is cheaper than making the runtime path faster.
+
 ## What -O3 leaves on the table
 
 `gcc -O3` is good. It vectorizes, inlines aggressively within a
 translation unit, unrolls loops, eliminates dead code. What it
-*can't* do — by design — is optimize across translation-unit
+*can't* do, by design, is optimize across translation-unit
 boundaries. Each `.cpp` file is compiled in isolation, gets its
 own `.o`, and the linker stitches the object files together at
 the end without re-running the optimizer.
@@ -50,10 +68,10 @@ That leaves two large pieces of performance on the floor:
    misses on real workloads.
 
 LTO addresses the first. PGO addresses the second. They're
-complementary — using both is normal. Demo-01 builds variants
+complementary; using both is normal. Demo-01 builds variants
 with each combination so you can see the size and speed delta.
 
-## LTO — the link-time inliner
+## LTO: the link-time inliner
 
 **Link-Time Optimization** moves optimization past the
 per-`.cpp` boundary. Instead of emitting object code, the
@@ -94,7 +112,7 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 CMake translates that to `-flto=thin` for clang and `-flto=auto`
 for gcc.
 
-## PGO — three passes, one feedback loop
+## PGO: three passes, one feedback loop
 
 **Profile-Guided Optimization** is the lever for layout and
 branch decisions. The idea is simple: instead of guessing which
@@ -129,7 +147,7 @@ instrumented binary in pass 1 is roughly **10% slower** than the
 baseline and **~10 MB bigger** on disk (it carries counter
 arrays for every branch and call site); demo-01's
 `pgo-instrumented` image is 124 MB vs the `pgo` final image at
-114 MB. That's not a deployment artifact — it exists for the
+114 MB. That's not a deployment artifact; it exists for the
 duration of pass 2.
 
 The compiler uses the recorded data in pass 3 for several
@@ -151,7 +169,7 @@ specific decisions:
   the stack.
 
 Typical PGO impact on a CPU-bound C++ service is **5-25%
-throughput improvement**, but the variance is huge — read the
+throughput improvement**, but the variance is huge; read the
 caveat in the next section. Combined with thin LTO, **15-30%
 is realistic** for workloads that aren't already I/O-bound.
 
@@ -172,12 +190,12 @@ A few patterns to avoid:
   pre-PGO build.
 - **Single-tenant profiles.** Recording with a single client
   hitting a service teaches the compiler that there's no
-  contention — every branch in the connection-pool code looks
+  contention: every branch in the connection-pool code looks
   monomorphic. Production with 200 concurrent clients hits
   branches PGO marked "cold".
 - **Profiles from staging hardware that doesn't match prod.**
   Branch frequencies don't change much across hardware, but
-  cache layout decisions do — function clustering is tuned to
+  cache layout decisions do; function clustering is tuned to
   the recorded I-cache size.
 
 **The fix is to record from a real workload, or from a load
@@ -188,7 +206,7 @@ your service's actual traffic. If you can't generate
 realistic load offline, record a profile from a canary
 deployment carrying live traffic instead.
 
-## `constexpr`, `consteval`, `constinit` — move work to compile time
+## `constexpr`, `consteval`, `constinit`: move work to compile time
 
 LTO and PGO are about the compiler making smarter decisions
 with the code you wrote. `constexpr` and its C++20 cousins
@@ -209,7 +227,7 @@ Where `constexpr` actually moves runtime cost:
   at compile time, the table is in `.rodata` and the lookup is
   one cache-line load.
 - **Configuration parsing.** A version number, a feature-flag
-  string, a build-info JSON — parse it `consteval` and the
+  string, a build-info JSON: parse it `consteval` and the
   parsed result is a compile-time constant.
 - **Small DSLs.** A `printf`-format-string validator, a regex
   pattern compiler, a SQL-query parser. Where the input is
@@ -220,7 +238,7 @@ Where `constexpr` produces no measurable change:
 
 - **Functions called once at startup with runtime inputs.**
   `constexpr` qualifiers on `parse_config_file(argv[1])` do
-  nothing useful — the input isn't a constant expression, so
+  nothing useful: the input isn't a constant expression, so
   the function runs at runtime regardless.
 - **Functions where the body still calls runtime functions.**
   `constexpr` doesn't make `malloc` or `iostream` operations
@@ -229,7 +247,7 @@ Where `constexpr` produces no measurable change:
   compile time.
 
 C++20 expanded what's permissible inside `constexpr` functions
-considerably — `std::vector`, much of `<algorithm>`, parts of
+considerably: `std::vector`, much of `<algorithm>`, parts of
 `<string>` became constexpr. C++23 extended this further with
 `if consteval` for branch-on-context patterns and more
 `<numeric>` / `<bit>` constexpr coverage.
@@ -238,7 +256,7 @@ The data structure consequences of constexpr-heavy designs
 (constant-time vs cache-friendly trade-offs) are
 [where §6 picks up](../06-stl-layout/).
 
-## Decision frame — which lever to pull when
+## Decision frame: which lever to pull when
 
 | Technique | Build time cost | Runtime impact | When to invest |
 |---|---|---|---|
@@ -257,9 +275,9 @@ in PGO when the service is CPU-bound and traffic patterns are
 stable enough to record a useful profile**. Full LTO is the
 last knob to turn and rarely worth it.
 
-## Production diagnostic — did the optimizations actually fire?
+## Production diagnostic: did the optimizations actually fire?
 
-A binary built by someone else (or by yesterday-you) — how do
+A binary built by someone else (or by yesterday-you): how do
 you tell what optimizations are in it?
 
 ```bash
@@ -311,23 +329,23 @@ section forward:
   pitfall in §14](../14-pitfalls/) when build host and runtime
   host disagree.
 - The `constexpr` choice interacts with [data-structure layout
-  in §6](../06-stl-layout/) — a compile-time-built lookup table
+  in §6](../06-stl-layout/): a compile-time-built lookup table
   has different cache properties than a runtime-built one.
 - The PGO workload-collection step is itself an
-  [observability-and-load-test workflow](../10-observability-profiling/)
-  — you need a load generator that matches production.
+  [observability-and-load-test workflow](../10-observability-profiling/);
+  you need a load generator that matches production.
 
 ## Demo
 
 [`examples/demo-01-image-strategy/`]({{ '/examples/demo-01-image-strategy/' | relative_url }})
 also exercises this section. The `./demo-pgo.sh` script:
 
-1. Builds an `ubi-multistage` baseline (no LTO, no PGO) — **114 MB**.
-2. Builds a `pgo-instrumented` variant — **124 MB**, ~10% slower
+1. Builds an `ubi-multistage` baseline (no LTO, no PGO): **114 MB**.
+2. Builds a `pgo-instrumented` variant: **124 MB**, ~10% slower
    under load.
 3. Runs `hey` against the instrumented binary for 60 seconds.
 4. Merges `.profraw` files with `llvm-profdata`.
-5. Builds the `pgo` final variant — **114 MB**, the recorded
+5. Builds the `pgo` final variant: **114 MB**, the recorded
    workload's optimized layout.
 6. Runs `hey` against the baseline and `pgo` binaries side by
    side and prints the throughput delta.
@@ -355,5 +373,5 @@ so you can inspect each with the production-diagnostic recipe above.
 on](../06-stl-layout/): once the compiler is doing its best,
 the next big runtime lever is whether your data is laid out so
 the CPU's cache hierarchy can help. Flat vs node, AoS vs SoA,
-and where `std::pmr` actually moves the number — that's the
+and where `std::pmr` actually moves the number: that's the
 next section.

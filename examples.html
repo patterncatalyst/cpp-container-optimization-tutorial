@@ -27,7 +27,7 @@ permalink: /examples/
             Each card links to the demo's page on this site (a
             rendering of the README with cross-references), and each
             page links to the source on GitHub. Each demo also stands
-            alone — run it without reading the tutorial first if you'd
+            alone: run it without reading the tutorial first if you'd
             rather poke at it directly.
         </p>
 
@@ -54,7 +54,7 @@ permalink: /examples/
             Clone the repo and invoke each <code>demo.sh</code> from its
             directory. The scripts assume Podman 5.x rootless and a
             handful of host tools (<code>hey</code>, <code>jq</code>,
-            <code>curl</code>) — see <a href="{{ '/docs/01-prerequisites/' | relative_url }}">§1
+            <code>curl</code>), see <a href="{{ '/docs/01-prerequisites/' | relative_url }}">§1
             Prerequisites</a> for the full list.
         </p>
 <pre><code>git clone https://github.com/{{ site.github_username }}/{{ site.github_repo }}.git
@@ -68,11 +68,10 @@ cd {{ site.github_repo }}
         <h2 class="section-heading">If a demo fails</h2>
         <p>
             Most failures are kernel-feature gaps (<code>io_uring</code>
-            multishot needs ≥ 5.19) or rootless cgroup limits. The
-            <a href="{{ '/plans/reconciliation-plan/' | relative_url }}">reconciliation plan</a>
-            tracks every demo's verification state per host class. If
-            your host isn't covered, an entry there is the right
-            contribution.
+            multishot needs ≥ 5.19) or rootless cgroup limits. If
+            your host isn't covered, opening an issue with your
+            <code>uname -r</code> and <code>lscpu</code> output is the
+            right contribution.
         </p>
     </div>
 </section>

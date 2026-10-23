@@ -7,7 +7,7 @@ duration: "15 minutes"
 
 ## Learning objectives
 
-By the end of this section you can:
+By the end of this chapter you can:
 
 - Reproduce a four-scenario isolation comparison with two
   containerized tenants and a load generator, measuring how
@@ -19,13 +19,19 @@ By the end of this section you can:
 - Pin CPUs with `--cpuset-cpus`, explain when the rigidity is
   worth it, and recognize the cache-locality bonus that makes
   pinned configurations sometimes faster than running alone.
-- Run the production-diagnostic sequence — *"my service was
-  fast yesterday; what changed?"* — for tail-latency problems on
-  shared hosts.
+- Run the production-diagnostic sequence for the question
+  *"my service was fast yesterday; what changed?"* on
+  tail-latency problems on shared hosts.
 
 ## Diagram
 
 {% include excalidraw.html name="11-isolation-cgroup-tree" caption="Two-tenant cgroup hierarchy with delegated controllers." %}
+
+## Why this matters
+
+Most production hosts run more than one tenant, and the default Linux scheduler treats every cgroup as equally deserving of CPU time. That default is fine when workloads look alike. It falls apart the moment one tenant is latency-sensitive and another is a steady CPU-bound batch job, because fairness in CPU share is not the same as fairness in tail latency.
+
+This matters for C++ services because they are frequently the ones with a hard latency budget in the first place: a trading system, a search front end, an RPC layer running at five-digit QPS. The isolation primitives in this chapter, `cpu.weight` and `cpuset.cpus`, are the difference between a p99 that degrades by an order of magnitude when a neighbor shows up and one that holds steady, or even improves, because pinning also buys back cache locality.
 
 ## The setup
 
@@ -34,8 +40,8 @@ is a tiny C++ HTTP server (the kind of latency-sensitive service
 you might actually care about): one endpoint, returns `"ok"`,
 configured with the same production-load httplib knobs used in
 demo-06 (large keep-alive limit, ThreadPool sized above the test
-concurrency — see the demo-05 README for the rationale).
-`tenant-b` is a steady CPU-bound batch workload — same image
+concurrency; see the demo-05 README for the rationale).
+`tenant-b` is a steady CPU-bound batch workload: same image
 shape, also written in C++, but it does sustained integer work
 in a tight loop on every available thread. Neither container is
 malicious. Neither has a bug. Both are using their CPU budget
@@ -45,11 +51,11 @@ We run `tenant-a` under a load generator (`hey -n 5000 -c 25
 http://127.0.0.1:8501/`) and measure its p50, p95, and p99
 latency in four scenarios:
 
-1. **baseline** — `tenant-a` runs alone
-2. **unisolated** — both containers run with no resource hints
-3. **weighted** — `tenant-b` runs with `cpu.weight=10`
+1. **baseline**: `tenant-a` runs alone
+2. **unisolated**: both containers run with no resource hints
+3. **weighted**: `tenant-b` runs with `cpu.weight=10`
    (against `tenant-a`'s default `cpu.weight=100`)
-4. **pinned** — `cpuset.cpus` splits the host's CPUs in half;
+4. **pinned**: `cpuset.cpus` splits the host's CPUs in half;
    `tenant-a` gets the lower half, `tenant-b` the upper
 
 On the 22-CPU host the verified numbers landed at:
@@ -61,11 +67,11 @@ On the 22-CPU host the verified numbers landed at:
 | weighted | 1.10 | 3.90 | 9.00 | **3.9×** |
 | pinned | 0.50 | 1.40 | 1.80 | **0.78×** |
 
-Three numbers worth pausing on: **10.7×, 3.9×, 0.78×**. Default
+Three numbers stand out: **10.7×, 3.9×, 0.78×**. Default
 behavior costs you 10.7× at the tail. `cpu.weight` brings it
-back to 3.9× — better but still hurting. `cpuset.cpus` brings
-it to 0.78× — *below* baseline. The rest of this section
-explains what each mechanism actually does, why one is partial
+back to 3.9×, better but still hurting. `cpuset.cpus` brings
+it to 0.78×, *below* baseline. The sections below
+explain what each mechanism actually does, why one is partial
 and the others are complete, and how to pick.
 
 ## What default fairness costs you
@@ -79,13 +85,13 @@ which defaults to 100 each. Both tenants get a roughly equal
 share of every CPU.
 
 Equal share is the wrong answer for `tenant-a`. Its workload is
-spiky — a request comes in, ~200 µs of work happens, then idle
-until the next request. `tenant-b`'s workload is steady — every
+spiky: a request comes in, ~200 µs of work happens, then idle
+until the next request. `tenant-b`'s workload is steady: every
 thread is always runnable. When CFS hands `tenant-a` a CPU,
 `tenant-b` is the next-in-line process on the same runqueue.
 When `tenant-a` finishes its request, that CPU goes immediately
 to `tenant-b`. When `tenant-a`'s next request arrives, it has
-to wait for `tenant-b` to be preempted off — which happens, but
+to wait for `tenant-b` to be preempted off, which happens, but
 not for a few hundred microseconds, because CFS rewards
 already-running processes with a minimum runtime quantum.
 
@@ -98,8 +104,8 @@ other tenant has temporarily.
 This is the part of the lesson most worth internalizing: **on a
 shared host with no isolation hints, your latency tail is set by
 your neighbors' workload pattern, not by your own.** A neighbor
-doing steady CPU work — backup encryption, a batch job, a
-sibling service that happens to spin on a queue — will push
+doing steady CPU work, such as backup encryption, a batch job, or a
+sibling service that happens to spin on a queue, will push
 your p99 up by an order of magnitude with nothing you can fix in
 your own code.
 
@@ -110,13 +116,13 @@ down from its default of 100. The cgroup file lives at
 `/sys/fs/cgroup/.../cpu.weight`; the value is on a scale of 1
 to 10000 with a default of 100. CFS allocates CPU time in
 proportion to the weights of cgroups that are *actively
-contending* — so when `tenant-a` and `tenant-b` are both
+contending*, so when `tenant-a` and `tenant-b` are both
 runnable on the same CPU, `tenant-a`'s share is `100 / (100 + 10) ≈ 91%`
 and `tenant-b`'s is `9%`.
 
 In podman 5.x this is set with `--cgroup-conf=cpu.weight=10`
 (not `--cpu-weight`, which is not a podman flag despite the
-intuitive name — see the demo-05 README's Caveats section for
+intuitive name; see the demo-05 README's Caveats section for
 the full G-42 gotcha capture).
 The path through to the cgroup file requires the cgroup v2 `cpu`
 controller to be delegated to your user slice if you're running
@@ -128,7 +134,7 @@ mechanism is exactly why:
 
 `cpu.weight` is *relative* and applies only during contention.
 When `tenant-a` is briefly idle between requests, `tenant-b`
-legally consumes the available CPU — it's not capped, it's just
+legally consumes the available CPU; it's not capped, it's just
 deprioritized when both compete. When `tenant-a`'s next request
 arrives, `tenant-b` has to be preempted off the CPU it's been
 using. CFS does preempt it, but only at the end of the next
@@ -137,7 +143,7 @@ after the CPU runs the cache lines for `tenant-a`'s working set
 back into L1.
 
 So `cpu.weight` doesn't eliminate the cost of context switching
-between tenants — it just reduces how much CPU time `tenant-b`
+between tenants; it just reduces how much CPU time `tenant-b`
 gets while it's there. Tail latency depends on the *latency* of
 scheduling decisions, not just their *share*. Weight tunes the
 share; it doesn't tune the latency.
@@ -168,7 +174,7 @@ to `/sys/fs/cgroup/.../cpuset.cpus`. The kernel scheduler can no
 longer place `tenant-b`'s threads on CPUs 0-10 at all. There is
 no contention. There are no scheduling decisions to make.
 
-p99 lands at 1.80 ms — **below baseline's 2.30 ms**. That's not a
+p99 lands at 1.80 ms, **below baseline's 2.30 ms**. That's not a
 measurement artifact. It's a real effect with a physical cause.
 
 In the baseline scenario, `tenant-a` runs alone, but the CFS is
@@ -200,7 +206,7 @@ pattern, not based on intuitions about modern infrastructure.
 
 ### NUMA, briefly
 
-Larger hosts have multiple NUMA nodes — typically one per socket
+Larger hosts have multiple NUMA nodes, typically one per socket
 on a multi-socket server. Memory accesses to the local node are
 faster than to remote nodes (typically 30-100% latency
 difference). The pinning above only pinned CPUs; on a NUMA host
@@ -282,7 +288,7 @@ the same for a Python or Go service. But the *consequence* is
 particularly sharp for C++ for two reasons.
 
 First, C++ services are often the ones with hard latency
-budgets — the trading systems, the search front-ends, the
+budgets: the trading systems, the search front-ends, the
 high-throughput RPCs whose p99 actually matters at five-digit
 QPS. Languages with garbage collection have larger and more
 variable baseline tails that drown the scheduler effects.
@@ -317,11 +323,11 @@ delegation once, re-login, and all four scenarios run.
 
 - Enberg, *Latency*, ch. 5-6 (CPU scheduling and isolation under
   contention; the queueing-theory framing for the numbers above)
-- Ghosh, *Building Low Latency Applications with C++*, ch. 7 —
+- Ghosh, *Building Low Latency Applications with C++*, ch. 7:
   CPU pinning, NUMA placement, and busy-spin vs blocking-wait
   trade-offs from a low-latency trading angle. The container
   framing is ours; the underlying patterns are his.
-- Andrist & Sehr, *C++ High Performance*, ch. 14 — the
+- Andrist & Sehr, *C++ High Performance*, ch. 14: the
   concurrency story, complementary to the scheduling-and-
   isolation story above
 - [cgroups v2 admin guide](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html)

@@ -6,10 +6,10 @@ and `<file>.excalidraw` (the editable JSON source).
 
 The site references diagrams two ways:
 
-1. **Inline in a tutorial section** — via
+1. **Inline in a tutorial section**: via
    `{% include excalidraw.html name="06-allocator-stack" caption="..." %}`.
    The include resolves to `diagrams/06-allocator-stack.svg`.
-2. **Gallery view** at `/diagrams/` — every diagram referenced in
+2. **Gallery view** at `/diagrams/`: every diagram referenced in
    `diagrams.html` shows up as a fullscreen-clickable card.
 
 ## Naming convention
@@ -22,7 +22,7 @@ Diagrams currently in the set:
 |---------------------------------------|---------|----------------------------------------|
 | `01-prerequisites-toolchain`          | §1      | toolchain layout                       |
 | `02-introduction-four-layers`         | §2      | the four-layer mental model            |
-| `02-threading-models`                 | §2      | C++ threading models — stack vs scheduler |
+| `02-threading-models`                 | §2      | C++ threading models: stack vs scheduler |
 | `03-raii-discipline`                  | §3      | RAII vs manual cleanup leak paths      |
 | `04-image-strategy-multistage`        | §4      | multi-stage image strategy             |
 | `05-compile-time-pgo-flow`            | §5      | LTO / PGO build flow                   |
@@ -57,7 +57,7 @@ flatpak run com.excalidraw.Excalidraw diagrams/06-allocator-stack.excalidraw
 After editing:
 
 1. **Save** the modified `.excalidraw` JSON over the old one.
-2. **Export to SVG** at the same basename — File → Export → SVG, then
+2. **Export to SVG** at the same basename: File → Export → SVG, then
    rename to match (e.g. `06-allocator-stack.svg`). On the desktop app
    the Export dialog has a "Save as" path; on the web app, save and
    move into place.
@@ -67,7 +67,7 @@ After editing:
 ## Style guidelines
 
 - **One canvas, one idea.** If you need a second diagram, give it its
-  own basename — don't pile concepts onto one canvas.
+  own basename: don't pile concepts onto one canvas.
 - **Excalidraw's "Hand-drawn" sketchy mode is the house style.** The
   visual contrast between the playful diagrams and the precise prose
   is part of what makes the tutorial scannable.
@@ -79,7 +79,7 @@ After editing:
 
 ## Status
 
-The diagrams are drawn — the main-track set (above) is real hand-style
+The diagrams are drawn: the main-track set (above) is real hand-style
 Excalidraw diagrams, embedded inline and rendered into the companion
 deck. When adding a new diagram, follow the naming convention and style
 guidelines above, and commit the `.svg` and `.excalidraw` pair together.

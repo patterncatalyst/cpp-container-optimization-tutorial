@@ -45,7 +45,7 @@
   <rect width="900" height="540" fill="url(#grid)" opacity="0.4"/>
 
   <!-- Title -->
-  <text x="450" y="30" class="ttl-big" text-anchor="middle">Container image strategy — single-stage vs multi-stage</text>
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">Container image strategy: single-stage vs multi-stage</text>
 
   <!-- LEFT: Single-stage -->
   <rect class="band b-single" x="40" y="60" width="350" height="380"/>
@@ -88,8 +88,8 @@
 
   <!-- RIGHT: Multi-stage -->
   <rect class="band b-multi-b" x="490" y="60" width="370" height="180"/>
-  <text x="675" y="84" class="ttl" text-anchor="middle">Multi-stage build  —  Stage 1 (build)</text>
-  <text x="675" y="100" class="sec" text-anchor="middle">FROM ubi:10 AS build  —  same as single-stage above</text>
+  <text x="675" y="84" class="ttl" text-anchor="middle">Multi-stage build :  Stage 1 (build)</text>
+  <text x="675" y="100" class="sec" text-anchor="middle">FROM ubi:10 AS build :  same as single-stage above</text>
 
   <rect class="b-layer-b" x="510" y="114" width="330" height="62" stroke-dasharray="2 2"/>
   <text x="520" y="132" class="mono">FROM ubi:10 AS build</text>
@@ -98,7 +98,7 @@
   <text x="520" y="174" class="mono">RUN cmake -B build &amp;&amp; ninja</text>
 
   <text x="675" y="200" class="sec" text-anchor="middle">heavy: toolchain, Conan cache, intermediates,</text>
-  <text x="675" y="214" class="sec" text-anchor="middle">source files all present — but THROWN AWAY</text>
+  <text x="675" y="214" class="sec" text-anchor="middle">source files all present: but THROWN AWAY</text>
 
   <!-- Red COPY directive: the key transition between stages -->
   <line x1="600" y1="240" x2="600" y2="270" class="arrow-r" marker-end="url(#arrowhead-r)"/>
@@ -106,8 +106,8 @@
   <text x="675" y="273" class="sec" text-anchor="middle">only the binary crosses the stage boundary</text>
 
   <rect class="band b-multi-r" x="490" y="280" width="370" height="160"/>
-  <text x="675" y="304" class="ttl" text-anchor="middle">Multi-stage build  —  Stage 2 (runtime)</text>
-  <text x="675" y="320" class="sec" text-anchor="middle">FROM ubi-micro  —  bare minimum runtime</text>
+  <text x="675" y="304" class="ttl" text-anchor="middle">Multi-stage build :  Stage 2 (runtime)</text>
+  <text x="675" y="320" class="sec" text-anchor="middle">FROM ubi-micro :  bare minimum runtime</text>
 
   <rect class="b-layer-r" x="510" y="334" width="330" height="48" stroke-dasharray="2 2"/>
   <text x="520" y="352" class="mono">FROM registry.access.redhat.com/ubi10-micro</text>

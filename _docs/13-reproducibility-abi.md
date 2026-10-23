@@ -7,7 +7,7 @@ duration: "25 minutes"
 
 ## Learning objectives
 
-By the end of this section you can:
+By the end of this chapter you can:
 
 - Create a Conan 2.x lockfile pinning every transitive
   dependency (name, version, **and recipe revision**) and
@@ -17,7 +17,7 @@ By the end of this section you can:
   this kind of project actually uses (debug, release-LTO,
   release-PGO, release-PGO-instrumented).
 - Build the same binary in two different containers and
-  produce identical SHA-256 digests — what "hermetic"
+  produce identical SHA-256 digests: what "hermetic"
   actually requires and where it usually leaks.
 - Describe what Konflux and Cachi2 add to the hermetic story
   (CI without network access at build time, prefetch-then-
@@ -32,6 +32,24 @@ By the end of this section you can:
 
 {% include excalidraw.html name="13-reproducibility-conan-flow" caption="Hermetic build: Conan → CMake/Ninja → reproducible binary." %}
 
+## Why this matters
+
+A C++ service built today has to be rebuildable, byte for byte, months
+or years later: for an incident postmortem, a compliance audit, or a
+CVE patch that has to land on top of the exact binary that's running in
+production. Without lockfiles and pinned build flags, a "same version"
+dependency graph can resolve to different transitive packages next
+month, and a binary that looks identical on paper links against
+different object code.
+
+ABI stability matters for the same reason, at a tighter timescale.
+A shared library that changes its data layout or vtable without
+bumping the SONAME breaks every binary that links against it, often
+without a compile error to flag the problem. The tools in this chapter
+(Conan lockfiles, CMake presets, hermetic builds, `abidiff`) turn both
+of those risks into checks that fail a build instead of incidents that
+wake someone up.
+
 ## What reproducibility actually means
 
 A reproducible build produces a byte-identical artifact given
@@ -39,12 +57,12 @@ the same inputs. *Same inputs*, in practice, means:
 
 1. **Same source tree** (a git SHA pins this).
 2. **Same toolchain** (compiler version, glibc version,
-   linker, archiver — pins via the build base image, see [§4](../04-image-strategy/)).
+   linker, archiver; pins via the build base image, see [§4](../04-image-strategy/)).
 3. **Same dependency graph** (Conan lockfile pins every
-   transitive package with its revision hash — see below).
+   transitive package with its revision hash; see below).
 4. **Same build environment** (no network reads during build,
    no clock-dependent metadata, no parallel-build
-   non-determinism — see "Hermetic CI" below).
+   non-determinism; see "Hermetic CI" below).
 5. **Same build flags** (CMake presets pin compiler flags,
    sanitizer choice, LTO/PGO state).
 
@@ -60,7 +78,7 @@ autotools-based packages (libcurl, openssl, c-ares, nghttp2, …) will fall over
 during their from-source build because UBI's minimal Perl
 doesn't ship the modules `aclocal` and `automake` need.
 
-**[Appendix A — Conan, autotools, and UBI's minimal
+**[Appendix A: Conan, autotools, and UBI's minimal
 Perl](appendix-a-conan-perl.html)** has the full
 perl-module shopping list and the alternatives (skip the
 dep, use the system package, drop cppstd to hit pre-builts)
@@ -86,9 +104,9 @@ A Conan package is addressed by **three** identifiers:
 `name`, `version`, **and `recipe revision`**. The version is
 what the recipe author publishes; the recipe revision is a
 hash of the recipe contents. Recipe maintainers occasionally
-update a published version's recipe — to bump a sub-dep, fix
+update a published version's recipe (to bump a sub-dep, fix
 a build-script bug, regenerate the recipe from a newer
-template — and when they do, **the version stays the same
+template), and when they do, **the version stays the same
 but the revision changes**. New pre-built binaries are
 published for the new revision; old revision binaries may
 stick around for a while or get garbage-collected.
@@ -124,7 +142,7 @@ against a working build:
 ./scripts/regenerate-demo-04-lockfile.sh
 ```
 
-That writes `examples/demo-04-observability/conan.lock` —
+That writes `examples/demo-04-observability/conan.lock`:
 JSON with every package's exact revision recorded. Commit
 the file. The Containerfile picks it up:
 
@@ -147,9 +165,9 @@ locked, your build is unaffected.
 ### What the lockfile still can't fix
 
 The lockfile pins identifiers; it can't conjure absent
-packages. If Conan Center yanks a recipe entirely — which is
+packages. If Conan Center yanks a recipe entirely (which is
 not hypothetical; it's how `grpc/1.62.0` disappeared while
-demo-04 was being shaken down — even a lockfile that names
+demo-04 was being shaken down), even a lockfile that names
 the exact revision will fail with `Unable to find` because
 the package isn't in the remote anymore.
 
@@ -176,7 +194,7 @@ part of the build infrastructure.
 
 Run `scripts/regenerate-demo-04-lockfile.sh` when:
 
-- You intentionally update an override version in
+- You choose to update an override version in
   `conanfile.py` (e.g., bumping opentelemetry-cpp).
 - You want to refresh against current recipe revisions
   because a security fix landed in one of your transitive
@@ -188,7 +206,7 @@ Run `scripts/regenerate-demo-04-lockfile.sh` when:
 Otherwise, leave the lockfile alone. The whole point is that
 it doesn't move.
 
-## CMake presets — the four useful configurations
+## CMake presets: the four useful configurations
 
 A `CMakePresets.json` file declares named build
 configurations. The four that consistently earn their keep
@@ -259,17 +277,17 @@ variant of the release build. Keep the set small enough that
 developers can name them all from memory.
 
 The `march=x86-64-v3` choice is from [§14's portable
-micro-architecture discussion](../14-pitfalls/) — pinning a
+micro-architecture discussion](../14-pitfalls/): pinning a
 portable baseline that runs on Haswell+ Intel and Zen 2+ AMD,
 not the build host's `-march=native`.
 
-## Hermetic CI — Konflux and Cachi2
+## Hermetic CI: Konflux and Cachi2
 
 Lockfiles pin the dep graph; presets pin the build flags. The
 *environment* is the third leak point. A build that fetches
 deps from the internet during `RUN` lines is at the mercy of
-the internet — DNS hiccup, registry outage, a transient 502
-from npm, all break the build. Worse, a malicious upstream
+the internet: a DNS hiccup, a registry outage, a transient 502
+from npm all break the build. Worse, a malicious upstream
 mid-build can substitute a different package than the one
 you tested with.
 
@@ -277,7 +295,7 @@ you tested with.
 network access* during the build, and every input is staged
 in advance. Two Red Hat tools that implement this pattern:
 
-**Konflux** — an open-source CI/CD platform from Red Hat that
+**Konflux**: an open-source CI/CD platform from Red Hat that
 treats every build as a Tekton pipeline with hermetic build
 phases. Builds run in containers with `network_mode: none`
 on the build steps; the prefetch step before each build
@@ -287,7 +305,7 @@ build artifacts include attestation metadata (signed
 provenance, SBOM, the exact dependency hashes used) so
 downstream consumers can verify the supply chain.
 
-**Cachi2** — the prefetch tool that pairs with Konflux (and
+**Cachi2**: the prefetch tool that pairs with Konflux (and
 works standalone). Cachi2 reads your `conan.lock` (or
 `package-lock.json`, `Pipfile.lock`, `go.sum`, etc.), fetches
 every referenced package over the network *before* the build,
@@ -332,18 +350,18 @@ contributor machines, and across time.
   changes weekly and you have other supply-chain signals
   (Dependabot, OSS scorecard, internal security review).
 - Demos and tutorials (this tutorial uses a Conan lockfile +
-  multi-stage builds, but not full Cachi2 prefetch — the
-  lockfile is the 80% that matters; Cachi2 closes the
+  multi-stage builds, but not full Cachi2 prefetch; the
+  lockfile is the 80% that matters, and Cachi2 closes the
   remaining 20%).
 
 Konflux ships as the SaaS offering at https://console.redhat.com/application-pipeline
 and as the self-hostable open-source project; Cachi2 is at
 https://github.com/containerbuildsystem/cachi2.
 
-## Testing hermeticity locally — `./demo.sh --hermetic-check`
+## Testing hermeticity locally: `./demo.sh --hermetic-check`
 
-Konflux + Cachi2 is the production answer. For local verification —
-"is my build actually reproducible right now, on my laptop?" — the
+Konflux + Cachi2 is the production answer. For local verification
+("is my build actually reproducible right now, on my laptop?"), the
 simpler test is: build twice, compare bytes.
 
 Demo-07 ships this as a flag:
@@ -379,7 +397,7 @@ COPY src/ ./src/
 Different `--build-arg HERMETIC_NONCE=...` values produce different
 cache keys at that line, forcing every layer downstream (the actual
 `cmake --build`) to re-execute. The arg itself has zero effect on the
-compiled binary — it only changes a string in `/tmp/`. The toolchain
+compiled binary: it only changes a string in `/tmp/`. The toolchain
 layers (UBI, EPEL, gcc/gcc-c++, libabigail) stay cached because
 they're upstream of the `ARG` line.
 
@@ -401,7 +419,7 @@ they're upstream of the `ARG` line.
 [ ok ]  Hermetic build: VERIFIED
 ```
 
-This isn't a partial signal — byte-identical means *byte-identical*.
+This isn't a partial signal: byte-identical means *byte-identical*.
 Build IDs match. Debug info matches. Constant pools match. Symbol
 ordering matches. The compiled binaries are interchangeable.
 
@@ -418,7 +436,7 @@ Outside containers, you'd typically need `-ffile-prefix-map=/path/to/src=.`
 and `SOURCE_DATE_EPOCH=...` exported to get this same property. Inside
 a container with constant `/src`, those flags become redundant.
 
-**When it fails.** Section "Production diagnostic — when a build isn't
+**When it fails.** Section "Production diagnostic: when a build isn't
 reproducible" below covers the ladder. The flag's failure output
 points there directly. The five suspects in decreasing frequency are:
 `__DATE__`/`__TIME__` macros, embedded paths in debug info, PRNG seeds
@@ -430,11 +448,11 @@ guarantees hermeticity by *closing off* sources of non-determinism
 hermeticity by independent rebuild + comparison. You want both: the
 first prevents drift, the second catches it when prevention fails.
 
-## Tests as a build-stage quality gate — GoogleTest in hermetic CI
+## Tests as a build-stage quality gate: GoogleTest in hermetic CI
 
 GoogleTest was introduced in [§12](../12-analysis-debugging/);
 the relevant Konflux/hermetic-build wrinkle is that the test
-run is a build-stage gate — the build fails if `ctest`
+run is a build-stage gate: the build fails if `ctest`
 returns nonzero, and the failing test output is in the build
 logs the same way a compile error would be.
 
@@ -454,7 +472,7 @@ RUN conan install . --lockfile=conan.lock && \
 In Konflux's hermetic phase, that whole build (including
 `ctest`) runs in a container with `--network=none`. If the
 test suite needs network access for, say, an integration
-test against an external service, the test fails — which is
+test against an external service, the test fails, which is
 the correct behavior. Integration tests against external
 services have to either (a) provision their own dependency
 as a build-stage sidecar that the hermetic container can
@@ -469,7 +487,7 @@ pattern demo-02 uses for the flat_map / unordered_map
 comparison from [§6](../06-stl-layout/), but turned into a
 gate.
 
-## Coverage — gcov/lcov for GCC builds
+## Coverage: gcov/lcov for GCC builds
 
 Test coverage measurement on GCC works via the `--coverage`
 compile flag, which inserts instrumentation that emits
@@ -512,11 +530,11 @@ The CMake preset for coverage:
 
 Pros of gcov/lcov:
 
-- Universal — GCC has shipped this since ~2003; it's the
+- Universal: GCC has shipped this since ~2003; it's the
   baseline.
-- Tooling ecosystem — every CI integration (Codecov,
+- Tooling ecosystem: every CI integration (Codecov,
   Coveralls, SonarQube) reads lcov or gcov output.
-- Simple — one flag to compile, one tool to summarize.
+- Simple: one flag to compile, one tool to summarize.
 
 Cons:
 
@@ -526,7 +544,7 @@ Cons:
   the line-coverage report. Lines that "should" be covered
   sometimes show 0 hits because the optimizer fused them with
   adjacent lines.
-- **Slow at scale** — coverage rebuilds are noticeably slower
+- **Slow at scale**: coverage rebuilds are noticeably slower
   than non-coverage builds, and the `.gcda` files have to be
   serialized at exit.
 
@@ -534,7 +552,7 @@ For most projects gcov + lcov is the sensible default. For
 projects on clang/LLVM where coverage accuracy matters,
 read on.
 
-## Coverage — Clang source-based coverage (llvm-profdata + llvm-cov)
+## Coverage: Clang source-based coverage (llvm-profdata + llvm-cov)
 
 Clang's source-based coverage instruments at the AST level
 *before* the compiler optimizes, so the line/branch counts
@@ -595,13 +613,13 @@ The CMake preset:
 
 Pros of clang source-based coverage:
 
-- **Accurate under optimization** — source-level instrumentation
+- **Accurate under optimization**: source-level instrumentation
   isn't fooled by inlining or code motion.
 - **Branch coverage** is reliable (gcov's branch coverage is
   notoriously unreliable on optimized code).
 - **`-format=lcov` export** means CI integrations that read
   lcov format work without modification.
-- **Region coverage** — clang tracks coverage of sub-line
+- **Region coverage**: clang tracks coverage of sub-line
   regions (each branch of a ternary, each `case` of a switch),
   which gcov can't.
 
@@ -609,7 +627,7 @@ Cons:
 
 - Requires clang as the compiler. If your release builds are
   GCC, you'd use clang only for the coverage build (which is
-  fine — coverage doesn't affect what you ship).
+  fine, since coverage doesn't affect what you ship).
 - Tooling has a small learning curve; the LLVM docs are the
   authoritative reference.
 
@@ -623,8 +641,8 @@ same code-review tooling.
 ## ABI labels in image metadata
 
 Reproducibility produces a binary that's bit-identical given
-the same inputs. The *next* question — "what toolchain was
-this binary built with?" — is the one [§4 covered with the
+the same inputs. The *next* question ("what toolchain was
+this binary built with?") is the one [§4 covered with the
 `LABEL` pattern](../04-image-strategy/). The labels worth
 encoding for a hermetic build:
 
@@ -653,7 +671,7 @@ covers the same information at the supply-chain level, but
 the labels remain useful as the "embedded in the image"
 version of the same answer.
 
-## `abidiff` in CI — catching ABI breaks before merge
+## `abidiff` in CI: catching ABI breaks before merge
 
 For C++ shared libraries (and increasingly for CLI binaries
 that other services depend on), an ABI change without a
@@ -661,7 +679,7 @@ SONAME bump silently breaks downstream consumers. `abidiff`
 from the libabigail project compares two builds of the same
 library and reports the ABI delta:
 
-{% include excalidraw.html name="13-abi-break-taxonomy" caption="ABI-safe vs ABI-breaking changes: adding non-virtual functions or appending enumerators is safe; changing data-member layout, the vtable, base classes, or a function signature breaks the binary contract — bump the SONAME, and let abidiff catch it." %}
+{% include excalidraw.html name="13-abi-break-taxonomy" caption="ABI-safe vs ABI-breaking changes: adding non-virtual functions or appending enumerators is safe; changing data-member layout, the vtable, base classes, or a function signature breaks the binary contract: bump the SONAME, and let abidiff catch it." %}
 
 ```bash
 abidiff \
@@ -700,16 +718,16 @@ library against the version on the previous git tag.
 
 `abidiff`'s findings categories that matter:
 
-- **Removed functions / removed variables** — always a break
+- **Removed functions / removed variables**: always a break
   unless the symbol was internal.
-- **Function-signature changes** — break unless backward-
+- **Function-signature changes**: break unless backward-
   compatible (e.g., parameter type change is a break; new
   default-argument-value isn't).
 - **Data-member insertions or reorderings in classes with
-  inheritance** — break vtable layouts and offsets, *even
+  inheritance**: break vtable layouts and offsets, *even
   if the inserted member is `private`*.
 - **vtable changes** (new virtual function, reordered virtual
-  functions) — always a break.
+  functions): always a break.
 
 The libabigail project's documentation walks through each
 category in more detail; the short version is "abidiff
@@ -717,7 +735,7 @@ deciding 'no ABI break' means downstream consumers don't
 need to recompile, and that judgement is reliable enough to
 gate merges on."
 
-## Production diagnostic — when a build isn't reproducible
+## Production diagnostic: when a build isn't reproducible
 
 When CI produces two builds with different SHA-256 hashes from
 what should be identical inputs, the common culprits in
@@ -760,7 +778,7 @@ graph is closed inside the binary; reproducibility is
 essentially built-in given a fixed go.sum. A Java program's
 JAR file embeds class files that are mostly compiler-output-
 stable. **C++ has multiple sources of build non-determinism
-that don't apply to either**:
+that don't apply to either:**
 
 - **Template instantiation order** affects function ordering
   in `.text`, which affects build IDs.
@@ -772,12 +790,12 @@ that don't apply to either**:
   link-time ABI mismatches that abidiff catches and code
   review doesn't).
 - **Toolchain version drift** in C++ has a longer tail than
-  in other languages — a single line of code that depends on
+  in other languages: a single line of code that depends on
   C++20 features fails on gcc-11 with cryptic errors but
   works fine on gcc-14.
 
-The discipline in this section — lockfiles, presets,
-hermetic builds, labels, abidiff — is heavier than equivalent
+The discipline in this section (lockfiles, presets,
+hermetic builds, labels, abidiff) is heavier than equivalent
 practices in other ecosystems because the C++ failure modes
 are heavier. **Each technique is optional individually, but
 the cumulative discipline is what makes a C++ binary that
@@ -788,7 +806,7 @@ shipped last year still rebuildable today.**
 [`examples/demo-07-quality-pipeline/`]({{ '/examples/demo-07-quality-pipeline/' | relative_url }})
 includes a hermetic build path: builds the library twice in
 identical builder containers and asserts the artifacts are
-byte-identical, deliberately introduces an ABI break and
+byte-identical, introduces an ABI break and
 shows `abidiff` catching it, and runs both gcov/lcov and
 clang source-based coverage as separate build presets.
 
@@ -803,19 +821,19 @@ recipe-revision drift is concretely visible).
   decisions that survive contact with reality), ch. 5 (the
   ABI cost of template choices).
 - The [libabigail
-  manual](https://sourceware.org/libabigail/manual/abigail-user-guide.html)
-  — the authoritative reference on `abidiff` semantics.
+  manual](https://sourceware.org/libabigail/manual/abigail-user-guide.html):
+  the authoritative reference on `abidiff` semantics.
 - Clang, [Source-Based Code
-  Coverage](https://clang.llvm.org/docs/SourceBasedCodeCoverage.html)
-  — the canonical reference for the LLVM coverage pipeline.
+  Coverage](https://clang.llvm.org/docs/SourceBasedCodeCoverage.html):
+  the canonical reference for the LLVM coverage pipeline.
 - GCC, [gcov
-  documentation](https://gcc.gnu.org/onlinedocs/gcc/Gcov-Intro.html)
-  — the GCC-side equivalent.
-- [Konflux](https://konflux-ci.dev/) — the open-source CI/CD
+  documentation](https://gcc.gnu.org/onlinedocs/gcc/Gcov-Intro.html):
+  the GCC-side equivalent.
+- [Konflux](https://konflux-ci.dev/): the open-source CI/CD
   platform; the documentation walks through hermetic build
   pipelines end-to-end.
-- [Cachi2](https://github.com/containerbuildsystem/cachi2)
-  — the prefetch tool; supports Conan, npm, pip, go modules,
+- [Cachi2](https://github.com/containerbuildsystem/cachi2):
+  the prefetch tool; supports Conan, npm, pip, go modules,
   and more.
 - [Conan 2.x lockfile
   reference](https://docs.conan.io/2/tutorial/versioning/lockfiles.html).

@@ -10,7 +10,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": [],
       "fontSize": 20, "fontFamily": 1,
-      "text": "Hermetic build flow — Conan + CMake, one lockfile per release",
+      "text": "Hermetic build flow: Conan + CMake, one lockfile per release",
       "textAlign": "center", "verticalAlign": "middle"
     },
     {
@@ -118,7 +118,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": [],
       "fontSize": 11, "fontFamily": 1,
-      "text": "conan.lock — what it actually pins, and why CI rebuilds are then deterministic\n• every transitive dependency: version + revision hash (immutable identifier of the source archive)\n• every dependency's compile-time options (e.g. with_ssl=True, threading=True)\n• the resolved binary ID for each package (function of: settings + options + dep graph hashes)\n• commit conan.lock to git → conan install --lockfile=conan.lock anywhere = byte-identical resolution\n• without the lockfile, a transitive dep can publish a new revision overnight and your build silently changes",
+      "text": "conan.lock: what it actually pins, and why CI rebuilds are then deterministic\n• every transitive dependency: version + revision hash (immutable identifier of the source archive)\n• every dependency's compile-time options (e.g. with_ssl=True, threading=True)\n• the resolved binary ID for each package (function of: settings + options + dep graph hashes)\n• commit conan.lock to git → conan install --lockfile=conan.lock anywhere = byte-identical resolution\n• without the lockfile, a transitive dep can publish a new revision overnight and your build silently changes",
       "textAlign": "left", "verticalAlign": "top"
     },
     {

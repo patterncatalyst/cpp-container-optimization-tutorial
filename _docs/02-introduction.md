@@ -1,7 +1,7 @@
 ---
 title: Introduction & Mental Model
 order: 2
-description: Why container constraints change C++ performance reasoning, the four-layer model the rest of the tutorial hangs off, and the cross-cutting concepts (LTO, PGO, PIE/ASLR, threading models) every later section references.
+description: Why container constraints change C++ performance reasoning, the four-layer model the tutorial hangs off, and the cross-cutting concepts (LTO, PGO, PIE/ASLR, threading models) every later section references.
 duration: "20 minutes"
 ---
 
@@ -19,7 +19,7 @@ cgroup that may revoke memory or CPU you thought you owned. It
 shares a kernel with neighbours that don't share your latency
 goals. The network packet your benchmark assumed was free now
 traverses a veth pair before it gets near your process. None of
-these are catastrophic — but each one nudges your tail latency
+these are catastrophic, but each one nudges your tail latency
 and silently invalidates a measurement.
 
 Demo-01 already showed one full instance of this in miniature:
@@ -76,9 +76,9 @@ Three different things, frequently conflated:
   request. The number FinOps cares about.
 
 Improving one almost always means trading the others. The
-observability stack in {% include section.html n=10 %} exists to keep you honest about which
-one you're moving. Demo-01's surprise — same p50 across all
-four working variants — is a clean example: the toolchain
+observability stack in {% include section.html n=10 %} exists to keep you grounded about which
+one you're moving. Demo-01's surprise (same p50 across all
+four working variants) is a clean example: the toolchain
 changes were real, but at that load the latency budget was
 spent on queueing, not on CPU work. CPU profiles would have
 showed a delta; wall-clock latency hid it.
@@ -105,7 +105,7 @@ With LTO, each `.o` carries an intermediate representation
 of the source rather than (or in addition to) machine code.
 At link time the linker hands all of those IR blobs back to
 the compiler, which can now inline across TU boundaries,
-fold constants, eliminate functions nothing actually calls,
+fold constants, eliminate functions nothing calls,
 and devirtualize calls whose target is now visible.
 
 Two flavors:
@@ -155,7 +155,7 @@ traffic shifts seasonally.
 Demo-01 captures one `.gcda` file (one TU, one source file)
 and rebuilds with `-fprofile-correction` to handle the case
 where the profile and the new source don't perfectly line
-up. The wall-clock latency delta in our demo was zero — the
+up. The wall-clock latency delta in our demo was zero: the
 work each request does is too small for code reordering to
 matter at this load. CPU profiles would tell a different
 story. That mismatch is itself worth internalising.
@@ -177,7 +177,7 @@ PIE's reason to exist is **ASLR (Address Space Layout
 Randomization)**, which is the runtime-layer half of the
 story.
 
-## ASLR — the runtime half of PIE
+## ASLR: the runtime half of PIE
 
 ASLR is the kernel deciding, at every process start, where
 in the address space to place the program text, the heap,
@@ -185,7 +185,7 @@ the stack, and shared libraries. An attacker who manages to
 hijack control flow can no longer rely on hard-coded
 addresses for `system()` or anything else; they have to leak
 addresses first. Every modern Linux ships ASLR enabled by
-default for shared libraries, the heap, and the stack — but
+default for shared libraries, the heap, and the stack, but
 to randomise the *program text*, the program has to be a
 PIE.
 
@@ -201,7 +201,7 @@ Three layers come together here:
 - **Toolchain:** compiled with `-fPIE`, linked with `-pie`.
 - **Kernel:** has ASLR enabled (`/proc/sys/kernel/randomize_va_space`
   set to `2`).
-- **Runtime:** the kernel actually slides the binary at
+- **Runtime:** the kernel slides the binary at
   `execve()` time.
 
 Demo-01's `ubi-micro` variant uses plain `-static` (non-PIE)
@@ -246,7 +246,7 @@ service in a container will reach for:
 - **C++20 coroutines.** Stackless. Each coroutine is a
   compiler-generated state machine that fits inside a heap
   allocation roughly the size of its locals. They're
-  *invisible* to the kernel — to the OS, the thread that's
+  *invisible* to the kernel: to the OS, the thread that's
   running coroutines is just one thread doing many small
   things. C++20 ships the language facility but no runtime;
   pair with cppcoro, libfork, or a hand-rolled scheduler.
@@ -263,14 +263,14 @@ service in a container will reach for:
   up.
 
 - **Boost.Context.** The low-level primitive Boost.Fibers is
-  built on. Provides `make_fcontext` / `jump_fcontext` —
+  built on. Provides `make_fcontext` / `jump_fcontext`:
   raw, allocation-free stack switching. You almost never
   use this directly; you use it when building your own
   scheduler.
 
 - **Library thread pools.** cpp-httplib's `ThreadPool`,
   Asio's executors, gRPC's completion-queue workers. Almost
-  always 1:1 under the hood — N pre-spawned `std::thread`s
+  always 1:1 under the hood: N pre-spawned `std::thread`s
   pulling work off a queue. The library hides the
   scheduling but the kernel cost is the same as N
   `std::thread`s.
@@ -284,22 +284,22 @@ running instructions. Compression, decryption, ML inference,
 JSON serialisation in tight loops. Adding a thread when all
 cores are already pegged just adds context-switch overhead
 and cache thrash. Right answer: a pool sized to the number
-of cores you actually have (not the host's; the cgroup's),
+of cores you have (not the host's; the cgroup's),
 plus maybe one extra to keep the pipeline full during brief
-idle moments. Coroutines and fibers don't help here —
-there's no I/O to overlap.
+idle moments. Coroutines and fibers don't help here: there's
+no I/O to overlap.
 
 **I/O-bound** workloads spend most of their wall-clock time
 waiting. RPC fan-out to other services, database queries,
 disk reads, network responses. Each request blocks for
 milliseconds while another service computes. Adding more
-threads gets you more concurrent waits — up to the point
+threads gets you more concurrent waits, up to the point
 where your scheduling and stack memory cost more than the
 extra concurrency wins. For modest fan-out (tens of in-
 flight requests), `std::thread` and library pools are fine.
 For huge fan-out (10k+ in-flight per process), the kernel
 cost of 10k threads becomes prohibitive and coroutines or
-fibers — or a coroutine-aware I/O API like `io_uring`, {% include section.html n=8 %} —
+fibers (or a coroutine-aware I/O API like `io_uring`, {% include section.html n=8 %})
 become the default.
 
 The mistake to avoid: picking coroutines for a CPU-bound
@@ -320,14 +320,14 @@ throttles you when you've used too much.
 Three traps live here.
 
 **Trap 1: `std::thread::hardware_concurrency()` returns the
-HOST core count, not your cgroup's.** The C++ standard
+host core count, not your cgroup's.** The C++ standard
 predates cgroups; the function reads `/proc/cpuinfo` or
 `sched_getaffinity()`. On a 64-core host with a 2-core
 cgroup limit, you'll spawn a 64-thread pool, every one of
 them eligible to run, then watch the kernel throttle the
 group hard. Modern glibc reports the cgroup's effective
 quota for `sysconf(_SC_NPROCESSORS_ONLN)` *if* the cgroup
-v2 controllers are visible — but `hardware_concurrency()`
+v2 controllers are visible, but `hardware_concurrency()`
 isn't required to use that source.
 
 The mitigation: read `/sys/fs/cgroup/cpu.max` yourself and
@@ -337,8 +337,8 @@ hard-coded 128 to make the demo robust, but the production
 answer is "read your actual quota."
 
 **Trap 2: requests are not limits.** Kubernetes-style
-*requests* tell the scheduler "give me at least this much"
-— it's a placement and priority knob. *Limits* tell the
+*requests* tell the scheduler "give me at least this much":
+it's a placement and priority knob. *Limits* tell the
 kernel "throttle me past this." A pod with `requests: 1`
 and `limits: 4` schedules cheaply and gets up to 4 cores
 when they're idle, but gets kicked back to ~1 core
@@ -402,15 +402,15 @@ a different scale. {% include section.html n=12 %} owns the deep dive; §2 intro
 - **Dynamic analyzers.** Valgrind (Memcheck for memory,
   Callgrind for cache, Helgrind for races); the sanitizers
   (`-fsanitize=address|undefined|thread|memory`). Slow,
-  thorough, definitive — Valgrind in particular runs the
+  thorough, definitive: Valgrind in particular runs the
   binary on a synthetic CPU, and the slowdown is real
   (typically 10-50×). Use for finding bugs in CI on a
   representative workload, not in production. {% include section.html n=12 %} covers
   running them under cgroup memory limits without
   triggering OOM. *(macOS aside: Valgrind support has
-  degraded badly there — broken on Apple Silicon since
+  degraded badly there: broken on Apple Silicon since
   ~2020, and increasingly unmaintained. The native
-  substitutes are Instruments — part of Xcode — for
+  substitutes are Instruments (part of Xcode) for
   profiling and allocation tracking, the `leaks`
   command-line tool for memory-leak snapshots,
   `MallocStackLogging=1` plus `malloc_history` for
@@ -422,7 +422,7 @@ a different scale. {% include section.html n=12 %} owns the deep dive; §2 intro
   and tracepoints; eBPF tools (`bcc`, `bpftrace`,
   `bpftool`) for kernel-side observability without a
   recompile. These are the right answer for "the service
-  is slow *right now*" — no sidecar, no slowdown, no
+  is slow *right now*": no sidecar, no slowdown, no
   rebuild. They need elevated privileges (`CAP_BPF` or
   full root) and a kernel new enough to have BPF Type
   Format (BTF). {% include section.html n=10 %} + demo-04.
@@ -445,22 +445,22 @@ your editor.
 
 For deeper grounding before you continue:
 
-- Enberg, *Latency*, ch. 1-2 — the language for talking
+- Enberg, *Latency*, ch. 1-2: the language for talking
   about latency budgets at all.
-- Andrist & Sehr, *C++ High Performance*, ch. 1-3 — the
+- Andrist & Sehr, *C++ High Performance*, ch. 1-3: the
   measurement discipline this tutorial assumes you have.
-- Iglberger, *C++ Software Design*, ch. 1-2 — how design
+- Iglberger, *C++ Software Design*, ch. 1-2: how design
   decisions become performance decisions.
-- Ghosh, *Building Low Latency Applications with C++*, ch. 1-3 —
+- Ghosh, *Building Low Latency Applications with C++*, ch. 1-3:
   the trading-systems framing of "how fast is fast enough?" and
   the C++ building blocks for low-latency work. Where Enberg
   treats latency as a general-systems problem, Ghosh anchors it
-  to a domain where microseconds are money — a useful concretizer
+  to a domain where microseconds are money, a useful concretizer
   for readers who haven't worked in latency-critical fields before.
 
 ## What's next
 
-{% include section.html n=4 %} starts at the image layer — pick a base; everything else
+{% include section.html n=4 %} starts at the image layer: pick a base; everything else
 follows. {% include section.html n=5 %} covers the toolchain-layer optimizations (LTO and
 PGO with real numbers). The threading deep-dive that §2 sketched
 is split across {% include section.html n=7 %} (memory side) and {% include section.html n=11 %} (CPU side); demo-02

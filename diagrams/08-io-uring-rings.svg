@@ -44,7 +44,7 @@
   <rect width="900" height="540" fill="url(#grid)" opacity="0.4"/>
 
   <!-- Title -->
-  <text x="450" y="30" class="ttl-big" text-anchor="middle">io_uring — two rings, shared memory, syscall amortization</text>
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">io_uring: two rings, shared memory, syscall amortization</text>
 
   <!-- Application layer -->
   <rect class="band b-app" x="60" y="60" width="780" height="80"/>
@@ -64,7 +64,7 @@
   <!-- SHARED MEMORY BAND - the accent -->
   <rect class="b-shared" x="60" y="180" width="780" height="180"/>
   <text x="80" y="200" class="accent-t">shared memory (mmap)</text>
-  <text x="450" y="200" class="accent-l" text-anchor="middle">— this boundary is the entire point —</text>
+  <text x="450" y="200" class="accent-l" text-anchor="middle">:  this boundary is the entire point : </text>
   <text x="820" y="200" class="accent-t" text-anchor="end">no copy, no syscall per op</text>
 
   <!-- Submission Queue -->
@@ -140,7 +140,7 @@
   <rect class="band b-kern" x="60" y="380" width="780" height="80"/>
   <text x="450" y="404" class="ttl" text-anchor="middle">Kernel</text>
   <text x="450" y="424" class="mono-sm" text-anchor="middle">io_uring worker reads SQEs, dispatches to vfs / network / block layer, writes CQEs on completion</text>
-  <text x="450" y="446" class="sec" text-anchor="middle">with IORING_SETUP_SQPOLL the kernel polls the SQ on its own — zero syscalls for steady-state I/O</text>
+  <text x="450" y="446" class="sec" text-anchor="middle">with IORING_SETUP_SQPOLL the kernel polls the SQ on its own: zero syscalls for steady-state I/O</text>
 
   <!-- Bottom comparison panel -->
   <rect class="b-comp" x="60" y="478" width="780" height="50"/>

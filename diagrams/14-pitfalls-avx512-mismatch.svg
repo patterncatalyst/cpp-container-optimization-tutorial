@@ -43,12 +43,12 @@
   <rect width="900" height="540" fill="url(#grid)" opacity="0.4"/>
 
   <!-- Title -->
-  <text x="450" y="30" class="ttl-big" text-anchor="middle">AVX-512 mismatch — when -march=native bites in containers</text>
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">AVX-512 mismatch: when -march=native bites in containers</text>
 
   <!-- Build host (left) -->
   <rect class="band b-build" x="30" y="60" width="260" height="220"/>
   <text x="160" y="84" class="ttl" text-anchor="middle">Build host (your laptop / CI runner)</text>
-  <text x="160" y="100" class="sec" text-anchor="middle">Intel Sapphire Rapids — has AVX-512</text>
+  <text x="160" y="100" class="sec" text-anchor="middle">Intel Sapphire Rapids: has AVX-512</text>
 
   <rect class="b-cell-b" x="50" y="120" width="220" height="80"/>
   <text x="60" y="140" class="lbl">/proc/cpuinfo flags:</text>
@@ -107,15 +107,15 @@
 
   <!-- The fix band -->
   <rect class="b-fix" x="30" y="400" width="840" height="120"/>
-  <text x="450" y="422" class="ttl" text-anchor="middle">The fix — choose a portable CPU baseline at build time, not the build host's</text>
+  <text x="450" y="422" class="ttl" text-anchor="middle">The fix: choose a portable CPU baseline at build time, not the build host's</text>
 
-  <text x="60" y="448" class="lbl">Option 1 — x86-64 micro-architecture levels (recommended)</text>
+  <text x="60" y="448" class="lbl">Option 1: x86-64 micro-architecture levels (recommended)</text>
   <text x="80" y="464" class="mono-sm">x86-64       baseline; works on any x86_64 CPU (no SSE3 even)</text>
-  <text x="80" y="478" class="mono-sm">x86-64-v2    SSE3-SSE4.2, popcnt — Nehalem era and newer</text>
-  <text x="80" y="492" class="mono-sm">x86-64-v3    AVX, AVX2, BMI1/2, FMA — Haswell+ (most modern workloads)</text>
-  <text x="80" y="506" class="mono-sm">x86-64-v4    AVX-512  — opt-in only after surveying every deployment target</text>
+  <text x="80" y="478" class="mono-sm">x86-64-v2    SSE3-SSE4.2, popcnt: Nehalem era and newer</text>
+  <text x="80" y="492" class="mono-sm">x86-64-v3    AVX, AVX2, BMI1/2, FMA: Haswell+ (most modern workloads)</text>
+  <text x="80" y="506" class="mono-sm">x86-64-v4    AVX-512 : opt-in only after surveying every deployment target</text>
 
-  <text x="490" y="448" class="lbl">Option 2 — multi-arch builds + runtime dispatch</text>
+  <text x="490" y="448" class="lbl">Option 2: multi-arch builds + runtime dispatch</text>
   <text x="510" y="464" class="mono-sm">build two image variants:</text>
   <text x="510" y="478" class="mono-sm">  app:v1.2-v3      (Haswell baseline)</text>
   <text x="510" y="492" class="mono-sm">  app:v1.2-v4      (AVX-512 enabled)</text>

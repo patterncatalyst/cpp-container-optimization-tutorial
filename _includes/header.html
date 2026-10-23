@@ -10,7 +10,7 @@
         <nav class="site-nav" aria-label="Primary">
             <a href="{{ '/docs/00-outline/' | relative_url }}"
                {% if page.layout == 'tutorial' %}class="is-current"{% endif %}>
-                Tutorial
+                Chapters
             </a>
             <a href="{{ '/diagrams/' | relative_url }}"
                {% if page.url contains '/diagrams' %}class="is-current"{% endif %}>
@@ -23,10 +23,6 @@
             <a href="{{ '/bibliography/' | relative_url }}"
                {% if page.url contains '/bibliography' %}class="is-current"{% endif %}>
                 Bibliography
-            </a>
-            <a href="{{ '/plans/reconciliation-plan/' | relative_url }}"
-               {% if page.layout == 'plan' %}class="is-current"{% endif %}>
-                Plan
             </a>
             <a href="https://github.com/{{ site.github_username }}/{{ site.github_repo }}"
                rel="noopener">GitHub ↗</a>

@@ -10,7 +10,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": [],
       "fontSize": 20, "fontFamily": 1,
-      "text": "Container layout — contiguous vs node-based, in cache lines",
+      "text": "Container layout: contiguous vs node-based, in cache lines",
       "textAlign": "center", "verticalAlign": "middle"
     },
     {

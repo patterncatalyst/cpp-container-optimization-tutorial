@@ -12,7 +12,7 @@ you realize the problem is your environment.
 
 The good news: **on a fresh Fedora 44 install, the entire prerequisite
 list is one `dnf install` and one `gh` configuration step.** This
-section walks you through it deliberately, says what each piece is
+section walks you through it step by step, says what each piece is
 for, and ends with a host-check script that verifies everything works
 before you commit to running a demo.
 
@@ -36,7 +36,7 @@ importance:
    and `cpuset.cpus`. Some hardened distros disable this and require
    a manual `systemctl --user` setup.
 3. **GCC 14 and `clang` 18 are both available and current.**
-   We use both — GCC for the UBI-based demos (matches what Red Hat
+   We use both: GCC for the UBI-based demos (matches what Red Hat
    ships as `gcc`/`gcc-c++` in the UBI 10 base appstream), Clang for
    the PGO build (better profile-data tooling and Sampling-PGO
    support).
@@ -51,7 +51,7 @@ Other distros that should work with minor adjustments:
 
 | Distro                | Verdict                                                                                |
 |-----------------------|----------------------------------------------------------------------------------------|
-| RHEL 9 / CentOS Stream 9 | Most demos work. Kernel may lag on `io_uring` multishot — check `uname -r` ≥ 5.19. |
+| RHEL 9 / CentOS Stream 9 | Most demos work. Kernel may lag on `io_uring` multishot: check `uname -r` ≥ 5.19. |
 | Ubuntu 24.04 LTS      | Most demos work; package names differ throughout. The host-check script flags these.    |
 | Arch / openSUSE Tumbleweed | Should work. We don't test against them, but kernel and toolchain are recent enough.|
 | **macOS (any)**       | Container parts work via `podman machine`. **Kernel-feature demos (2, 3, 5) won't.**    |
@@ -67,46 +67,46 @@ right after.
 
 ### Container runtime and supporting tools
 
-- **`podman`** (≥ 5.0) — the OCI runtime. Rootless by default.
-- **`podman-compose`** — for the multi-service stacks in demos 3 and 4.
-- **`buildah`** — sometimes needed when `podman build` hits its
+- **`podman`** (≥ 5.0): the OCI runtime. Rootless by default.
+- **`podman-compose`**: for the multi-service stacks in demos 3 and 4.
+- **`buildah`**: sometimes needed when `podman build` hits its
   limits; we don't use it directly but the demos shell out to it
   in one place.
-- **`skopeo`** — only needed if you want to inspect remote image
-  manifests. Not strictly required, but very useful.
+- **`skopeo`**: only needed if you want to inspect remote image
+  manifests. Not strictly required, but useful.
 
 ### C++ toolchain
 
-- **`gcc-c++`** — Fedora 44 ships GCC 14.x as the default `g++`,
+- **`gcc-c++`**: Fedora 44 ships GCC 14.x as the default `g++`,
   which has full C++23 support; that's all you need on the host.
   (UBI-based container builds install `gcc`/`gcc-c++` from the UBI 10
-  base appstream — GCC 14.3.1 — separately, but that's installed
+  base appstream, GCC 14.3.1, separately, but that's installed
   *inside* the container image, not on your host.)
-- **`clang`, `clang-tools-extra`, `lld`, `llvm`** — the gating Clang.
+- **`clang`, `clang-tools-extra`, `lld`, `llvm`**: the gating Clang.
   Used for PGO instrumentation and `clang-tidy` in demo 6.
-- **`cmake`** (≥ 3.25) — needed for CMake presets v6.
-- **`ninja-build`** — the build driver of choice; faster and cleaner
+- **`cmake`** (≥ 3.25): needed for CMake presets v6.
+- **`ninja-build`**: the build driver of choice; faster and cleaner
   than `make` for our build sizes.
-- **`python3-pip`** — for installing Conan 2.
-- **`conan`** (≥ 2.0, ≤ 3.0) — installed via pip, not dnf.
+- **`python3-pip`**: for installing Conan 2.
+- **`conan`** (≥ 2.0, ≤ 3.0): installed via pip, not dnf.
 
 ### Quality / debugging tools
 
-- **`gdb`, `gdb-gdbserver`** — for the demo 6 debug sidecar.
-- **`cppcheck`** — first-pass static analysis.
-- **`libabigail`** — provides `abidiff` for the demo 6 ABI check.
-- **`bpftrace`, `bcc-tools`** — for the §9 profiling layer.
-- **`perf`** (`linux-tools` on some distros) — CPU sampling.
+- **`gdb`, `gdb-gdbserver`**: for the demo 6 debug sidecar.
+- **`cppcheck`**: first-pass static analysis.
+- **`libabigail`**: provides `abidiff` for the demo 6 ABI check.
+- **`bpftrace`, `bcc-tools`**: for the §9 profiling layer.
+- **`perf`** (`linux-tools` on some distros): CPU sampling.
 
 ### Load generation and convenience
 
-- **`hey`** — HTTP load generator. Not in dnf; we install via Go or
+- **`hey`**: HTTP load generator. Not in dnf; we install via Go or
   a binary download.
-- **`ghz`** — gRPC load generator. Optional; demo 3 falls back to
+- **`ghz`**: gRPC load generator. Optional; demo 3 falls back to
   `hey` if `ghz` isn't on PATH.
-- **`jq`** — JSON parsing in shell scripts. Universal.
-- **`curl`** — every script uses it.
-- **`bc`** — needed by one helper for byte-formatting.
+- **`jq`**: JSON parsing in shell scripts. Universal.
+- **`curl`**: every script uses it.
+- **`bc`**: needed by one helper for byte-formatting.
 
 ## Installation, one command at a time
 
@@ -137,7 +137,7 @@ sudo dnf install -y \
 This pulls roughly 800 MB of packages, mostly toolchain. Coffee break.
 
 `golang` is included because we use `go install` to fetch `hey` and
-(optionally) `ghz` — see step 4 below. If you already have a Go
+(optionally) `ghz`; see step 4 below. If you already have a Go
 toolchain, the `dnf install` will no-op on it.
 
 ### 3. Install Conan 2 via pip
@@ -267,19 +267,19 @@ sudo systemctl daemon-reload
 
 The most important controllers for our demos:
 
-- **`cpu`** — needed for `--cgroup-conf=cpu.weight=N` and `--cpus`
+- **`cpu`**: needed for `--cgroup-conf=cpu.weight=N` and `--cpus`
   (demo 5 weighted scenario). Note that `--cpu-weight` is not a real
-  podman flag, despite mirroring the cgroup file name — use
+  podman flag, despite mirroring the cgroup file name; use
   `--cgroup-conf=cpu.weight=N` to set the v2 weight directly.
-- **`cpuset`** — needed for `--cpuset-cpus` (demo 5 pinned scenario).
+- **`cpuset`**: needed for `--cpuset-cpus` (demo 5 pinned scenario).
   An earlier version of this guide claimed cpuset worked without
   delegation; **that turned out to be wrong on Fedora 44** with
-  podman 5.x — the `--cpuset-cpus` flag triggers a "controller
+  podman 5.x: the `--cpuset-cpus` flag triggers a "controller
   cpuset is not available" error from crun without delegation.
-- **`memory`** — needed for `--memory` and `memory.high` (demos 2, 6)
-- **`io`** — needed for I/O limits (not heavily used by current demos
+- **`memory`**: needed for `--memory` and `memory.high` (demos 2, 6)
+- **`io`**: needed for I/O limits (not heavily used by current demos
   but cheap to include)
-- **`pids`** — already delegated by default
+- **`pids`**: already delegated by default
 
 Re-run the `cat` command after re-login to verify all five appear.
 
@@ -308,8 +308,8 @@ gh auth login                # follow the interactive prompts
 gh auth status               # confirm scopes include repo, workflow
 ```
 
-If your token doesn't have the `workflow` scope, add it now —
-the deploy workflow won't push to `gh-pages` without it:
+If your token doesn't have the `workflow` scope, add it now; the
+deploy workflow won't push to `gh-pages` without it:
 
 ```bash
 gh auth refresh -h github.com -s repo,workflow,admin:repo_hook
@@ -361,7 +361,7 @@ podman save docker.io/grafana/otel-lgtm:0.8.1 -o lgtm.tar
 podman load -i lgtm.tar
 ```
 
-If a mirror isn't viable, demo 4 simply won't run — but everything
+If a mirror isn't viable, demo 4 simply won't run; everything
 else will.
 
 ## Clone this repo
@@ -437,10 +437,10 @@ which demos are affected.
 ```
 
 Required checks (the 24) gate the script's exit code. Warnings
-don't — they're informational, telling you which demos may be
+don't; they're informational, telling you which demos may be
 constrained by your network.
 
-If any line says `FAIL`, scroll up — the script prints the exact
+If any line says `FAIL`, scroll up: the script prints the exact
 remediation command for each failure.
 
 > **Note:** the host-check script is added in this section's commit;
@@ -458,22 +458,22 @@ Two convenience scripts under `scripts/` that save you debugging time:
 ./scripts/verify-stacks.sh --quick    # skip slow stacks (e.g. observability)
 ```
 
-**Run `./scripts/pre-pull.sh` once after first clone** — it warms the
+**Run `./scripts/pre-pull.sh` once after first clone**: it warms the
 local image cache so subsequent demo runs start in seconds instead of
 minutes. Especially important if you'll be presenting; you want
 the network surprises to happen now, not in front of an audience.
 
 **Run `./scripts/verify-stacks.sh` whenever you think something might
-have broken** — after a system update, after pulling fresh images, or
+have broken**: after a system update, after pulling fresh images, or
 before walking on stage. Each stack passes if it can `up`, respond
 to a health endpoint, and `down` cleanly.
 
-The verify script intentionally only tests **shared infrastructure**
-(currently just the observability stack). Per-demo verification lives
-in `scripts/test-demo-NN-*.sh` — run those when you're walking through
+The verify script only tests **shared infrastructure** (currently
+just the observability stack). Per-demo verification lives in
+`scripts/test-demo-NN-*.sh`; run those when you're walking through
 a specific demo's section.
 
-If any pull fails, the message will say which image and why — usually
+If any pull fails, the message will say which image and why: usually
 either Docker Hub being throttled (re-run later) or a network /
 firewall blocking the registry (see "When `docker.io` is unreachable"
 above for the workaround).
@@ -500,7 +500,7 @@ EOF
 Your container is listening on the wrong interface. Demos pin
 listeners to `0.0.0.0` and bind via `-p 127.0.0.1:PORT:8080`; if
 yours doesn't, you'll see this. The demo source pins to `0.0.0.0`
-intentionally; if you've modified it, check your edit.
+by default; if you've modified it, check your edit.
 
 **`cmake --preset release` says "preset not found".**
 You're on CMake < 3.25. Our presets use schema v6, which requires
@@ -518,18 +518,18 @@ Delegation isn't enabled or didn't stick. Run:
 `./scripts/cgroup-delegation.sh enable` to fix. After enabling,
 **you must log out and back in** (or reboot) for the user manager
 to pick it up. The `--cpuset-cpus` error in particular needs the
-cpuset controller specifically — see G-40 in the gotcha catalog.
+cpuset controller specifically; see G-40 in the gotcha catalog.
 
 ## What's next
 
 You have a working environment. Open
-[§2 — Introduction & mental model](../02-introduction/) to read the
-**why** of this tutorial: what about containers actually changes
+[§2: Introduction & mental model](../02-introduction/) to read the
+**why** of this tutorial: what about containers changes
 how C++ performance work plays out, and the four-layer model that
 frames the rest of the sections.
 
 If you'd rather skip ahead and confirm the toolchain works by
 running something concrete first, jump to
-[§4 — Container strategy](../04-image-strategy/) and run Demo 1.
+[§4: Container strategy](../04-image-strategy/) and run Demo 1.
 You can come back for §2 once the cmake/podman pipeline has stopped
 feeling like a black box.

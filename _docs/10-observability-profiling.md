@@ -1,13 +1,13 @@
 ---
 title: "Observability & Profiling: OTel, Grafana Stack, perf, eBPF"
 order: 10
-description: The single biggest performance knob in OpenTelemetry-cpp is the choice between SimpleSpanProcessor and BatchSpanProcessor — verified 8.5× throughput collapse with the wrong one. Plus the LGTM stack, perf and eBPF against containerized processes.
+description: "The single biggest performance knob in OpenTelemetry-cpp is the choice between SimpleSpanProcessor and BatchSpanProcessor: verified 8.5× throughput collapse with the wrong one. Plus the LGTM stack, perf and eBPF against containerized processes."
 duration: "15 minutes"
 ---
 
 ## Learning objectives
 
-By the end of this section you can:
+By the end of this chapter you can:
 
 - Pick the right OpenTelemetry SDK processor for your workload
   and explain mechanistically why the default-in-most-tutorials
@@ -25,11 +25,17 @@ By the end of this section you can:
   exceeds a latency threshold, and read its output as a
   histogram.
 - Diagnose the production case: *"I added observability and my
-  service got 10× slower — what happened?"*
+  service got 10× slower: what happened?"*
 
 ## Diagram
 
 {% include excalidraw.html name="10-observability-otel-stack" caption="OTel pipeline: C++ → OTel SDK → OTLP → Grafana stack." %}
+
+## Why this matters
+
+Observability is supposed to cost you a fraction of a request's work in exchange for visibility into production. In OpenTelemetry-cpp, a one-line choice between two span processors turns that fraction into a multiple: an 8.5× throughput collapse and a 13× latency increase, measured directly, with no code change beyond swapping which processor class gets instantiated.
+
+For C++ services this is sharper than for most languages. A service whose own work takes 200 microseconds has nowhere to hide a synchronous network call that costs the same 200 microseconds per span. The same proximity to the kernel that makes C++ fast also makes instrumentation mistakes visible immediately, as a doubled or tripled p50 instead of a rounding error. This chapter covers how to pick the right processor, bring up the LGTM stack, and profile a containerized process without losing the ability to resolve symbols or attribute cost correctly.
 
 ## The single biggest knob
 
@@ -46,7 +52,7 @@ Three lines. Looks fine. Works in the hello-world. **Will collapse
 your throughput by an order of magnitude in production.**
 
 We measured this directly in demo-06. The service is the same
-across all rows of the table below — a tiny C++ HTTP server that
+across all rows of the table below: a tiny C++ HTTP server that
 allocates a small data structure, sums some integers, and
 returns. The only thing that changes is the OpenTelemetry
 configuration:
@@ -58,15 +64,15 @@ configuration:
 | OTel `BatchSpanProcessor` + `BatchLogRecordProcessor` | ~28,000 req/s | 200 µs | 1.8 ms |
 
 The Simple processors caused an **8.5× throughput collapse** and
-a **13× latency increase**. The Batch processors recovered fully
-— and in fact slightly exceeded the no-OTel baseline within
+a **13× latency increase**. The Batch processors recovered fully,
+and in fact slightly exceeded the no-OTel baseline within
 run-to-run variance, because the workload is too small to make
 batch-export overhead visible at all.
 
 This is the single most consequential decision in OpenTelemetry-
 cpp instrumentation, and the documentation buries it. Most
 tutorials lead with Simple processors because they're easier to
-demonstrate — spans show up in the backend in milliseconds, not
+demonstrate: spans show up in the backend in milliseconds, not
 five seconds, which makes for satisfying screenshots. Almost
 every production-quality service should use Batch.
 
@@ -115,7 +121,7 @@ The per-span cost on the hot path is roughly:
 2. That's it.
 
 Total: a few microseconds per span. The 200 µs of OTLP
-serialization, gRPC framing, and network I/O still happens — but
+serialization, gRPC framing, and network I/O still happens, but
 not on your request handler's call stack. It happens in the
 background thread, amortized over hundreds of spans per export
 cycle.
@@ -143,13 +149,13 @@ happened in that window. **Metrics fundamentally aggregate, and
 aggregation makes per-call export nonsensical.**
 
 This is why demo-06's metrics didn't suffer the throughput
-collapse — only spans and logs did. If you're instrumenting and
+collapse: only spans and logs did. If you're instrumenting and
 your dashboards rely entirely on metrics (counters, gauges,
 histograms), you can sleep easier. If you're shipping traces and
 logs to a backend, the Batch decision is non-negotiable.
 
 The takeaway is that "the cost of observability" is not a single
-number — it depends sharply on which signals you emit and how
+number: it depends sharply on which signals you emit and how
 their processors are wired. One signal in your pipeline can
 dominate; the other two can be invisible. Diagnose with the
 chain in mind, not the abstraction.
@@ -189,20 +195,20 @@ together.
 |---|---|---|---|
 | **Prometheus** | Metrics | Short-term (~15d) time-series, PromQL queries | The reference open-source TSDB; broad collector ecosystem |
 | **Tempo** | Traces | Trace store + lookup by trace ID, TraceQL queries | Cheaper than Jaeger at scale because traces are stored as blobs, not indexed events |
-| **Loki** | Logs | Log store + label-based filter, LogQL queries | "Prometheus for logs" — labels are indexed, log bodies are not, which keeps storage and query costs predictable |
+| **Loki** | Logs | Log store + label-based filter, LogQL queries | "Prometheus for logs": labels are indexed, log bodies are not, which keeps storage and query costs predictable |
 | **Mimir** | Metrics (long-term) | Cloud-native long-term Prometheus-compatible store | Used when you want metrics retention measured in months, not days |
 | **Grafana** | UI / correlation | Multi-source dashboards; click a metric anomaly → jump to the trace → jump to the logs | The user-facing layer that makes the signal-by-signal split useful |
 
 This is one of several possible stacks (the OTel docs cover
 Jaeger, Zipkin, SigNoz, etc.). We use LGTM because Grafana is
 the de facto open-source dashboarding standard, and the four
-backends share authentication, tenancy, and operator patterns —
+backends share authentication, tenancy, and operator patterns:
 fewer per-component decisions when you're standing up the first
 deployment.
 
 The whole stack comes up with `podman compose up -f compose-lgtm.yml`
 in demo-04. The compose file uses Grafana's `otel-lgtm` image,
-which packages all five components in a single container — not
+which packages all five components in a single container, not
 the right shape for production (you want each as a separate
 service with its own storage and scaling), but exactly the right
 shape for a tutorial demo and for local development.
@@ -248,7 +254,7 @@ Look at the processor before you tune anything else.
 ## `perf record` against containerized processes
 
 `perf` works against any process whose PID is visible from the
-host. For a rootless Podman container, the PID is visible — the
+host. For a rootless Podman container, the PID is visible: the
 container is just a tree of processes under the user's session,
 with its own user namespace and mount namespace but sharing the
 host kernel.
@@ -272,7 +278,7 @@ podman cp my-service:/tmp/perf.data ./
 perf report --no-children -i ./perf.data
 ```
 
-Or — for ad-hoc sampling from outside — provide the path-prefix
+Or, for ad-hoc sampling from outside, provide the path-prefix
 hint:
 
 ```bash
@@ -306,7 +312,7 @@ event boundary. They produce data continuously, with no
 sampling artifacts, and at a fraction of `perf`'s overhead for
 many workloads.
 
-`bpftrace` is the awk-of-eBPF — short one-liners for ad-hoc
+`bpftrace` is the awk-of-eBPF: short one-liners for ad-hoc
 investigations. Example: histogram of `read()` syscall latencies
 across the system, broken down by PID:
 
@@ -361,7 +367,7 @@ LogRecordProcessor as the dominant cost:
 
 The fix is always the same: switch to Batch processors. The
 question is whether you can afford 5 seconds of visibility
-latency on individual signals — for production observability,
+latency on individual signals: for production observability,
 yes. For debugging an active incident, sometimes no (use Simple
 with a 1% sample rate during the debugging window).
 
@@ -373,8 +379,8 @@ reasons make it especially sharp for C++:
 
 First, **C++ workloads are often the ones where the OTel cost
 matters**. A Python service whose handlers each take 50 ms of
-synchronous work won't notice 200 µs of OTel export per request
-— it's a 0.4% overhead. A C++ service whose handlers take 200 µs
+synchronous work won't notice 200 µs of OTel export per request;
+it's a 0.4% overhead. A C++ service whose handlers take 200 µs
 will see that same 200 µs as a **2× p50 increase**. The
 relative cost of OTel scales inversely with the speed of your
 application; the faster your code, the more your instrumentation
@@ -403,7 +409,7 @@ container and writes the syscall-latency histograms into Loki
 for cross-correlation against the application traces.
 
 [`examples/demo-06-memory-and-allocators/`]({{ '/examples/demo-06-memory-and-allocators/' | relative_url }})
-in serve mode shows the same lesson with a different workload —
+in serve mode shows the same lesson with a different workload;
 the verified numbers cited above are from that demo's
 instrumented run. Both demos are independent demonstrations of the
 same OTel processor decision; pick either, the conclusion is
@@ -414,7 +420,7 @@ the same.
 - Enberg, *Latency*, ch. 8 (measurement and observability; the
   Heisenberg-uncertainty framing that "measuring perturbs the
   measurement" applies very literally to OTel processors)
-- Andrist & Sehr, *C++ High Performance*, ch. 3 — the
+- Andrist & Sehr, *C++ High Performance*, ch. 3: the
   performance-measurement chapter, complementary to this
   section's "OTel as instrumentation cost" angle
 - [The `bpftrace` reference guide](https://github.com/iovisor/bpftrace)

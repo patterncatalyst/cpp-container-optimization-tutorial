@@ -22,7 +22,7 @@
       "groupIds": [],
       "fontSize": 20,
       "fontFamily": 1,
-      "text": "cgroup v2 hierarchy — demo-05 isolation scenarios",
+      "text": "cgroup v2 hierarchy: demo-05 isolation scenarios",
       "textAlign": "center",
       "verticalAlign": "middle"
     },
@@ -190,7 +190,7 @@
       "groupIds": ["tenant-a-group"],
       "fontSize": 12,
       "fontFamily": 1,
-      "text": "demo05-a\ntenant-a — latency-sensitive HTTP server\n\ncpu.weight     = 100  (default)\ncpuset.cpus    = 0-10\nmemory.high    = (unset)\n\nworkload: 200 µs per request,\n          idle between requests",
+      "text": "demo05-a\ntenant-a: latency-sensitive HTTP server\n\ncpu.weight     = 100  (default)\ncpuset.cpus    = 0-10\nmemory.high    = (unset)\n\nworkload: 200 µs per request,\n          idle between requests",
       "textAlign": "left",
       "verticalAlign": "top"
     },
@@ -232,7 +232,7 @@
       "groupIds": ["tenant-b-group"],
       "fontSize": 12,
       "fontFamily": 1,
-      "text": "demo05-b\ntenant-b — CPU-bound noisy neighbor\n\ncpu.weight     = 10  ← the weight knob\ncpuset.cpus    = 11-21  ← the pin knob\nmemory.high    = (unset)\n\nworkload: every thread always\n          runnable, steady CPU",
+      "text": "demo05-b\ntenant-b: CPU-bound noisy neighbor\n\ncpu.weight     = 10  ← the weight knob\ncpuset.cpus    = 11-21  ← the pin knob\nmemory.high    = (unset)\n\nworkload: every thread always\n          runnable, steady CPU",
       "textAlign": "left",
       "verticalAlign": "top"
     },
