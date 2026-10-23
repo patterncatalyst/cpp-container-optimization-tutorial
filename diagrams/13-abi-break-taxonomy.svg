@@ -16,10 +16,10 @@
   </defs>
   <rect width="900" height="560" fill="#fdfbf7"/>
   <rect width="900" height="560" fill="url(#grid)" opacity="0.4"/>
-  <text x="450" y="30" text-anchor="middle" style="font: 700 16px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">ABI compatibility — what is safe to change and what breaks the ABI</text>
-  <text x="450" y="50" text-anchor="middle" style="font: italic 400 11px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #555555;">Recompiling isn&#x27;t enough — a library swapped at runtime must keep the same binary contract</text>
+  <text x="450" y="30" text-anchor="middle" style="font: 700 16px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">ABI compatibility: what is safe to change and what breaks the ABI</text>
+  <text x="450" y="50" text-anchor="middle" style="font: italic 400 11px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #555555;">Recompiling isn&#x27;t enough: a library swapped at runtime must keep the same binary contract</text>
   <rect x="60" y="90" width="360" height="40" rx="6" ry="6" fill="#d8e8df" stroke="#5a8870" stroke-width="1.5"/>
-  <text x="240" y="110" text-anchor="middle" style="font: 700 14px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">ABI-SAFE — same SONAME is fine</text>
+  <text x="240" y="110" text-anchor="middle" style="font: 700 14px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">ABI-SAFE: same SONAME is fine</text>
   <rect x="60" y="145" width="360" height="34" rx="4" ry="4" fill="#eef5f0" stroke="#5a8870" stroke-width="1.0"/>
   <text x="76" y="167" text-anchor="start" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">Add a non-virtual member function</text>
   <rect x="60" y="187" width="360" height="34" rx="4" ry="4" fill="#eef5f0" stroke="#5a8870" stroke-width="1.0"/>
@@ -33,7 +33,7 @@
   <rect x="60" y="355" width="360" height="34" rx="4" ry="4" fill="#eef5f0" stroke="#5a8870" stroke-width="1.0"/>
   <text x="76" y="377" text-anchor="start" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">Add a new class / type</text>
   <rect x="480" y="90" width="360" height="40" rx="6" ry="6" fill="#fdfbf7" stroke="#c0392b" stroke-width="2.0"/>
-  <text x="660" y="110" text-anchor="middle" style="font: 700 14px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">ABI-BREAKING — must bump SONAME</text>
+  <text x="660" y="110" text-anchor="middle" style="font: 700 14px -apple-system, system-ui, 'Segoe UI', sans-serif; fill: #1a1a1a;">ABI-BREAKING: must bump SONAME</text>
   <rect x="480" y="145" width="360" height="34" rx="4" ry="4" fill="#f6dfd8" stroke="#c0392b" stroke-width="1.2"/>
   <text x="496" y="167" text-anchor="start" style="font: 400 10px ui-monospace, 'SF Mono', Menlo, Consolas, monospace; fill: #444444;">Add / remove / reorder data members  → layout</text>
   <rect x="480" y="187" width="360" height="34" rx="4" ry="4" fill="#f6dfd8" stroke="#c0392b" stroke-width="1.2"/>

@@ -43,7 +43,7 @@
   <rect width="900" height="540" fill="url(#grid)" opacity="0.4"/>
 
   <!-- Title -->
-  <text x="450" y="30" class="ttl-big" text-anchor="middle">Hermetic build flow — Conan + CMake, one lockfile per release</text>
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">Hermetic build flow: Conan + CMake, one lockfile per release</text>
 
   <!-- Inputs column -->
   <rect class="band b-input" x="30" y="80" width="180" height="280"/>
@@ -123,7 +123,7 @@
 
   <!-- Bottom: lockfile narrative -->
   <rect class="b-lock" x="60" y="402" width="780" height="116"/>
-  <text x="450" y="424" class="accent-t" text-anchor="middle">conan.lock — what it actually pins, and why CI rebuilds are then deterministic</text>
+  <text x="450" y="424" class="accent-t" text-anchor="middle">conan.lock: what it actually pins, and why CI rebuilds are then deterministic</text>
   <text x="80" y="448" class="mono-sm">• every transitive dependency: version + revision hash (immutable identifier of the source archive)</text>
   <text x="80" y="464" class="mono-sm">• every dependency's compile-time options (e.g. with_ssl=True, threading=True)</text>
   <text x="80" y="480" class="mono-sm">• the resolved binary ID for each package (function of: settings + options + dep graph hashes)</text>

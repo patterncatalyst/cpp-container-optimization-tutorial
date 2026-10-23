@@ -10,7 +10,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": [],
       "fontSize": 20, "fontFamily": 1,
-      "text": "Ephemeral debug sidecar — gdb without rebuilding the prod image",
+      "text": "Ephemeral debug sidecar: gdb without rebuilding the prod image",
       "textAlign": "center", "verticalAlign": "middle"
     },
     {
@@ -28,7 +28,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": [],
       "fontSize": 12, "fontFamily": 1,
-      "text": "shared PID namespace  —  containers see each other's processes  —  --pid=container:main",
+      "text": "shared PID namespace :  containers see each other's processes :  --pid=container:main",
       "textAlign": "center", "verticalAlign": "middle"
     },
     {
@@ -46,7 +46,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": ["main-group"],
       "fontSize": 12, "fontFamily": 1,
-      "text": "Main container  —  production\nstripped, no debug tools, smallest image\n\nPID 1: your C++ service\n/usr/local/bin/myservice\nUBI micro base, ~26 MB total\n\nContainerfile:\n  FROM ubi-micro\n  COPY --from=build /app /\n  ENTRYPOINT [\"/app\"]",
+      "text": "Main container :  production\nstripped, no debug tools, smallest image\n\nPID 1: your C++ service\n/usr/local/bin/myservice\nUBI micro base, ~26 MB total\n\nContainerfile:\n  FROM ubi-micro\n  COPY --from=build /app /\n  ENTRYPOINT [\"/app\"]",
       "textAlign": "center", "verticalAlign": "top"
     },
     {
@@ -64,7 +64,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": ["sidecar-group"],
       "fontSize": 12, "fontFamily": 1,
-      "text": "Debug sidecar  —  ephemeral\nheavy, only running during a debug session\n\ngdb + debug symbols + glibc-debug\neu-stack, valgrind, strace, perf\n~400 MB image, fine for ad-hoc use\n\nLaunch command:\n  podman run -it --rm \\\n    --pid=container:main \\\n    --cap-add=SYS_PTRACE  debug:latest",
+      "text": "Debug sidecar :  ephemeral\nheavy, only running during a debug session\n\ngdb + debug symbols + glibc-debug\neu-stack, valgrind, strace, perf\n~400 MB image, fine for ad-hoc use\n\nLaunch command:\n  podman run -it --rm \\\n    --pid=container:main \\\n    --cap-add=SYS_PTRACE  debug:latest",
       "textAlign": "left", "verticalAlign": "top"
     },
     {

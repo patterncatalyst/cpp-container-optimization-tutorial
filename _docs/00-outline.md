@@ -232,8 +232,7 @@ A few things are out of scope on purpose:
   Conan vs vcpkg — choices are stated and defended in §1; readers
   wanting comparisons can do them themselves.
 
-The [reconciliation plan](../../plans/reconciliation-plan/) tracks
-which of these may be added in future iterations and which are
+Some of these may be added in future iterations; others are
 firmly out of scope.
 
 ## Estimated time, end-to-end

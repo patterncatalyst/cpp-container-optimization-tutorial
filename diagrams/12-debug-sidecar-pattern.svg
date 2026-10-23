@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 540" role="img"
-     aria-label="The ephemeral debug-sidecar pattern. A production container runs a stripped, locked-down C++ service with no debugger tools and PID 1 = your service. To attach a debugger without rebuilding the production image, an ephemeral sidecar is launched alongside with --pid=container:main and --cap-add=SYS_PTRACE, sharing the production container's PID namespace; the sidecar has gdb plus debug symbols and uses ptrace to attach to PID 1. The shared PID namespace plus SYS_PTRACE capability — the --pid=container flag — is the key mechanism, highlighted in red.">
+     aria-label="The ephemeral debug-sidecar pattern. A production container runs a stripped, locked-down C++ service with no debugger tools and PID 1 = your service. To attach a debugger without rebuilding the production image, an ephemeral sidecar is launched alongside with --pid=container:main and --cap-add=SYS_PTRACE, sharing the production container's PID namespace; the sidecar has gdb plus debug symbols and uses ptrace to attach to PID 1. The shared PID namespace plus SYS_PTRACE capability: the --pid=container flag: is the key mechanism, highlighted in red.">
   <defs>
     <style><![CDATA[
       .bg       { fill: #fdfbf7; }
@@ -41,17 +41,17 @@
   <rect width="900" height="540" fill="url(#grid)" opacity="0.4"/>
 
   <!-- Title -->
-  <text x="450" y="30" class="ttl-big" text-anchor="middle">Ephemeral debug sidecar — gdb without rebuilding the prod image</text>
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">Ephemeral debug sidecar: gdb without rebuilding the prod image</text>
 
   <!-- Shared PID namespace band (red dashed) -->
   <rect class="b-share" x="40" y="80" width="820" height="280"/>
   <text x="60" y="100" class="accent-t">shared PID namespace</text>
-  <text x="450" y="100" class="accent-l" text-anchor="middle">— containers see each other's processes —</text>
+  <text x="450" y="100" class="accent-l" text-anchor="middle">:  containers see each other's processes : </text>
   <text x="840" y="100" class="accent-t" text-anchor="end">--pid=container:main</text>
 
   <!-- LEFT: main (production) container -->
   <rect class="band b-main" x="80" y="120" width="340" height="220"/>
-  <text x="250" y="144" class="ttl" text-anchor="middle">Main container  —  production</text>
+  <text x="250" y="144" class="ttl" text-anchor="middle">Main container :  production</text>
   <text x="250" y="160" class="sec" text-anchor="middle">stripped, no debug tools, smallest image</text>
 
   <rect class="b-cell-m" x="100" y="180" width="300" height="60"/>
@@ -67,7 +67,7 @@
 
   <!-- RIGHT: sidecar container -->
   <rect class="band b-side" x="480" y="120" width="340" height="220"/>
-  <text x="650" y="144" class="ttl" text-anchor="middle">Debug sidecar  —  ephemeral</text>
+  <text x="650" y="144" class="ttl" text-anchor="middle">Debug sidecar :  ephemeral</text>
   <text x="650" y="160" class="sec" text-anchor="middle">heavy, only running during a debug session</text>
 
   <rect class="b-cell-s" x="500" y="180" width="300" height="60"/>

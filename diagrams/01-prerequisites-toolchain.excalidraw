@@ -10,7 +10,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": [],
       "fontSize": 20, "fontFamily": 1,
-      "text": "Prerequisites — the toolchain at a glance",
+      "text": "Prerequisites: the toolchain at a glance",
       "textAlign": "center", "verticalAlign": "middle"
     },
     {
@@ -38,7 +38,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": [],
       "fontSize": 12, "fontFamily": 1,
-      "text": "Source code (C++20/23) + Containerfiles\n\nConan 2.x — package manager + lockfiles\n\nCMake + Ninja — presets, hermetic build\n\ngcc 14 | clang (optional)\nC++20/23, sanitizers, LTO, PGO\n\n↓\n\nELF binary\nlinked against glibc from build base",
+      "text": "Source code (C++20/23) + Containerfiles\n\nConan 2.x: package manager + lockfiles\n\nCMake + Ninja: presets, hermetic build\n\ngcc 14 | clang (optional)\nC++20/23, sanitizers, LTO, PGO\n\n↓\n\nELF binary\nlinked against glibc from build base",
       "textAlign": "left", "verticalAlign": "top"
     },
     {
@@ -84,7 +84,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": [],
       "fontSize": 14, "fontFamily": 1,
-      "text": "HOST  —  Fedora 44\nLinux kernel 6.x, the substrate all the above runs on",
+      "text": "HOST :  Fedora 44\nLinux kernel 6.x, the substrate all the above runs on",
       "textAlign": "center", "verticalAlign": "middle"
     },
     {

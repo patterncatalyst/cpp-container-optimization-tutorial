@@ -47,7 +47,7 @@
   <rect width="900" height="580" fill="url(#grid)" opacity="0.4"/>
 
   <!-- Title -->
-  <text x="450" y="30" class="ttl-big" text-anchor="middle">The C++ allocator stack — where the cost actually lives</text>
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">The C++ allocator stack: where the cost actually lives</text>
 
   <!-- Application -->
   <rect class="band b-app" x="200" y="60" width="500" height="44"/>
@@ -116,7 +116,7 @@
   <text x="740" y="270" class="accent-t">p99  5.61 µs</text>
   <text x="740" y="288" class="accent-l">2.12× faster</text>
 
-  <text x="740" y="312" class="sec">(serve mode: no win — see §7 prose)</text>
+  <text x="740" y="312" class="sec">(serve mode: no win: see §7 prose)</text>
 
   <!-- Vertical labels showing the layers -->
   <text x="180" y="90" class="role" text-anchor="end">your code</text>

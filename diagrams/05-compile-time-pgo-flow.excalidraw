@@ -10,7 +10,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": [],
       "fontSize": 20, "fontFamily": 1,
-      "text": "Profile-guided optimization — three-pass build, one feedback loop",
+      "text": "Profile-guided optimization: three-pass build, one feedback loop",
       "textAlign": "center", "verticalAlign": "middle"
     },
     {
@@ -46,7 +46,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": ["pass1-group"],
       "fontSize": 12, "fontFamily": 1,
-      "text": "Pass 1 — Instrument\ncompile with profile counters\n\n-fprofile-generate\n-fno-omit-frame-pointer\n      ↓\n  instrumented binary\n  ~10% slower than baseline\n\nembedded counters track\nbranch taken/not-taken,\nfunction entries, etc.",
+      "text": "Pass 1: Instrument\ncompile with profile counters\n\n-fprofile-generate\n-fno-omit-frame-pointer\n      ↓\n  instrumented binary\n  ~10% slower than baseline\n\nembedded counters track\nbranch taken/not-taken,\nfunction entries, etc.",
       "textAlign": "left", "verticalAlign": "top"
     },
     {
@@ -64,7 +64,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": ["pass2-group"],
       "fontSize": 12, "fontFamily": 1,
-      "text": "Pass 2 — Profile\nrun against representative load\n\n./instrumented_binary\n  with realistic workload\n      ↓\n  .profraw files\n  merged with llvm-profdata\n\n→ merged.profdata\nthe entire feedback loop:\n'what the binary actually does'",
+      "text": "Pass 2: Profile\nrun against representative load\n\n./instrumented_binary\n  with realistic workload\n      ↓\n  .profraw files\n  merged with llvm-profdata\n\n→ merged.profdata\nthe entire feedback loop:\n'what the binary actually does'",
       "textAlign": "left", "verticalAlign": "top"
     },
     {
@@ -82,7 +82,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": ["pass3-group"],
       "fontSize": 12, "fontFamily": 1,
-      "text": "Pass 3 — Optimize\ncompile with feedback\n\n-fprofile-use=\n  merged.profdata\n      ↓\n  optimized binary\n  production artifact\n\ncompiler now knows:\n• hot vs cold paths\n• branch frequencies",
+      "text": "Pass 3: Optimize\ncompile with feedback\n\n-fprofile-use=\n  merged.profdata\n      ↓\n  optimized binary\n  production artifact\n\ncompiler now knows:\n• hot vs cold paths\n• branch frequencies",
       "textAlign": "left", "verticalAlign": "top"
     },
     {

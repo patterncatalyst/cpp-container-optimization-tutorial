@@ -10,7 +10,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": [],
       "fontSize": 20, "fontFamily": 1,
-      "text": "AVX-512 mismatch — when -march=native bites in containers",
+      "text": "AVX-512 mismatch: when -march=native bites in containers",
       "textAlign": "center", "verticalAlign": "middle"
     },
     {
@@ -28,7 +28,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": ["build-group"],
       "fontSize": 11, "fontFamily": 1,
-      "text": "Build host (your laptop / CI)\nIntel Sapphire Rapids — has AVX-512\n\n/proc/cpuinfo flags:\navx avx2 avx512f avx512dq\navx512cd avx512bw avx512vl ...\n\ngcc -march=native picks up ALL of these\n\n$ gcc -march=native -O3 ...\nemits AVX-512 instructions",
+      "text": "Build host (your laptop / CI)\nIntel Sapphire Rapids: has AVX-512\n\n/proc/cpuinfo flags:\navx avx2 avx512f avx512dq\navx512cd avx512bw avx512vl ...\n\ngcc -march=native picks up ALL of these\n\n$ gcc -march=native -O3 ...\nemits AVX-512 instructions",
       "textAlign": "left", "verticalAlign": "top"
     },
     {
@@ -100,7 +100,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": ["fix-group"],
       "fontSize": 14, "fontFamily": 1,
-      "text": "The fix — choose a portable CPU baseline at build time, not the build host's",
+      "text": "The fix: choose a portable CPU baseline at build time, not the build host's",
       "textAlign": "center", "verticalAlign": "middle"
     },
     {
@@ -110,7 +110,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": ["fix-group"],
       "fontSize": 11, "fontFamily": 1,
-      "text": "Option 1 — x86-64 micro-architecture levels (recommended)\n  x86-64       baseline; works on any x86_64 CPU\n  x86-64-v2    SSE3-SSE4.2, popcnt — Nehalem era+\n  x86-64-v3    AVX, AVX2, BMI1/2, FMA — Haswell+ (most modern)\n  x86-64-v4    AVX-512 — opt-in only after surveying targets",
+      "text": "Option 1: x86-64 micro-architecture levels (recommended)\n  x86-64       baseline; works on any x86_64 CPU\n  x86-64-v2    SSE3-SSE4.2, popcnt: Nehalem era+\n  x86-64-v3    AVX, AVX2, BMI1/2, FMA: Haswell+ (most modern)\n  x86-64-v4    AVX-512: opt-in only after surveying targets",
       "textAlign": "left", "verticalAlign": "top"
     },
     {
@@ -120,7 +120,7 @@
       "fillStyle": "solid", "strokeWidth": 1, "strokeStyle": "solid",
       "roughness": 1, "opacity": 100, "groupIds": ["fix-group"],
       "fontSize": 11, "fontFamily": 1,
-      "text": "Option 2 — multi-arch builds + runtime dispatch\n  build two image variants:\n    app:v1.2-v3   (Haswell baseline)\n    app:v1.2-v4   (AVX-512 enabled)\n  → pick at deploy time via host CPU detection",
+      "text": "Option 2: multi-arch builds + runtime dispatch\n  build two image variants:\n    app:v1.2-v3   (Haswell baseline)\n    app:v1.2-v4   (AVX-512 enabled)\n  → pick at deploy time via host CPU detection",
       "textAlign": "left", "verticalAlign": "top"
     },
     {

@@ -37,7 +37,7 @@
   <rect width="900" height="540" fill="url(#grid)" opacity="0.4"/>
 
   <!-- Title -->
-  <text x="450" y="30" class="ttl-big" text-anchor="middle">Prerequisites — the toolchain at a glance</text>
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">Prerequisites: the toolchain at a glance</text>
 
   <!-- Build-time column -->
   <rect class="band b-build" x="60" y="60" width="340" height="320"/>
@@ -102,7 +102,7 @@
 
   <!-- Host band -->
   <rect class="band b-host" x="60" y="400" width="780" height="120"/>
-  <text x="450" y="424" class="ttl" text-anchor="middle">HOST  —  Fedora 44</text>
+  <text x="450" y="424" class="ttl" text-anchor="middle">HOST :  Fedora 44</text>
   <text x="450" y="440" class="sec" text-anchor="middle">Linux kernel 6.x, the substrate all the above runs on</text>
 
   <rect class="b-tool-h" x="90" y="452" width="200" height="56"/>

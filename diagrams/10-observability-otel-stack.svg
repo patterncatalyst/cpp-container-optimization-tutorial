@@ -48,7 +48,7 @@
   <rect width="920" height="560" fill="url(#grid)" opacity="0.4"/>
 
   <!-- Title -->
-  <text x="460" y="30" class="ttl-big" text-anchor="middle">OpenTelemetry data flow — and the one decision that matters</text>
+  <text x="460" y="30" class="ttl-big" text-anchor="middle">OpenTelemetry data flow: and the one decision that matters</text>
 
   <!-- C++ application -->
   <rect class="band b-app" x="40" y="80" width="180" height="80"/>
@@ -76,7 +76,7 @@
   <text x="380" y="216" class="accent-t" text-anchor="middle">Simple ⨯  ←→  Batch ✓</text>
 
   <rect class="band b-sdk" x="280" y="232" width="200" height="22" stroke-dasharray="2 2" opacity="0.7"/>
-  <text x="380" y="247" class="sec" text-anchor="middle">MetricReader — already batch by design</text>
+  <text x="380" y="247" class="sec" text-anchor="middle">MetricReader: already batch by design</text>
 
   <!-- Arrow SDK -> OTLP -->
   <line x1="500" y1="170" x2="540" y2="170" class="arrow" marker-end="url(#arrowhead)"/>
@@ -157,5 +157,5 @@
 
   <text x="520" y="486" class="lbl">OTel Batch*</text>
   <text x="700" y="486" class="mono">~28,000 req/s   p50 200 µs    p99 1.8 ms</text>
-  <text x="520" y="506" class="sec">recovers fully — within run-to-run variance of no-OTel baseline</text>
+  <text x="520" y="506" class="sec">recovers fully: within run-to-run variance of no-OTel baseline</text>
 </svg>

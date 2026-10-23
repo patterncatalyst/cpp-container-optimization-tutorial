@@ -45,7 +45,7 @@
   <rect width="900" height="540" fill="url(#grid)" opacity="0.4"/>
 
   <!-- Title -->
-  <text x="450" y="30" class="ttl-big" text-anchor="middle">Container layout — contiguous vs node-based, in cache lines</text>
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">Container layout: contiguous vs node-based, in cache lines</text>
 
   <!-- LEFT: vector (contiguous) -->
   <rect class="band b-vec" x="30" y="60" width="410" height="430"/>

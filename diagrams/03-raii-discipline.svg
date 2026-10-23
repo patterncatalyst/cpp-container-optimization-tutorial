@@ -58,7 +58,7 @@
 
   <!-- ════════════ LEFT PANEL: manual cleanup (bad) ════════════ -->
   <rect class="panel-bad" x="40" y="80" width="400" height="450"/>
-  <text x="240" y="106" text-anchor="middle" class="pttl-bad">Manual cleanup — three exit paths, two leak</text>
+  <text x="240" y="106" text-anchor="middle" class="pttl-bad">Manual cleanup: three exit paths, two leak</text>
 
   <!-- function scope outline -->
   <rect class="scope" x="60" y="125" width="360" height="385"/>
@@ -106,7 +106,7 @@
 
   <!-- ════════════ RIGHT PANEL: RAII (good) ════════════ -->
   <rect class="panel-ok" x="480" y="80" width="400" height="450"/>
-  <text x="680" y="106" text-anchor="middle" class="pttl-ok">RAII — destructor fires on every exit path</text>
+  <text x="680" y="106" text-anchor="middle" class="pttl-ok">RAII: destructor fires on every exit path</text>
 
   <!-- function scope outline -->
   <rect class="scope" x="500" y="125" width="360" height="385"/>

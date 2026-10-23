@@ -68,11 +68,10 @@ cd {{ site.github_repo }}
         <h2 class="section-heading">If a demo fails</h2>
         <p>
             Most failures are kernel-feature gaps (<code>io_uring</code>
-            multishot needs ≥ 5.19) or rootless cgroup limits. The
-            <a href="{{ '/plans/reconciliation-plan/' | relative_url }}">reconciliation plan</a>
-            tracks every demo's verification state per host class. If
-            your host isn't covered, an entry there is the right
-            contribution.
+            multishot needs ≥ 5.19) or rootless cgroup limits. If
+            your host isn't covered, opening an issue with your
+            <code>uname -r</code> and <code>lscpu</code> output is the
+            right contribution.
         </p>
     </div>
 </section>

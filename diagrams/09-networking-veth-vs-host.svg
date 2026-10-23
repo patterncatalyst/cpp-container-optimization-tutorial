@@ -43,7 +43,7 @@
   <rect width="900" height="540" fill="url(#grid)" opacity="0.4"/>
 
   <!-- Title -->
-  <text x="450" y="30" class="ttl-big" text-anchor="middle">Container networking — three modes, three latency profiles</text>
+  <text x="450" y="30" class="ttl-big" text-anchor="middle">Container networking: three modes, three latency profiles</text>
 
   <!-- LEFT column: host networking -->
   <rect class="band b-host" x="30" y="60" width="280" height="430"/>

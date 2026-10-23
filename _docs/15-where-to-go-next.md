@@ -92,8 +92,6 @@ which has a reading guide and a scenario-based jump table.
 
 ## Final pointer
 
-The reconciliation plan in [`_plans/`](../../plans/reconciliation-plan/)
-is the truthful state of this tutorial — what's verified versus
-what's drafted. If you found a claim that doesn't match what
-your machine does, please open an issue with the section and
-your `uname -r` and `lscpu` output.
+If you found a claim that does not match what your machine does,
+open an issue with the section and your `uname -r` and `lscpu`
+output.

@@ -22,7 +22,7 @@
       "groupIds": [],
       "fontSize": 20,
       "fontFamily": 1,
-      "text": "OpenTelemetry data flow — and the one decision that matters",
+      "text": "OpenTelemetry data flow: and the one decision that matters",
       "textAlign": "center",
       "verticalAlign": "middle"
     },
@@ -213,7 +213,7 @@
       "groupIds": [],
       "fontSize": 11,
       "fontFamily": 1,
-      "text": "MetricReader — already batch by design",
+      "text": "MetricReader: already batch by design",
       "textAlign": "center",
       "verticalAlign": "middle"
     },
